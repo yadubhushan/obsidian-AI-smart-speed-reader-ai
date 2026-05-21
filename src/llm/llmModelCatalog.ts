@@ -1,3 +1,5 @@
+import { ensureParentFolderForFile } from '../utils/vaultAdapterDirs';
+
 export interface LlmModelOption {
 	id: string;
 	label: string;
@@ -145,6 +147,7 @@ export async function migrateLlmModelsConfigIfNeeded(
 	const legacyPath = legacyPluginLlmModelsConfigPath(vaultConfigDir, pluginId);
 	if (await adapter.exists(legacyPath)) {
 		const text = await adapter.read(legacyPath);
+		await ensureParentFolderForFile(adapter, dataPath);
 		await adapter.write(dataPath, text);
 	}
 
@@ -159,6 +162,7 @@ export interface DataAdapterLike {
 	exists(path: string): Promise<boolean>;
 	read(path: string): Promise<string>;
 	write(path: string, data: string): Promise<void>;
+	mkdir(path: string): Promise<void>;
 }
 
 export async function ensureLlmModelsConfigFile(
@@ -169,6 +173,7 @@ export async function ensureLlmModelsConfigFile(
 	if (await adapter.exists(configPath)) {
 		return;
 	}
+	await ensureParentFolderForFile(adapter, configPath);
 	await adapter.write(configPath, serializeLlmModelsConfig(template));
 }
 

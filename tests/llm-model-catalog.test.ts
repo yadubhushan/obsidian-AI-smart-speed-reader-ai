@@ -80,6 +80,9 @@ describe('llmModelCatalog', () => {
 			},
 			async write(path: string, data: string) {
 				files.set(path, data);
+			},
+			async mkdir(_path: string) {
+				/* no-op for in-memory test */
 			}
 		};
 

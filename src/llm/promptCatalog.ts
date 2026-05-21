@@ -1,6 +1,7 @@
 import batchChunkSuffixTxt from '../../config/prompts/batch-chunk-suffix.txt';
 import prepareSectionsTxt from '../../config/prompts/prepare-sections.txt';
 import prepareSingleStoryTxt from '../../config/prompts/prepare-single-story.txt';
+import { ensureFolderPath } from '../utils/vaultAdapterDirs';
 
 export const PROMPTS_DIR_NAME = 'prompts';
 
@@ -90,7 +91,7 @@ export async function ensurePromptFiles(
 	dirPath: string,
 	templates: Record<PreparePromptFilename, string>
 ): Promise<void> {
-	await adapter.mkdir(dirPath);
+	await ensureFolderPath(adapter, dirPath);
 	for (const filename of PREPARE_PROMPT_FILENAMES) {
 		const path = promptFilePath(dirPath, filename);
 		if (await adapter.exists(path)) {
