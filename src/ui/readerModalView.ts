@@ -37,6 +37,24 @@ import { mountSettingsPane, type SettingsPaneHandle } from './readerShell/panes/
 import { mountShortcutsPane, type ShortcutsPaneHandle } from './readerShell/panes/shortcutsPane';
 import { mountAdvancedPane, type AdvancedPaneHandle } from './readerShell/panes/advancedPane';
 import { validateSettings } from '../services/settingsValidator';
+import {
+	applyMobileShellClass,
+	isMobileReader,
+	mountMobileProgressStrip,
+	removeMobileShellClass,
+	consumeMobileGestureHint,
+	syncMobilePlayingState,
+	syncMobileProgressStrip
+} from './readerShell/mobileLayout';
+import {
+	mountMobileCompactBar,
+	type MobileCompactBarHandle
+} from './readerShell/mobileCompactBar';
+import { mountMobileGestures, type MobileGesturesHandle } from './readerShell/mobileGestures';
+import {
+	mountMobileBottomSheet,
+	type MobileBottomSheetHandle
+} from './readerShell/mobileBottomSheet';
 
 const INTER_SECTION_MS = 2000;
 const FONT_SIZE_STEP = 3;
@@ -97,7 +115,13 @@ export class SpeedReaderAiModal extends Modal {
 	private header!: ReaderHeaderHandle;
 	private controlBar!: ReaderControlBarHandle;
 	private contextLine!: ContextLineHandle;
-	private tabDock!: ReaderTabDockHandle;
+	private tabDock: ReaderTabDockHandle | null = null;
+	private mobileCompactBar: MobileCompactBarHandle | null = null;
+	private mobileBottomSheet: MobileBottomSheetHandle | null = null;
+	private mobileGestures: MobileGesturesHandle | null = null;
+	private mobileProgressStripEl: HTMLElement | null = null;
+	private mobileMenuOpen = false;
+	private readonly mobileReader = isMobileReader();
 	private contentPane!: ContentPaneHandle;
 	private settingsPane!: SettingsPaneHandle;
 	private shortcutsPane!: ShortcutsPaneHandle;
@@ -190,6 +214,31 @@ export class SpeedReaderAiModal extends Modal {
 			this.refocusContent();
 		});
 
+		if (this.mobileReader) {
+			applyMobileShellClass(this.shellEl);
+			this.mobileProgressStripEl = mountMobileProgressStrip(this.shellEl);
+			if (this.readerOpen.kind !== 'preferences') {
+				this.mobileCompactBar = mountMobileCompactBar(this.shellEl, {
+					onWpmDelta: (delta) => this.adjustWpm(delta),
+					onFontDelta: (delta) => this.adjustFontSize(delta),
+					onToggleMode: () => {
+						this.engine.togglePlaybackMode();
+						this.render();
+					},
+					onPlayPause: () => {
+						this.engine.togglePlayPause();
+						this.refocusContent();
+					}
+				});
+				this.mobileCompactBar.onChapterPillTap(() => {
+					if (this.state?.isPlaying) {
+						return;
+					}
+					this.mobileBottomSheet?.open({ showChapterPicker: true });
+				});
+			}
+		}
+
 		this.paneStackEl = this.shellEl.createDiv({ cls: 'speed-reader-ai-pane-stack' });
 
 		this.homePaneEl = this.paneStackEl.createDiv({ cls: 'speed-reader-ai-pane speed-reader-ai-pane-home' });
@@ -272,16 +321,37 @@ export class SpeedReaderAiModal extends Modal {
 			}
 		);
 
-		this.tabDock = mountReaderTabDock(
-			this.shellEl,
-			this.activeTab,
-			(tab) => this.setActiveTab(tab),
-			{ preferencesOnly: this.readerOpen.kind === 'preferences' }
-		);
+		if (this.mobileReader) {
+			this.mobileBottomSheet = mountMobileBottomSheet(
+				this.shellEl,
+				this.engine,
+				{
+					preferencesOnly: this.readerOpen.kind === 'preferences',
+					initialTab: this.activeTab,
+					onSelectTab: (tab) => this.setActiveTab(tab),
+					onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId),
+					canNavigateSections: () => this.canNavigateSections()
+				}
+			);
+			this.mobileBottomSheet.onOpenChange((open) => {
+				this.mobileMenuOpen = open;
+				this.render();
+			});
+		} else {
+			this.tabDock = mountReaderTabDock(
+				this.shellEl,
+				this.activeTab,
+				(tab) => this.setActiveTab(tab),
+				{ preferencesOnly: this.readerOpen.kind === 'preferences' }
+			);
+		}
 
 		if (this.readerOpen.kind === 'preferences') {
 			this.setActiveTab(this.activeTab);
 			this.registerKeyboardHandlers();
+			if (this.mobileReader) {
+				this.mountMobileGesturesIfNeeded();
+			}
 			return;
 		}
 
@@ -333,8 +403,15 @@ export class SpeedReaderAiModal extends Modal {
 		this.setActiveTab('home');
 		this.registerKeyboardHandlers();
 		this.registerFocusHandlers();
+		this.mountMobileGesturesIfNeeded();
 		this.updateModeSpecificUi();
 		this.scheduleAutoStart();
+		if (this.mobileReader && consumeMobileGestureHint()) {
+			new Notice(
+				'Mobile: tap the word area to play/pause, swipe for prev/next, ☰ for tabs and chapters.',
+				8000
+			);
+		}
 	}
 
 	onClose() {
@@ -354,6 +431,10 @@ export class SpeedReaderAiModal extends Modal {
 		this.controlBar?.destroy();
 		this.contextLine?.destroy();
 		this.tabDock?.destroy();
+		this.mobileCompactBar?.destroy();
+		this.mobileBottomSheet?.destroy();
+		this.mobileGestures?.destroy();
+		removeMobileShellClass(this.shellEl);
 		this.contentPane?.destroy();
 		this.settingsPane?.destroy();
 		this.shortcutsPane?.destroy();
@@ -374,6 +455,11 @@ export class SpeedReaderAiModal extends Modal {
 
 	private setActiveTab(tab: ReaderTabId) {
 		this.activeTab = tab;
+		this.tabDock?.setActiveTab(tab);
+		this.mobileBottomSheet?.setActiveTab(tab);
+		if (this.mobileReader && tab !== 'home') {
+			this.mobileBottomSheet?.close();
+		}
 		const isHome = tab === 'home';
 		this.homePaneEl?.toggleClass('is-hidden', !isHome);
 		this.paneStackEl
@@ -391,7 +477,9 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.header?.setProgressVisible(isHome && this.settings.reader.display.showProgress);
 		this.contextLine?.setVisible(isHome && this.settings.reader.display.showContext);
-		this.controlBar?.setVisible(isHome && this.readerOpen.kind !== 'preferences');
+		this.controlBar?.setVisible(
+			isHome && !this.mobileReader && this.readerOpen.kind !== 'preferences'
+		);
 		this.shellEl?.toggleClass('is-preferences-only', this.readerOpen.kind === 'preferences');
 
 		if (tab === 'settings') {
@@ -654,7 +742,11 @@ export class SpeedReaderAiModal extends Modal {
 		}
 
 		const showSectionNav = this.canNavigateSections();
-		this.controlBar?.setVisible(this.activeTab === 'home' && this.readerOpen.kind !== 'preferences');
+		this.controlBar?.setVisible(
+			this.activeTab === 'home' &&
+				!this.mobileReader &&
+				this.readerOpen.kind !== 'preferences'
+		);
 		// Re-mount control bar nav visibility via update - section nav buttons in control bar
 		this.render();
 		this.renderSectionVisibility();
@@ -1077,6 +1169,7 @@ export class SpeedReaderAiModal extends Modal {
 		const state = this.state;
 		if (!state || !this.wordDisplayEl) {
 			this.header?.update(state);
+			this.syncMobileChrome(state);
 			return;
 		}
 
@@ -1096,6 +1189,63 @@ export class SpeedReaderAiModal extends Modal {
 		this.renderSectionVisibility();
 		this.sectionNav?.updateFromState(state);
 		this.chapterNav?.updateFromState(state);
+		this.syncMobileChrome(state);
+	}
+
+	private syncMobileChrome(state: ReaderState | null) {
+		if (!this.mobileReader) {
+			return;
+		}
+		const isHome = this.activeTab === 'home';
+		const playing = Boolean(state?.isPlaying && !state.finished && isHome);
+		syncMobilePlayingState(this.shellEl, playing, this.mobileMenuOpen);
+		syncMobileProgressStrip(
+			this.mobileProgressStripEl,
+			isHome ? state : null,
+			this.settings.reader.display.showProgress
+		);
+		if (this.mobileCompactBar && state) {
+			this.mobileCompactBar.update(state, this.settings);
+			this.mobileCompactBar.setChapterNavVisible(this.canNavigateSections());
+		}
+	}
+
+	private mountMobileGesturesIfNeeded() {
+		if (!this.mobileReader || this.mobileGestures || this.readerOpen.kind === 'preferences') {
+			return;
+		}
+		this.mobileGestures = mountMobileGestures(
+			this.wordContainer,
+			this.mobileCompactBar?.getChapterPillEl() ?? null,
+			{
+				onTapWordArea: () => {
+					this.engine.togglePlayPause();
+					this.refocusContent();
+				},
+				onSwipeLeft: () => this.handleArrowLeft(),
+				onSwipeRight: () => this.handleArrowRight(),
+				onSwipeChapterLeft: () => this.handleShiftArrowLeft(),
+				onSwipeChapterRight: () => this.handleShiftArrowRight(),
+				isBlocked: () => this.isInputBlockedByOverlay(),
+				isHomeActive: () => this.activeTab === 'home'
+			}
+		);
+	}
+
+	private onMobileChapterSelect(sectionId: string) {
+		const profile = this.engine.getReaderUxProfile();
+		if (profile?.sectionNav === false && this.engine.getStreamHeadings().length > 0) {
+			this.engine.seekToHeading(sectionId);
+		} else if (this.engine.getSectionList().some((s) => s.id === sectionId)) {
+			this.engine.goToSection(sectionId);
+			this.notifySectionChange();
+		} else {
+			const wordIndex = Number.parseInt(sectionId, 10);
+			if (!Number.isNaN(wordIndex)) {
+				this.engine.jumpToHeading(wordIndex);
+			}
+		}
+		this.refocusContent();
 	}
 
 	private revokeCoverObjectUrl(): void {

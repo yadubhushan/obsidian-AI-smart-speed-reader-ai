@@ -886,6 +886,266 @@
 }
 
 /* ==============================================
+   Mobile reader UX (Platform.isDesktopApp === false)
+   ============================================== */
+
+.speed-reader-ai-mobile .speed-reader-ai-tab-dock {
+	display: none !important;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-header {
+	display: none;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane-home {
+	flex: 1;
+	min-height: 55vh;
+	padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-word-container {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-mobile-progress-strip {
+	flex-shrink: 0;
+	height: 3px;
+	margin: 0;
+	background: var(--sr-progress-track, var(--background-modifier-border));
+	overflow: hidden;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-mobile-progress-strip.is-hidden {
+	display: none;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-mobile-progress-fill {
+	height: 100%;
+	background: var(--sr-progress-fill, var(--interactive-accent));
+	transition: width 0.1s ease-out;
+}
+
+.speed-reader-ai-mobile-compact-bar {
+	flex-shrink: 0;
+	padding: 0.5rem 0.75rem;
+	padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+	border-top: 1px solid var(--sr-border, var(--background-modifier-border));
+}
+
+.speed-reader-ai-mobile-compact-top {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.speed-reader-ai-mobile-compact-play {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: 1.1rem;
+	min-width: 44px;
+	min-height: 44px;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-mobile-chapter-pill {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: 999px;
+	background: var(--background-secondary);
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	flex: 1;
+	min-height: 44px;
+	padding: 0.35rem 0.75rem;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.speed-reader-ai-mobile-compact-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+}
+
+.speed-reader-ai-mobile-compact-group {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.speed-reader-ai-mobile-touch-btn {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	min-width: 44px;
+	min-height: 44px;
+	padding: 0.25rem 0.5rem;
+}
+
+.speed-reader-ai-mobile-mode-btn.is-line-repeat {
+	color: var(--text-success);
+	border-color: color-mix(in srgb, var(--text-success) 35%, transparent);
+}
+
+.speed-reader-ai-mobile-compact-value {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	min-width: 2.25rem;
+	text-align: center;
+}
+
+.speed-reader-ai-mobile-sheet-root {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-mobile-fab {
+	position: fixed;
+	right: calc(1rem + env(safe-area-inset-right, 0px));
+	bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+	z-index: 50;
+	appearance: none;
+	border: none;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	font-size: 1.25rem;
+	width: 52px;
+	height: 52px;
+	box-shadow: 0 2px 12px color-mix(in srgb, var(--background-modifier-box-shadow) 80%, transparent);
+}
+
+.speed-reader-ai-mobile-sheet-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	background: color-mix(in srgb, var(--background-modifier-cover) 55%, transparent);
+}
+
+.speed-reader-ai-mobile-sheet {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 61;
+	max-height: 70vh;
+	display: flex;
+	flex-direction: column;
+	background: var(--background-primary);
+	border-top: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-l) var(--radius-l) 0 0;
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	box-shadow: 0 -4px 24px color-mix(in srgb, var(--background-modifier-box-shadow) 60%, transparent);
+}
+
+.speed-reader-ai-mobile-sheet-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.35rem;
+	padding: 0.75rem 1rem 0.5rem;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-mobile-sheet-tab {
+	appearance: none;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--sr-tab-inactive-text, var(--text-muted));
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	min-height: 44px;
+	padding: 0.4rem 0.85rem;
+}
+
+.speed-reader-ai-mobile-sheet-tab.is-active {
+	background: var(--sr-tab-active-bg, var(--interactive-accent));
+	color: var(--sr-tab-active-text, var(--text-on-accent));
+}
+
+.speed-reader-ai-mobile-sheet-chapters {
+	overflow: auto;
+	padding: 0 1rem 1rem;
+	flex: 1;
+	min-height: 0;
+}
+
+.speed-reader-ai-mobile-sheet-chapters-title {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 0.5rem;
+}
+
+.speed-reader-ai-mobile-sheet-chapter-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.speed-reader-ai-mobile-sheet-chapter-btn {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	min-height: 44px;
+	padding: 0.5rem 0.75rem;
+	text-align: left;
+}
+
+.speed-reader-ai-mobile-menu-open .speed-reader-ai-pane-stack,
+.speed-reader-ai-mobile-menu-open .speed-reader-ai-mobile-compact-bar,
+.speed-reader-ai-mobile-menu-open .speed-reader-ai-mobile-progress-strip {
+	opacity: 0.35;
+	pointer-events: none;
+}
+
+.speed-reader-ai-mobile-playing .speed-reader-ai-context-line,
+.speed-reader-ai-mobile-playing .speed-reader-ai-control-bar,
+.speed-reader-ai-mobile-playing .speed-reader-ai-structured-bar,
+.speed-reader-ai-mobile-playing .speed-reader-ai-mobile-compact-bar {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	height: 0;
+	min-height: 0;
+	padding: 0;
+	margin: 0;
+	border: none;
+	overflow: hidden;
+}
+
+.speed-reader-ai-mobile-playing .speed-reader-ai-pane-home {
+	padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.speed-reader-ai-shell.is-preferences-only.speed-reader-ai-mobile .speed-reader-ai-mobile-compact-bar {
+	display: none;
+}
+
+/* ==============================================
    Done State
    ============================================== */
 
@@ -1358,10 +1618,15 @@
 		padding: 0.25rem 0.5rem;
 	}
 
-	.speed-reader-ai-word-container {
+	.speed-reader-ai-shell:not(.speed-reader-ai-mobile) .speed-reader-ai-word-container {
 		min-height: 100px;
 		padding: 1rem 0.5rem;
 		--speed-reader-ai-font-size: clamp(2rem, 6vw, 3rem);
+	}
+
+	.speed-reader-ai-mobile .speed-reader-ai-word-container {
+		min-height: 100px;
+		padding: 1rem 0.5rem;
 	}
 
 	.speed-reader-ai-header-badge {

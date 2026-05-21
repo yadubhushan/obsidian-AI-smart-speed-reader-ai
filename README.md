@@ -78,6 +78,17 @@ Do **not** rely on Sync to deliver plugin binaries. Install via BRAT or the comm
 
 Plugin settings (API keys, reader prefs) live in `.obsidian/plugins/speed-reader-ai/data.json`. If you exclude the plugins folder from Sync, configure LLM settings once on each device.
 
+### Mobile reader
+
+On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout unchanged):
+
+- **Tap** the word area — play / pause
+- **Swipe** left / right — previous / next word
+- **Swipe** on the chapter pill (when paused) — previous / next chapter or section
+- **☰** (FAB) — bottom sheet for Home, Content, Settings, Shortcuts, Advanced; chapter jump when paused
+
+While playing, chrome collapses to maximize the RSVP area.
+
 ## Build from source
 
 Requires Node.js 18+.
