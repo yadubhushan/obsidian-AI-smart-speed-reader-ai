@@ -21,6 +21,9 @@ export interface CreateLlmClientDeps {
 }
 
 function defaultCanResolveCursorCli(configuredPath: string | undefined): boolean {
+	if (Platform.isDesktopApp === false) {
+		return false;
+	}
 	try {
 		detectCursorExecutable(configuredPath);
 		return true;
@@ -69,9 +72,10 @@ export function resolveAutoBackend(
 	deps: Pick<CreateLlmClientDeps, 'isDesktopApp' | 'canResolveCursorCli'>
 ): Exclude<LlmBackend, 'auto'> {
 	const isDesktop = deps.isDesktopApp ?? Platform.isDesktopApp;
-	const canResolveCursor =
-		deps.canResolveCursorCli?.(settings.ai.cursorCliPath.trim() || undefined) ??
-		defaultCanResolveCursorCli(settings.ai.cursorCliPath.trim() || undefined);
+	const canResolveCursor = isDesktop
+		? (deps.canResolveCursorCli?.(settings.ai.cursorCliPath.trim() || undefined) ??
+			defaultCanResolveCursorCli(settings.ai.cursorCliPath.trim() || undefined))
+		: false;
 
 	if (isDesktop && canResolveCursor) {
 		return 'cursor-cli';
@@ -155,8 +159,9 @@ export function isLlmBackendConfigured(
 			return false;
 		}
 		return (
-			deps?.canResolveCursorCli?.(settings.ai.cursorCliPath.trim() || undefined) ??
-			defaultCanResolveCursorCli(settings.ai.cursorCliPath.trim() || undefined)
+			isDesktop &&
+			(deps?.canResolveCursorCli?.(settings.ai.cursorCliPath.trim() || undefined) ??
+				defaultCanResolveCursorCli(settings.ai.cursorCliPath.trim() || undefined))
 		);
 	}
 	if (settings.ai.llmBackend === 'ai-providers') {

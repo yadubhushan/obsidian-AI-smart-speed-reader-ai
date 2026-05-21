@@ -3,10 +3,10 @@ main.js
 .DS_Store
 *.log
 .vite/
+data/
 
 # Vault-only dev (not published to GitHub)
 brain/
 scripts/
 demo.gif
 README copy.md
-readme.md

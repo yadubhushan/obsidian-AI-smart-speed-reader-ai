@@ -1,3 +1,4 @@
+import { Platform } from 'obsidian';
 import { execFileSync, spawn, type ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import { basename, resolve } from 'path';
@@ -48,6 +49,9 @@ function which(cmd: string): string | null {
 
 /** Match Python `_detect_cursor_executable` */
 export function detectCursorExecutable(configuredPath: string | undefined): string {
+	if (Platform.isDesktopApp === false) {
+		throw new CursorCliExecutionError('Cursor CLI is not available on mobile.');
+	}
 	const raw = (configuredPath ?? '').trim();
 	if (raw) {
 		const home = process.env.HOME ?? '';

@@ -43,6 +43,12 @@ describe('resolveAutoBackend', () => {
 		).toBe('openai-compatible');
 	});
 
+	it('never selects cursor-cli on mobile without api or providers configured', () => {
+		expect(() =>
+			resolveAutoBackend(DEFAULT_SETTINGS, { isDesktopApp: false })
+		).toThrow(LlmClientError);
+	});
+
 	it('throws when nothing configured on mobile', () => {
 		expect(() =>
 			resolveAutoBackend(DEFAULT_SETTINGS, {
