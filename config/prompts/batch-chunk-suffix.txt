@@ -1,0 +1,1 @@
+This is a PARTIAL chunk of a larger document. Produce digest sections for ONLY the content in this chunk. Maintain reading order within the chunk. Each section must still follow the 80/20 comprehension rules — tell the story of the idea, not a summary of the text. Return sections with title and body for this chunk only.

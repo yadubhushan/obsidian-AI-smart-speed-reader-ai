@@ -1,0 +1,13 @@
+{
+  "default": "composer-2.5-fast",
+  "models": [
+    { "id": "composer-2.5-fast", "label": "Composer 2.5 Fast" },
+    { "id": "gpt-5.5-medium", "label": "GPT-5.5" },
+    { "id": "gpt-5.3-codex", "label": "Codex 5.3" },
+    { "id": "claude-4.6-sonnet-medium", "label": "Sonnet 4.6" },
+    { "id": "claude-opus-4-7-medium", "label": "Opus 4.7" },
+    { "id": "claude-4.5-opus-high", "label": "Opus 4.5" },
+    { "id": "gpt-5.2-xhigh", "label": "GPT-5.2 Extra High" },
+    { "id": "gemini-3.1-pro", "label": "Gemini 3.1 Pro" }
+  ]
+}

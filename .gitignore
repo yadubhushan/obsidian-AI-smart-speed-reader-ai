@@ -1,0 +1,12 @@
+node_modules/
+main.js
+.DS_Store
+*.log
+.vite/
+
+# Vault-only dev (not published to GitHub)
+brain/
+scripts/
+demo.gif
+README copy.md
+readme.md
