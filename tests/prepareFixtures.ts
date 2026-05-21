@@ -4,7 +4,7 @@ import type { NormalizedDocumentBundle } from '../src/parse/normalizeTypes';
 import type { ProcessedDocument, ProcessorDeps } from '../src/types/processedDocument';
 import type { LlmClient } from '../src/llm/CursorCliClient';
 import { DEFAULT_SETTINGS } from '../src/types';
-import { loadPreparePromptSetFromDirSync } from '../src/llm/promptCatalog';
+import { loadPreparePromptSetFromDirSync } from '../src/llm/promptCatalogSync';
 import { join } from 'node:path';
 
 const TEST_PREPARE_PROMPTS = loadPreparePromptSetFromDirSync(

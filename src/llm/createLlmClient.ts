@@ -2,11 +2,8 @@ import { Platform } from 'obsidian';
 import type { LlmBackend, SpeedReaderAiSettings } from '../types';
 import type { AiProvidersExecuteApi } from './AiProvidersLlmClient';
 import { AiProvidersLlmClient } from './AiProvidersLlmClient';
-import {
-	CursorCliClient,
-	cursorCliOptionsFromSettings,
-	detectCursorExecutable
-} from './CursorCliClient';
+import { canResolveCursorCliDesktop } from './cursorCliDesktopBridge';
+import { cursorCliOptionsFromSettings } from './cursorCliShared';
 import type { LlmClient } from './LlmClient';
 import { LlmClientError } from './LlmClient';
 import { OpenAiCompatibleClient, resolveApiBaseUrl } from './OpenAiCompatibleClient';
@@ -24,12 +21,7 @@ function defaultCanResolveCursorCli(configuredPath: string | undefined): boolean
 	if (Platform.isDesktopApp === false) {
 		return false;
 	}
-	try {
-		detectCursorExecutable(configuredPath);
-		return true;
-	} catch {
-		return false;
-	}
+	return canResolveCursorCliDesktop(configuredPath);
 }
 
 function hasApiKeyConfigured(settings: SpeedReaderAiSettings): boolean {
@@ -40,8 +32,20 @@ function hasAiProvidersConfigured(settings: SpeedReaderAiSettings): boolean {
 	return settings.ai.aiProvidersProviderId.trim().length > 0;
 }
 
-function createCursorCliClient(settings: SpeedReaderAiSettings): LlmClient {
-	return new CursorCliClient(cursorCliOptionsFromSettings(settings));
+class LazyCursorCliLlmClient implements LlmClient {
+	private client: LlmClient | null = null;
+
+	constructor(private readonly getSettings: () => SpeedReaderAiSettings) {}
+
+	complete(systemPrompt: string, userPrompt: string): Promise<string> {
+		if (this.client) {
+			return this.client.complete(systemPrompt, userPrompt);
+		}
+		return import('./CursorCliClient').then(({ CursorCliClient }) => {
+			this.client = new CursorCliClient(cursorCliOptionsFromSettings(this.getSettings()));
+			return this.client.complete(systemPrompt, userPrompt);
+		});
+	}
 }
 
 function createAiProvidersClient(
@@ -112,7 +116,7 @@ export function createLlmClient(deps: CreateLlmClientDeps): LlmClient {
 			if (!(deps.isDesktopApp ?? Platform.isDesktopApp)) {
 				throw new LlmClientError('Cursor CLI is not available on mobile.');
 			}
-			return createCursorCliClient(settings);
+			return new LazyCursorCliLlmClient(deps.getSettings);
 		}
 		case 'ai-providers':
 			if (!hasAiProvidersConfigured(settings)) {

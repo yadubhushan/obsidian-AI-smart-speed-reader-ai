@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import batchChunkSuffixTxt from '../../config/prompts/batch-chunk-suffix.txt';
 import prepareSectionsTxt from '../../config/prompts/prepare-sections.txt';
 import prepareSingleStoryTxt from '../../config/prompts/prepare-single-story.txt';
@@ -124,23 +122,6 @@ export async function loadPreparePromptSet(
 	} catch {
 		throw new Error(PREPARE_PROMPTS_MISSING_MESSAGE);
 	}
-}
-
-/** Sync load for tests; reads `config/prompts/` or any directory with the three files. */
-export function loadPreparePromptSetFromDirSync(dirPath: string): PreparePromptSet {
-	const sections = readFileSync(
-		join(dirPath, PREPARE_SECTIONS_FILENAME),
-		'utf8'
-	);
-	const singleStory = readFileSync(
-		join(dirPath, PREPARE_SINGLE_STORY_FILENAME),
-		'utf8'
-	);
-	const batchChunkSuffix = readFileSync(
-		join(dirPath, BATCH_CHUNK_SUFFIX_FILENAME),
-		'utf8'
-	);
-	return buildPreparePromptSet(sections, singleStory, batchChunkSuffix);
 }
 
 /** Seeds missing `data/prompts/*.txt` from bundled defaults (no package readFileSync). */

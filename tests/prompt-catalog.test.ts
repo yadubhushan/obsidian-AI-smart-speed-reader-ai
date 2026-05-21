@@ -7,12 +7,12 @@ import {
 	buildPreparePromptSet,
 	ensurePreparePromptFiles,
 	loadPreparePromptSet,
-	loadPreparePromptSetFromDirSync,
 	PREPARE_PROMPTS_MISSING_MESSAGE,
 	PREPARE_SECTIONS_FILENAME,
 	PREPARE_SINGLE_STORY_FILENAME,
 	type DataAdapterLike
 } from '../src/llm/promptCatalog';
+import { loadPreparePromptSetFromDirSync } from '../src/llm/promptCatalogSync';
 
 const CONFIG_PROMPTS_DIR = join(process.cwd(), 'config', 'prompts');
 

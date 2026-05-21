@@ -1,5 +1,6 @@
 import { Editor, MarkdownView, Menu, Notice, Plugin } from 'obsidian';
 import { initAI } from '@obsidian-ai-providers/sdk';
+import { initCursorCliDesktopSupport } from './llm/cursorCliDesktopBridge';
 import { contentChecksum } from './crypto-checksum';
 import { registerFeature1 } from './features/feature1/registerFeature1';
 import {
@@ -48,6 +49,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 	async onload() {
 		initAI(this.app, this, async () => undefined, { disableFallback: true });
+		await initCursorCliDesktopSupport();
 		this.llmModelsConfigPath = await migrateLlmModelsConfigIfNeeded(
 			this.app.vault.adapter,
 			this.app.vault.configDir,

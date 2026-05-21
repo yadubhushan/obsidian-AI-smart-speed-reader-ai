@@ -1,10 +1,6 @@
 import { App, Notice, Platform, Setting } from 'obsidian';
 import type SpeedReaderAiPlugin from '../main';
 import { DEFAULT_SETTINGS } from '../types';
-import {
-	detectCursorExecutable,
-	runCursorCliSmokeTest
-} from '../llm/CursorCliClient';
 import { runAiProvidersSmokeTest } from '../llm/AiProvidersLlmClient';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
 import { describeActiveLlmBackend } from '../llm/createLlmClient';
@@ -119,97 +115,102 @@ export function displayPluginAiSettings(host: PluginAiSettingsHost, containerEl:
 				})
 			);
 
-		new Setting(containerEl)
-			.setName('Cursor CLI path')
-			.setDesc(
-				'Absolute path to the `cursor` or `cursor-agent` binary. ' +
-					'Obsidian often has a minimal PATH (unlike Terminal), so leave this empty only if `which cursor` works from a bare login shell. ' +
-					'Example: /Users/you/.local/bin/cursor'
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder('e.g. /Users/you/.local/bin/cursor')
-					.setValue(ai.cursorCliPath)
-					.onChange(async (value) => {
-						plugin.settings.ai.cursorCliPath = value.trim();
-						await plugin.saveSettings();
-						const p = plugin.settings.ai.cursorCliPath;
-						if (!p.length) {
-							return;
-						}
+		if (Platform.isDesktopApp) {
+			new Setting(containerEl)
+				.setName('Cursor CLI path')
+				.setDesc(
+					'Absolute path to the `cursor` or `cursor-agent` binary. ' +
+						'Obsidian often has a minimal PATH (unlike Terminal), so leave this empty only if `which cursor` works from a bare login shell. ' +
+						'Example: /Users/you/.local/bin/cursor'
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder('e.g. /Users/you/.local/bin/cursor')
+						.setValue(ai.cursorCliPath)
+						.onChange(async (value) => {
+							plugin.settings.ai.cursorCliPath = value.trim();
+							await plugin.saveSettings();
+							const p = plugin.settings.ai.cursorCliPath;
+							if (!p.length) {
+								return;
+							}
+							try {
+								const { detectCursorExecutable } = await import('../llm/CursorCliClient');
+								detectCursorExecutable(p);
+							} catch {
+								new Notice(
+									'Could not resolve Cursor CLI at this path (setting saved). ' +
+										'Install the CLI or fix the path, then use Resolve to verify.',
+									11000
+								);
+							}
+						})
+				);
+
+			new Setting(containerEl)
+				.setName('Locate Cursor CLI executable')
+				.setDesc('Only checks filesystem / PATH resolution (instant). Does not call the agent.')
+				.addButton((btn) =>
+					btn.setButtonText('Resolve').onClick(async () => {
 						try {
-							detectCursorExecutable(p);
-						} catch {
-							new Notice(
-								'Could not resolve Cursor CLI at this path (setting saved). ' +
-									'Install the CLI or fix the path, then use Resolve to verify.',
-								11000
+							const { detectCursorExecutable } = await import('../llm/CursorCliClient');
+							const configured = plugin.settings.ai.cursorCliPath.trim();
+							const exe = detectCursorExecutable(
+								configured.length ? configured : undefined
 							);
+							new Notice(`OK — using: ${exe}`, 10000);
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error ? e.message : `Resolution failed: ${String(e)}`;
+							new Notice(msg, 14000);
 						}
 					})
-			);
+				);
 
-		new Setting(containerEl)
-			.setName('Locate Cursor CLI executable')
-			.setDesc('Only checks filesystem / PATH resolution (instant). Does not call the agent.')
-			.addButton((btn) =>
-				btn.setButtonText('Resolve').onClick(() => {
-					try {
-						const configured = plugin.settings.ai.cursorCliPath.trim();
-						const exe = detectCursorExecutable(
-							configured.length ? configured : undefined
-						);
-						new Notice(`OK — using: ${exe}`, 10000);
-					} catch (e: unknown) {
-						const msg =
-							e instanceof Error ? e.message : `Resolution failed: ${String(e)}`;
-						new Notice(msg, 14000);
-					}
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Test Cursor CLI connection')
-			.setDesc(
-				'Runs a minimal ping prompt through the Cursor agent. Uses a capped timeout (30–120s).'
-			)
-			.addButton((btn) =>
-				btn.setButtonText(BUTTON_SMOKE_CURSOR_LABEL).onClick(async () => {
-					btn.setDisabled(true);
-					btn.setButtonText('Calling…');
-					try {
-						const path = plugin.settings.ai.cursorCliPath.trim();
-						const r = await runCursorCliSmokeTest({
-							cursorCliPath: path.length ? path : undefined,
-							model: plugin.settings.ai.llmModel,
-							timeoutSeconds: plugin.settings.ai.timeoutSeconds
-						});
-						if (r.ok) {
-							const trimmed = summarizeSmokeStdout(r.stdout);
-							const normalized = trimmed.toUpperCase();
-							const hinted = normalized.includes('SPEED_READER_PING_OK')
-								? '(response contains ping token)'
-								: '(unexpected format — check Cursor output)';
-							new Notice(
-								`LLM OK ${hinted}\n(${r.timeoutSecondsUsed}s timeout) ${trimmed}`,
-								16000
-							);
-						} else {
-							const pathHint = path.length
-								? `\nConfigured path: ${path}`
-								: '\nNo path configured — check PATH or set cursorCliPath.';
-							new Notice(`${r.message}${pathHint}`, 16000);
+			new Setting(containerEl)
+				.setName('Test Cursor CLI connection')
+				.setDesc(
+					'Runs a minimal ping prompt through the Cursor agent. Uses a capped timeout (30–120s).'
+				)
+				.addButton((btn) =>
+					btn.setButtonText(BUTTON_SMOKE_CURSOR_LABEL).onClick(async () => {
+						btn.setDisabled(true);
+						btn.setButtonText('Calling…');
+						try {
+							const { runCursorCliSmokeTest } = await import('../llm/CursorCliClient');
+							const path = plugin.settings.ai.cursorCliPath.trim();
+							const r = await runCursorCliSmokeTest({
+								cursorCliPath: path.length ? path : undefined,
+								model: plugin.settings.ai.llmModel,
+								timeoutSeconds: plugin.settings.ai.timeoutSeconds
+							});
+							if (r.ok) {
+								const trimmed = summarizeSmokeStdout(r.stdout);
+								const normalized = trimmed.toUpperCase();
+								const hinted = normalized.includes('SPEED_READER_PING_OK')
+									? '(response contains ping token)'
+									: '(unexpected format — check Cursor output)';
+								new Notice(
+									`LLM OK ${hinted}\n(${r.timeoutSecondsUsed}s timeout) ${trimmed}`,
+									16000
+								);
+							} else {
+								const pathHint = path.length
+									? `\nConfigured path: ${path}`
+									: '\nNo path configured — check PATH or set cursorCliPath.';
+								new Notice(`${r.message}${pathHint}`, 16000);
+							}
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error ? e.message : `Smoke test crashed: ${String(e)}`;
+							new Notice(msg, 16000);
+						} finally {
+							btn.setButtonText(BUTTON_SMOKE_CURSOR_LABEL);
+							btn.setDisabled(false);
 						}
-					} catch (e: unknown) {
-						const msg =
-							e instanceof Error ? e.message : `Smoke test crashed: ${String(e)}`;
-						new Notice(msg, 16000);
-					} finally {
-						btn.setButtonText(BUTTON_SMOKE_CURSOR_LABEL);
-						btn.setDisabled(false);
-					}
-				})
-			);
+					})
+				);
+		}
 	}
 
 	if (showAiProviders) {

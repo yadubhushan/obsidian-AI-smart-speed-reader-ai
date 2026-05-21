@@ -1,6 +1,7 @@
 import { EventBus } from './eventBus';
 import type { SpeedReaderPluginHost } from './pluginHost';
 import { SettingsBackedLlmClient, isLlmBackendConfigured } from '../llm/createLlmClient';
+import { canResolveCursorCliDesktop } from '../llm/cursorCliDesktopBridge';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
 import { validateSettings } from './settingsValidator';
 import { BookCacheStoreImpl } from '../store/BookCacheStore';
@@ -42,7 +43,8 @@ export function createPluginServices(plugin: SpeedReaderPluginHost): PluginServi
 			}
 			return new SettingsBackedLlmClient({
 				getSettings: () => plugin.settings,
-				getAiProviders: () => getAiProvidersApi(plugin.app)
+				getAiProviders: () => getAiProvidersApi(plugin.app),
+				canResolveCursorCli: (path) => canResolveCursorCliDesktop(path)
 			});
 		}
 	);
