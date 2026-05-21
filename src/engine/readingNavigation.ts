@@ -13,6 +13,8 @@ export interface NavWord {
 	seekIndex: number;
 	display: string;
 	isSentenceEnd: boolean;
+	/** True when this word begins a new paragraph (EPUB cache or note segment boundary). */
+	isParagraphStart?: boolean;
 }
 
 export interface PauseContextToken {
@@ -45,9 +47,16 @@ export function navWordsFromLegacy(words: WordData[]): NavWord[] {
 	}));
 }
 
-export function navWordsFromStream(stream: StreamToken[]): NavWord[] {
+export function navWordsFromStream(
+	stream: StreamToken[],
+	paragraphStarts?: number[]
+): NavWord[] {
 	const result: NavWord[] = [];
 	let wordIndex = 0;
+	const paragraphStartSet = new Set(paragraphStarts ?? [0]);
+	if (!paragraphStartSet.has(0)) {
+		paragraphStartSet.add(0);
+	}
 
 	for (let tokenIndex = 0; tokenIndex < stream.length; tokenIndex++) {
 		const token = stream[tokenIndex];
@@ -60,7 +69,8 @@ export function navWordsFromStream(stream: StreamToken[]): NavWord[] {
 			wordIndex,
 			seekIndex: tokenIndex,
 			display: token.text,
-			isSentenceEnd: isSentenceEndPunctuation(punctuation)
+			isSentenceEnd: isSentenceEndPunctuation(punctuation),
+			isParagraphStart: paragraphStartSet.has(wordIndex)
 		});
 		wordIndex++;
 	}

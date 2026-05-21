@@ -145,11 +145,18 @@ export function validateProcessedSection(raw: unknown): ProcessedSection | null 
 	if (!stream || stream.length === 0) {
 		return null;
 	}
-	return {
+	const section: ProcessedSection = {
 		sectionId: raw.sectionId.trim(),
 		title: raw.title.trim(),
 		stream
 	};
+	if (Array.isArray(raw.paragraphStarts)) {
+		const starts = raw.paragraphStarts.filter((n): n is number => typeof n === 'number' && n >= 0);
+		if (starts.length > 0) {
+			section.paragraphStarts = starts;
+		}
+	}
+	return section;
 }
 
 export function validateProcessedDocument(raw: unknown): ProcessedDocument | null {
@@ -202,12 +209,19 @@ export function validateProcessedDocument(raw: unknown): ProcessedDocument | nul
 		if (!stream || stream.length === 0) {
 			return null;
 		}
-		return {
+		const doc: Extract<ProcessedDocument, { kind: 'single_story' }> = {
 			kind: 'single_story',
 			processorId: 'single_story',
 			meta: processedMeta,
 			stream
 		};
+		if (Array.isArray(raw.paragraphStarts)) {
+			const starts = raw.paragraphStarts.filter((n): n is number => typeof n === 'number' && n >= 0);
+			if (starts.length > 0) {
+				doc.paragraphStarts = starts;
+			}
+		}
+		return doc;
 	}
 
 	return null;

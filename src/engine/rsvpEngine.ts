@@ -40,6 +40,13 @@ import {
 	prevLineUnitIndex,
 	SentenceUnit
 } from './lineRepeatPlayback';
+import type { BookmarkPassage, PauseSentenceContext } from './paragraphContracts';
+export type { BookmarkPassage, PauseSentenceContext } from './paragraphContracts';
+import {
+	buildParagraphUnits,
+	findParagraphForWordIndex,
+	paragraphTextFromUnit
+} from './paragraphUnits';
 import {
 	buildPauseContext,
 	computeSmartForwardTarget,
@@ -98,6 +105,7 @@ export class RSVPEngine {
 	private currentTokenIndex = 0;
 	private playbackMode: PlaybackMode;
 	private sentenceUnits: SentenceUnit[] = [];
+	private activeParagraphStarts: number[] | null = null;
 
 	constructor(
 		settings: SpeedReaderAiSettings,
@@ -150,6 +158,7 @@ export class RSVPEngine {
 		const maxToken = Math.max(stream.length - 1, 0);
 		this.currentTokenIndex = clamp(opts.tokenIndex ?? 0, 0, maxToken);
 
+		this.syncParagraphStarts();
 		this.rebuildSentenceUnits();
 		this.emitState(false);
 	}
@@ -454,6 +463,7 @@ export class RSVPEngine {
 			Math.max(this.processed.sections.length - 1, 0)
 		);
 		this.currentTokenIndex = 0;
+		this.syncParagraphStarts();
 		this.rebuildSentenceUnits();
 		this.emitState(false);
 		this.restartLoopIfPlaying();
@@ -502,6 +512,82 @@ export class RSVPEngine {
 		return slice.map((word) => word.display).join(' ').trim();
 	}
 
+	getBookmarkPassage(): BookmarkPassage {
+		const highlightedSentence = this.getCurrentSentenceText();
+		const navWords = this.getNavWords();
+
+		if (navWords.length === 0) {
+			return {
+				paragraphText: highlightedSentence,
+				highlightedSentence
+			};
+		}
+
+		const wordIdx = this.getCurrentWordIndex(navWords);
+		const units = buildParagraphUnits(navWords, this.sentenceUnits);
+		const paragraph = findParagraphForWordIndex(units, wordIdx);
+		const paragraphText = paragraph
+			? paragraphTextFromUnit(navWords, paragraph)
+			: highlightedSentence;
+
+		return {
+			paragraphText: paragraphText || highlightedSentence,
+			highlightedSentence
+		};
+	}
+
+	getPauseSentenceContext(): PauseSentenceContext | null {
+		const navWords = this.getNavWords();
+		if (navWords.length === 0 || this.sentenceUnits.length === 0) {
+			return null;
+		}
+
+		const seekIndex = this.getCurrentSeekIndex();
+		const unitIndex = findSentenceUnitForSeekIndex(this.sentenceUnits, seekIndex);
+		const unit = this.sentenceUnits[unitIndex];
+		if (!unit) {
+			return null;
+		}
+
+		const currentWordIndices = new Set(this.getCurrentChunkWordIndices(navWords));
+		const sentenceTokens: PauseContextToken[] = [];
+		for (let i = unit.startWordIdx; i <= unit.endWordIdx; i++) {
+			sentenceTokens.push({
+				text: navWords[i]!.display,
+				isCurrent: currentWordIndices.has(i)
+			});
+		}
+
+		const wordIdx = this.getCurrentWordIndex(navWords);
+		const paragraphUnits = buildParagraphUnits(navWords, this.sentenceUnits);
+		const paragraph = findParagraphForWordIndex(paragraphUnits, wordIdx);
+
+		let paragraphPrefix: string | undefined;
+		let paragraphSuffix: string | undefined;
+
+		if (paragraph && unit.startWordIdx > paragraph.startWordIdx) {
+			paragraphPrefix = navWords
+				.slice(paragraph.startWordIdx, unit.startWordIdx)
+				.map((w) => w.display)
+				.join(' ');
+			if (paragraphPrefix.length > 200) {
+				paragraphPrefix = `${paragraphPrefix.slice(0, 197)}…`;
+			}
+		}
+
+		if (paragraph && unit.endWordIdx < paragraph.endWordIdx) {
+			paragraphSuffix = navWords
+				.slice(unit.endWordIdx + 1, paragraph.endWordIdx + 1)
+				.map((w) => w.display)
+				.join(' ');
+			if (paragraphSuffix.length > 200) {
+				paragraphSuffix = `${paragraphSuffix.slice(0, 197)}…`;
+			}
+		}
+
+		return { paragraphPrefix, paragraphSuffix, sentenceTokens };
+	}
+
 	getContext(contextWords: number): { before: string[]; after: string[] } {
 		if (this.playbackSource === 'manifest') {
 			return this.getManifestContext(contextWords);
@@ -519,7 +605,7 @@ export class RSVPEngine {
 
 	private getNavWords() {
 		if (this.playbackSource === 'manifest') {
-			return navWordsFromStream(this.getActiveStream());
+			return navWordsFromStream(this.getActiveStream(), this.activeParagraphStarts ?? undefined);
 		}
 		return navWordsFromLegacy(this.words);
 	}
@@ -588,6 +674,21 @@ export class RSVPEngine {
 		this.isDeterministic = false;
 		this.currentSectionIndex = 0;
 		this.currentTokenIndex = 0;
+		this.activeParagraphStarts = null;
+	}
+
+	private syncParagraphStarts() {
+		this.activeParagraphStarts = null;
+		if (!this.processed) {
+			return;
+		}
+		if (isSectionsProcessed(this.processed)) {
+			this.activeParagraphStarts = this.getActiveSection()?.paragraphStarts ?? null;
+			return;
+		}
+		if (isStoryProcessed(this.processed)) {
+			this.activeParagraphStarts = this.processed.paragraphStarts ?? null;
+		}
 	}
 
 	private getSectionCount(): number {

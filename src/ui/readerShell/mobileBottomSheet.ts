@@ -1,30 +1,46 @@
-import {
-	READER_TABS,
-	type ReaderTabId
-} from './readerTabDock';
+import type { ReaderTabId } from './readerTabDock';
 import type { RSVPEngine } from '../../engine/rsvpEngine';
-import { getSectionPickerOptions } from './mobileCompactBar';
+import { getSectionPickerOptions } from './mobileSectionPicker';
+import {
+	mountMobileReadingControls,
+	type MobileReadingControlsHandle
+} from './mobileReadingControls';
+import type { ReaderState, SpeedReaderAiSettings } from '../../types';
+
+export type MobileMenuTabId = 'chapters' | 'reading' | 'settings' | 'advanced';
 
 export interface MobileBottomSheetHandle {
 	destroy(): void;
 	setActiveTab(tab: ReaderTabId): void;
-	open(options?: { showChapterPicker?: boolean }): void;
+	open(options?: { initialMenuTab?: MobileMenuTabId }): void;
 	close(): void;
 	isOpen(): boolean;
 	onOpenChange(cb: (open: boolean) => void): void;
+	refreshReadingControls(): void;
 }
 
-const PREFERENCES_TABS = new Set<ReaderTabId>(['settings', 'shortcuts', 'advanced']);
+const MOBILE_MENU_TABS: { id: MobileMenuTabId; label: string }[] = [
+	{ id: 'chapters', label: 'Chapters' },
+	{ id: 'reading', label: 'Reading' },
+	{ id: 'settings', label: 'Settings' },
+	{ id: 'advanced', label: 'Advanced' }
+];
+
+const PREFERENCES_MENU_TABS: MobileMenuTabId[] = ['settings', 'advanced'];
 
 export function mountMobileBottomSheet(
 	shellEl: HTMLElement,
 	engine: RSVPEngine,
 	options: {
 		preferencesOnly?: boolean;
-		initialTab: ReaderTabId;
 		onSelectTab: (tab: ReaderTabId) => void;
 		onChapterSelect: (sectionId: string) => void;
 		canNavigateSections: () => boolean;
+		getSettings: () => SpeedReaderAiSettings;
+		getState: () => ReaderState | null;
+		onWpmChange: (wpm: number) => void;
+		onFontChange: (fontSize: number) => void;
+		onToggleMode: () => void;
 	}
 ): MobileBottomSheetHandle {
 	const root = shellEl.createDiv({ cls: 'speed-reader-ai-mobile-sheet-root' });
@@ -37,7 +53,9 @@ export function mountMobileBottomSheet(
 	const backdrop = root.createDiv({ cls: 'speed-reader-ai-mobile-sheet-backdrop is-hidden' });
 	const sheet = root.createDiv({ cls: 'speed-reader-ai-mobile-sheet is-hidden' });
 	const tabRow = sheet.createDiv({ cls: 'speed-reader-ai-mobile-sheet-tabs' });
-	const chapterSection = sheet.createDiv({
+	const bodyHost = sheet.createDiv({ cls: 'speed-reader-ai-mobile-sheet-body' });
+
+	const chapterSection = bodyHost.createDiv({
 		cls: 'speed-reader-ai-mobile-sheet-chapters is-hidden'
 	});
 	const chapterTitle = chapterSection.createDiv({
@@ -46,22 +64,37 @@ export function mountMobileBottomSheet(
 	});
 	const chapterList = chapterSection.createDiv({ cls: 'speed-reader-ai-mobile-sheet-chapter-list' });
 
+	const readingSection = bodyHost.createDiv({
+		cls: 'speed-reader-ai-mobile-sheet-reading is-hidden'
+	});
+
 	let open = false;
-	let activeTab = options.initialTab;
+	let activeMenuTab: MobileMenuTabId = 'chapters';
 	const openListeners: Array<(open: boolean) => void> = [];
 	const visibleTabs = options.preferencesOnly
-		? READER_TABS.filter((t) => PREFERENCES_TABS.has(t.id))
-		: READER_TABS;
-	const tabButtons = new Map<ReaderTabId, HTMLButtonElement>();
+		? MOBILE_MENU_TABS.filter((t) => PREFERENCES_MENU_TABS.includes(t.id))
+		: MOBILE_MENU_TABS;
+	const tabButtons = new Map<MobileMenuTabId, HTMLButtonElement>();
+
+	let readingControls: MobileReadingControlsHandle | null = null;
+	if (!options.preferencesOnly) {
+		readingControls = mountMobileReadingControls(readingSection, {
+			getSettings: options.getSettings,
+			getState: options.getState,
+			onWpmChange: options.onWpmChange,
+			onFontChange: options.onFontChange,
+			onToggleMode: options.onToggleMode
+		});
+	}
 
 	for (const tab of visibleTabs) {
 		const btn = tabRow.createEl('button', {
-			cls: `speed-reader-ai-mobile-sheet-tab${tab.id === activeTab ? ' is-active' : ''}`,
+			cls: `speed-reader-ai-mobile-sheet-tab${tab.id === activeMenuTab ? ' is-active' : ''}`,
 			text: tab.label,
 			attr: { type: 'button', 'data-tab': tab.id }
 		});
 		btn.addEventListener('click', () => {
-			selectTab(tab.id);
+			selectMenuTab(tab.id);
 		});
 		tabButtons.set(tab.id, btn);
 	}
@@ -79,6 +112,7 @@ export function mountMobileBottomSheet(
 			chapterSection.addClass('is-hidden');
 			return;
 		}
+		chapterSection.removeClass('is-hidden');
 		for (const item of items) {
 			const btn = chapterList.createEl('button', {
 				cls: 'speed-reader-ai-mobile-sheet-chapter-btn',
@@ -92,31 +126,54 @@ export function mountMobileBottomSheet(
 		}
 	}
 
-	function selectTab(tab: ReaderTabId) {
-		activeTab = tab;
+	function showMenuPanel(tab: MobileMenuTabId) {
+		activeMenuTab = tab;
 		for (const [id, btn] of tabButtons) {
 			btn.toggleClass('is-active', id === tab);
 		}
-		options.onSelectTab(tab);
-		closeSheet();
+		chapterSection.toggleClass('is-hidden', tab !== 'chapters');
+		readingSection.toggleClass('is-hidden', tab !== 'reading');
+		if (tab === 'chapters') {
+			rebuildChapterList();
+			chapterTitle.setText(
+				engine.getSectionList().length > 0 ? 'Jump to chapter' : 'Jump to section'
+			);
+		}
+		if (tab === 'reading') {
+			readingControls?.refresh();
+		}
 	}
 
-	function openSheet(sheetOptions?: { showChapterPicker?: boolean }) {
+	function selectMenuTab(tab: MobileMenuTabId) {
+		if (tab === 'settings') {
+			options.onSelectTab('settings');
+			closeSheet();
+			return;
+		}
+		if (tab === 'advanced') {
+			options.onSelectTab('advanced');
+			closeSheet();
+			return;
+		}
+		showMenuPanel(tab);
+	}
+
+	function openSheet(sheetOptions?: { initialMenuTab?: MobileMenuTabId }) {
 		if (open) {
+			if (sheetOptions?.initialMenuTab) {
+				selectMenuTab(sheetOptions.initialMenuTab);
+			}
 			return;
 		}
 		open = true;
 		backdrop.removeClass('is-hidden');
 		sheet.removeClass('is-hidden');
 		root.addClass('is-sheet-open');
-		if (sheetOptions?.showChapterPicker && options.canNavigateSections()) {
-			rebuildChapterList();
-			chapterSection.removeClass('is-hidden');
-			chapterTitle.setText(
-				engine.getSectionList().length > 0 ? 'Jump to chapter' : 'Jump to section'
-			);
+		const initialTab = sheetOptions?.initialMenuTab ?? 'chapters';
+		if (initialTab === 'settings' || initialTab === 'advanced') {
+			selectMenuTab(initialTab);
 		} else {
-			chapterSection.addClass('is-hidden');
+			showMenuPanel(initialTab);
 		}
 		notifyOpenChange();
 	}
@@ -130,6 +187,7 @@ export function mountMobileBottomSheet(
 		sheet.addClass('is-hidden');
 		root.removeClass('is-sheet-open');
 		chapterSection.addClass('is-hidden');
+		readingSection.addClass('is-hidden');
 		notifyOpenChange();
 	}
 
@@ -147,12 +205,15 @@ export function mountMobileBottomSheet(
 	return {
 		destroy() {
 			backdrop.removeEventListener('click', onBackdropClick);
+			readingControls?.destroy();
 			root.remove();
 		},
 		setActiveTab(tab) {
-			activeTab = tab;
-			for (const [id, btn] of tabButtons) {
-				btn.toggleClass('is-active', id === tab);
+			if (tab === 'settings' || tab === 'advanced') {
+				activeMenuTab = tab;
+				for (const [id, btn] of tabButtons) {
+					btn.toggleClass('is-active', id === tab);
+				}
 			}
 		},
 		open: openSheet,
@@ -160,6 +221,9 @@ export function mountMobileBottomSheet(
 		isOpen: () => open,
 		onOpenChange(cb) {
 			openListeners.push(cb);
+		},
+		refreshReadingControls() {
+			readingControls?.refresh();
 		}
 	};
 }

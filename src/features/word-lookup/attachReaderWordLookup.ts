@@ -9,6 +9,7 @@ import type { SpeedReaderAiSettings } from '../../types';
 
 export interface ReaderWordLookupHandles {
 	lookupCurrentWord: () => void | Promise<void>;
+	lookupWord: (rawWord: string) => void | Promise<void>;
 	isEnabled: () => boolean;
 }
 
@@ -21,16 +22,33 @@ export interface AttachReaderWordLookupDeps {
 export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 	const { modal, lookupService, getSettings } = deps;
 
+	const performLookup = async (rawWord: string) => {
+		if (!getSettings().dictionary.enableWordLookup) {
+			new Notice('Word lookup is disabled in settings.');
+			return;
+		}
+
+		lookupService.setCacheEnabled(getSettings().dictionary.dictionaryCacheEnabled);
+
+		const normalized = normalizeWordForLookup(rawWord);
+		if (!normalized) {
+			new Notice('Cannot look up this token.');
+			return;
+		}
+
+		modal.enginePauseForLookup();
+		modal.showDictionaryLoading(normalized);
+
+		const outcome = await lookupService.lookup(rawWord);
+		if (!modal.isDictionaryOverlayVisible()) {
+			return;
+		}
+		modal.showDictionaryOutcome(outcome);
+	};
+
 	const handles: ReaderWordLookupHandles = {
 		isEnabled: () => getSettings().dictionary.enableWordLookup,
 		lookupCurrentWord: async () => {
-			if (!getSettings().dictionary.enableWordLookup) {
-				new Notice('Word lookup is disabled in settings.');
-				return;
-			}
-
-			lookupService.setCacheEnabled(getSettings().dictionary.dictionaryCacheEnabled);
-
 			if (modal.isDictionaryOverlayVisible()) {
 				modal.dismissDictionaryOverlay();
 				return;
@@ -42,20 +60,19 @@ export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 				return;
 			}
 
-			const normalized = normalizeWordForLookup(rawWord);
-			if (!normalized) {
-				new Notice('Cannot look up this token.');
+			await performLookup(rawWord);
+		},
+		lookupWord: async (rawWord: string) => {
+			if (modal.isDictionaryOverlayVisible()) {
+				modal.dismissDictionaryOverlay();
+			}
+
+			const trimmed = rawWord.trim();
+			if (!trimmed) {
 				return;
 			}
 
-			modal.enginePauseForLookup();
-			modal.showDictionaryLoading(normalized);
-
-			const outcome = await lookupService.lookup(rawWord);
-			if (!modal.isDictionaryOverlayVisible()) {
-				return;
-			}
-			modal.showDictionaryOutcome(outcome);
+			await performLookup(trimmed);
 		}
 	};
 

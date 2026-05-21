@@ -45,13 +45,83 @@ function slugify(value: string, fallback: string): string {
 	return slug || fallback;
 }
 
-function htmlToPlainText(html: string): string {
+const EPUB_BLOCK_SELECTOR = 'p, div, li, h1, h2, h3, h4, h5, h6, blockquote';
+
+function inlineTextFromElement(el: Element): string {
+	return (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** Block-aware HTML extract: preserves paragraph breaks as `\n\n` between block elements. */
+export function htmlToPlainText(html: string): string {
 	const doc = new DOMParser().parseFromString(html, 'text/html');
 	for (const el of doc.querySelectorAll('script, style, nav, header, footer')) {
 		el.remove();
 	}
-	const text = doc.body?.textContent ?? '';
-	return text.replace(/\s+/g, ' ').trim();
+	const body = doc.body;
+	if (!body) {
+		return '';
+	}
+
+	const blocks: string[] = [];
+	collectHtmlBlocks(body, blocks);
+
+	if (blocks.length === 0) {
+		return inlineTextFromElement(body);
+	}
+
+	return blocks.join('\n\n');
+}
+
+function collectHtmlBlocks(parent: Element, blocks: string[]): void {
+	let foundChildBlock = false;
+
+	for (const child of Array.from(parent.children)) {
+		if (child.matches(EPUB_BLOCK_SELECTOR)) {
+			foundChildBlock = true;
+			const text = inlineTextFromElement(child);
+			if (text) {
+				blocks.push(text);
+			}
+		} else {
+			collectHtmlBlocks(child, blocks);
+		}
+	}
+
+	if (!foundChildBlock && parent.tagName === 'BODY') {
+		const text = inlineTextFromElement(parent);
+		if (text) {
+			blocks.push(text);
+		}
+	}
+}
+
+export function tokenizePlainWithParagraphStarts(plain: string): {
+	words: string[];
+	paragraphStarts: number[];
+} {
+	const paragraphs = plain
+		.split(/\n\n+/)
+		.map((p) => p.trim())
+		.filter(Boolean);
+
+	if (paragraphs.length === 0) {
+		const trimmed = plain.trim();
+		if (!trimmed) {
+			return { words: [], paragraphStarts: [] };
+		}
+		const words = proseToWordTokens(trimmed).map((t) => t.text ?? '');
+		return { words, paragraphStarts: words.length > 0 ? [0] : [] };
+	}
+
+	const words: string[] = [];
+	const paragraphStarts: number[] = [];
+
+	for (const paragraph of paragraphs) {
+		paragraphStarts.push(words.length);
+		words.push(...proseToWordTokens(paragraph).map((t) => t.text ?? ''));
+	}
+
+	return { words, paragraphStarts };
 }
 
 function firstImageHrefFromHtml(html: string, chapterDir: string, opfDir: string): string | undefined {
@@ -97,6 +167,7 @@ export async function parseEpubBytes(
 		html: string;
 		plain: string;
 		words: string[];
+		paragraphStarts: number[];
 		chapterPath: string;
 	}> = [];
 
@@ -108,8 +179,8 @@ export async function parseEpubBytes(
 		if (!html) continue;
 
 		const plain = htmlToPlainText(html);
-		const words = proseToWordTokens(plain).map((t) => t.text ?? '');
-		spineItems.push({ spineIndex: i, html, plain, words, chapterPath });
+		const { words, paragraphStarts } = tokenizePlainWithParagraphStarts(plain);
+		spineItems.push({ spineIndex: i, html, plain, words, paragraphStarts, chapterPath });
 	}
 
 	if (spineItems.length === 0) {
@@ -198,6 +269,9 @@ export async function parseEpubBytes(
 			wordCount: item.words.length,
 			words: item.words
 		};
+		if (item.paragraphStarts.length > 0) {
+			chapter.paragraphStarts = item.paragraphStarts;
+		}
 		if (sectionKind) {
 			chapter.sectionKind = sectionKind;
 		}

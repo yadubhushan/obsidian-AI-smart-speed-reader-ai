@@ -3,11 +3,17 @@ import type { BookCacheIndex, BookPosition } from '../types/m2Contracts';
 import type { ProcessedDocument, ProcessedSection } from '../types/processedDocument';
 
 export function bookIndexToProcessedDocument(index: BookCacheIndex): ProcessedDocument {
-	const sections: ProcessedSection[] = index.chapters.map((chapter) => ({
-		sectionId: chapter.chapterId,
-		title: chapter.title,
-		stream: proseToWordTokens(chapter.words.join(' '))
-	}));
+	const sections: ProcessedSection[] = index.chapters.map((chapter) => {
+		const section: ProcessedSection = {
+			sectionId: chapter.chapterId,
+			title: chapter.title,
+			stream: proseToWordTokens(chapter.words.join(' '))
+		};
+		if (chapter.paragraphStarts && chapter.paragraphStarts.length > 0) {
+			section.paragraphStarts = chapter.paragraphStarts;
+		}
+		return section;
+	});
 
 	return {
 		kind: 'sections',

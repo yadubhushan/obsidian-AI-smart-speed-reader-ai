@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const vaultOutDir = join(__dirname, "../../../.obsidian/plugins/speed-reader-ai");
+const vaultOutDir = process.env.OBSIDIAN_PLUGIN_DIR
+	? process.env.OBSIDIAN_PLUGIN_DIR
+	: join(__dirname, "../../../.obsidian/plugins/speed-reader-ai");
 const releaseOutDir = __dirname;
 
 const prod = process.argv[2] === "production";

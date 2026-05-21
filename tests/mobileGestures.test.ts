@@ -1,0 +1,116 @@
+import { describe, expect, it } from 'vitest';
+import {
+	classifyLateralZone,
+	exceedsTapMovement,
+	isDoubleTap,
+	isEdgeZone,
+	isSwipeDown,
+	isSwipeUp,
+	EDGE_ZONE_RATIO
+} from '../src/ui/readerShell/mobileGestures';
+
+function rect(left: number, width: number): DOMRect {
+	return { left, width, top: 0, height: 100, right: left + width, bottom: 100, x: left, y: 0, toJSON: () => ({}) };
+}
+
+describe('mobileGestures helpers', () => {
+	describe('classifyLateralZone', () => {
+		it('classifies left, center, and right zones', () => {
+			const r = rect(0, 100);
+			expect(classifyLateralZone(15, r)).toBe('left');
+			expect(classifyLateralZone(50, r)).toBe('center');
+			expect(classifyLateralZone(85, r)).toBe('right');
+		});
+
+		it('returns center for zero-width rect', () => {
+			expect(classifyLateralZone(50, rect(0, 0))).toBe('center');
+		});
+
+		it('respects 30/70 boundaries', () => {
+			const r = rect(100, 200);
+			expect(classifyLateralZone(159, r)).toBe('left');
+			expect(classifyLateralZone(160, r)).toBe('center');
+			expect(classifyLateralZone(239, r)).toBe('center');
+			expect(classifyLateralZone(241, r)).toBe('right');
+		});
+	});
+
+	describe('isEdgeZone', () => {
+		it('detects outer 8% left and right edges', () => {
+			const r = rect(0, 100);
+			expect(isEdgeZone(5, r)).toBe('left');
+			expect(isEdgeZone(8, r, EDGE_ZONE_RATIO)).toBe('left');
+			expect(isEdgeZone(50, r)).toBe(null);
+			expect(isEdgeZone(92, r)).toBe('right');
+			expect(isEdgeZone(95, r)).toBe('right');
+		});
+
+		it('returns null for zero-width rect', () => {
+			expect(isEdgeZone(50, rect(0, 0))).toBe(null);
+		});
+	});
+
+	describe('isDoubleTap', () => {
+		it('detects second tap in same lateral zone within window', () => {
+			const now = 1000;
+			expect(isDoubleTap('left', 800, 'left', now)).toBe(true);
+			expect(isDoubleTap('right', 750, 'right', now)).toBe(true);
+		});
+
+		it('rejects different zones or center', () => {
+			const now = 1000;
+			expect(isDoubleTap('left', 800, 'right', now)).toBe(false);
+			expect(isDoubleTap('left', 800, 'center', now)).toBe(false);
+			expect(isDoubleTap('center', 800, 'center', now)).toBe(false);
+		});
+
+		it('rejects taps outside the window', () => {
+			const now = 1000;
+			expect(isDoubleTap('left', 600, 'left', now)).toBe(false);
+		});
+
+		it('rejects when no prior tap', () => {
+			expect(isDoubleTap(null, 0, 'left', 1000)).toBe(false);
+		});
+	});
+
+	describe('exceedsTapMovement', () => {
+		it('allows movement within threshold', () => {
+			expect(exceedsTapMovement(10, 10)).toBe(false);
+			expect(exceedsTapMovement(12, 12)).toBe(false);
+		});
+
+		it('rejects movement beyond threshold', () => {
+			expect(exceedsTapMovement(13, 0)).toBe(true);
+			expect(exceedsTapMovement(0, 13)).toBe(true);
+		});
+	});
+
+	describe('isSwipeUp', () => {
+		it('detects upward swipe within threshold', () => {
+			expect(isSwipeUp(-50, 5, 300)).toBe(true);
+			expect(isSwipeUp(-40, 0, 400)).toBe(true);
+		});
+
+		it('rejects horizontal or short swipes', () => {
+			expect(isSwipeUp(-50, 60, 300)).toBe(false);
+			expect(isSwipeUp(-20, 0, 300)).toBe(false);
+			expect(isSwipeUp(-50, 0, 500)).toBe(false);
+			expect(isSwipeUp(50, 0, 300)).toBe(false);
+		});
+	});
+
+	describe('isSwipeDown', () => {
+		it('detects downward swipe within threshold', () => {
+			expect(isSwipeDown(50, 5, 300)).toBe(true);
+			expect(isSwipeDown(40, 0, 400)).toBe(true);
+		});
+
+		it('rejects horizontal or short swipes', () => {
+			expect(isSwipeDown(50, 60, 300)).toBe(false);
+			expect(isSwipeDown(20, 0, 300)).toBe(false);
+			expect(isSwipeDown(50, 0, 500)).toBe(false);
+			expect(isSwipeDown(-50, 0, 300)).toBe(false);
+		});
+	});
+});

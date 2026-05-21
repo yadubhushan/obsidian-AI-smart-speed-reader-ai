@@ -20,10 +20,10 @@ export function removeMobileShellClass(shellEl: HTMLElement): void {
 export function syncMobilePlayingState(
 	shellEl: HTMLElement,
 	isPlaying: boolean,
-	menuOpen: boolean
+	overlayOpen: boolean
 ): void {
-	shellEl.toggleClass('speed-reader-ai-mobile-playing', isPlaying && !menuOpen);
-	shellEl.toggleClass('speed-reader-ai-mobile-menu-open', menuOpen);
+	shellEl.toggleClass('speed-reader-ai-mobile-playing', isPlaying && !overlayOpen);
+	shellEl.toggleClass('speed-reader-ai-mobile-menu-open', overlayOpen);
 }
 
 export function syncMobileProgressStrip(

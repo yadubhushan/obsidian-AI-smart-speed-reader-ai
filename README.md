@@ -80,14 +80,22 @@ Plugin settings (API keys, reader prefs) live in `.obsidian/plugins/speed-reader
 
 ### Mobile reader
 
-On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout unchanged):
+On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout and keyboard shortcuts unchanged):
 
-- **Tap** the word area — play / pause
-- **Swipe** left / right — previous / next word
-- **Swipe** on the chapter pill (when paused) — previous / next chapter or section
-- **☰** (FAB) — bottom sheet for Home, Content, Settings, Shortcuts, Advanced; chapter jump when paused
+| Gesture | Action |
+|---------|--------|
+| Tap center | Play / pause |
+| Double-tap left / right | Skip back / forward |
+| Hold screen edge | Continuous rewind / fast-forward |
+| Long-press word | Dictionary (bottom sheet) |
+| Long-press context line | Bookmark (paragraph + highlighted sentence) |
+| Swipe up (paused) | Quick settings peek (WPM, font, mode) |
+| Swipe down top bar | Expand chapter + progress; second swipe closes reader |
+| ☰ (transport dock) | Menu: Chapters · Reading · Settings · Advanced |
 
-While playing, chrome collapses to maximize the RSVP area.
+While **playing**, chrome collapses to the RSVP word and progress strip. While **paused**, the transport dock and top bar appear. First mobile session shows a 3-step coach-mark overlay for gesture discovery.
+
+**Bookmarks on mobile:** passage saves the full paragraph; the current sentence is marked with `***like this***` in the blockquote.
 
 ## Build from source
 
@@ -99,14 +107,15 @@ npm run test
 npm run build          # outputs main.js, manifest.json, styles.css to repo root (release layout)
 ```
 
-For local vault development inside a monorepo, build into the vault plugin folder:
+For local vault development inside a monorepo, build and deploy into the vault plugin folder:
 
 ```bash
-SPEED_READER_OUT=vault npm run build
-npm run dev            # watch mode; always writes to vault .obsidian/plugins/speed-reader-ai/
+npm install
+npm run deploy       # production build → <vault>/.obsidian/plugins/speed-reader-ai/
+npm run dev          # watch mode; always writes to vault .obsidian/plugins/speed-reader-ai/
 ```
 
-Copy built artifacts to `<vault>/.obsidian/plugins/speed-reader-ai/` or use the vault outDir above.
+Equivalent to `SPEED_READER_OUT=vault npm run build`. Override the target with `OBSIDIAN_PLUGIN_DIR=/path/to/vault/.obsidian/plugins/speed-reader-ai npm run deploy`.
 
 ## Settings
 

@@ -24,6 +24,8 @@ export interface ProcessedSection {
 	sectionId: string;
 	title: string;
 	stream: StreamToken[];
+	/** Word indices where a new paragraph begins within this section stream. */
+	paragraphStarts?: number[];
 }
 
 export type ProcessedDocument =
@@ -38,6 +40,8 @@ export type ProcessedDocument =
 			processorId: 'single_story';
 			meta: ProcessedDocumentMeta;
 			stream: StreamToken[];
+			/** Word indices where a new paragraph begins in the document stream. */
+			paragraphStarts?: number[];
 	  };
 
 export interface ReaderUxProfile {

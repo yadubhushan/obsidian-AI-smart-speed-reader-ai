@@ -6,6 +6,11 @@ export interface BookmarkBlockInput {
 	uriLine?: string;
 }
 
+export interface BookmarkPassageInput {
+	paragraphText: string;
+	highlightedSentence: string;
+}
+
 function formatTimestamp(date: Date): string {
 	return date.toISOString().replace('T', ' ').slice(0, 19);
 }
@@ -15,6 +20,31 @@ function escapeBlockquote(text: string): string {
 		.split('\n')
 		.map((line) => `> ${line}`)
 		.join('\n');
+}
+
+/** Wrap the first exact match of highlightedSentence in ***bold italic*** markdown. */
+export function formatPassageWithHighlight(input: BookmarkPassageInput): string {
+	const paragraph = input.paragraphText.trim();
+	const sentence = input.highlightedSentence.trim();
+
+	if (!sentence) {
+		return paragraph || '(no passage captured)';
+	}
+
+	if (!paragraph) {
+		return `***${sentence}***`;
+	}
+
+	const index = paragraph.indexOf(sentence);
+	if (index === -1) {
+		return `${paragraph} ***${sentence}***`;
+	}
+
+	return (
+		paragraph.slice(0, index) +
+		`***${sentence}***` +
+		paragraph.slice(index + sentence.length)
+	);
 }
 
 export function formatBookmarkBlock(input: BookmarkBlockInput): string {

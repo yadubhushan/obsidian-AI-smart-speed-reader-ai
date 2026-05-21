@@ -136,6 +136,42 @@ describe('RSVPEngine', () => {
 		expect(ctx.some((t) => t.isCurrent)).toBe(true);
 	});
 
+	it('getBookmarkPassage returns paragraph with highlighted sentence', () => {
+		const base = sampleSectionsProcessed();
+		engine.loadProcessedDocument({
+			...base,
+			sections: [
+				{
+					sectionId: 's1',
+					title: 'Section',
+					stream: [
+						{ kind: 'word', text: 'First.' },
+						{ kind: 'word', text: 'Second.' },
+						{ kind: 'word', text: 'Third.' },
+						{ kind: 'word', text: 'Fourth.' }
+					],
+					paragraphStarts: [0, 2]
+				}
+			]
+		});
+		engine.seekToToken(1);
+		engine.pause();
+		const passage = engine.getBookmarkPassage();
+		expect(passage.highlightedSentence).toContain('Second');
+		expect(passage.paragraphText).toContain('First');
+		expect(passage.paragraphText).toContain('Second');
+	});
+
+	it('getPauseSentenceContext returns full sentence tokens when paused', () => {
+		engine.loadText('One two three. Four five six.');
+		engine.seekToIndex(4);
+		engine.pause();
+		const ctx = engine.getPauseSentenceContext();
+		expect(ctx).not.toBeNull();
+		expect(ctx!.sentenceTokens.length).toBeGreaterThanOrEqual(2);
+		expect(ctx!.sentenceTokens.some((t) => t.isCurrent)).toBe(true);
+	});
+
 	it('seeks to percentage', () => {
 		engine.loadText('One two three four five six seven eight nine ten');
 		engine.seekToPercent(0.5);

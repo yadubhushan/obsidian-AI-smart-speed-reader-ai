@@ -9,7 +9,8 @@ import type { StructuredReaderSession } from '../ui/structuredReaderSession';
 import {
 	formatBookBookmarkUri,
 	formatBookmarkBlock,
-	formatNoteBookmarkUri
+	formatNoteBookmarkUri,
+	formatPassageWithHighlight
 } from './bookmarkBlock';
 import { appendNoteBookmark } from './noteBookmarkAppend';
 import { resolveBookBookmarkPath } from './bookmarkPaths';
@@ -66,9 +67,10 @@ export class BookmarkService {
 	}
 
 	private buildPassage(engine: RSVPEngine): string {
-		const sentence = engine.getCurrentSentenceText();
-		if (sentence) {
-			return sentence;
+		const passage = engine.getBookmarkPassage();
+		const formatted = formatPassageWithHighlight(passage);
+		if (formatted && formatted !== '(no passage captured)') {
+			return formatted;
 		}
 		const context = engine.getContext(12);
 		const parts = [...context.before, ...context.after].filter(Boolean);

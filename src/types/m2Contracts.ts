@@ -19,6 +19,8 @@ export interface BookChapter {
 	title: string;
 	wordCount: number;
 	words: string[];
+	/** Word indices where a new paragraph begins (EPUB block extract). */
+	paragraphStarts?: number[];
 	/** True when this spine item is a cover page (often zero words). */
 	isCover?: boolean;
 	/** Classifier from nav or LLM ingest (optional). */

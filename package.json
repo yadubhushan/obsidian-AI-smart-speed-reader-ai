@@ -1,12 +1,13 @@
 {
 	"name": "obsidian-speed-reader-ai",
-	"version": "1.2.5",
+	"version": "1.2.6",
 	"description": "RSVP-based speed reading for your notes - flash one word at a time with optimal recognition point highlighting.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"deploy": "node scripts/deploy.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint .",
 		"test": "vitest run"

@@ -8,6 +8,35 @@ import type {
 } from '../types/processedDocument';
 import { proseToWordTokens } from './proseToStream';
 
+const PROSE_PARAGRAPH_KINDS = new Set<NormalizedSegment['kind']>([
+	'paragraph',
+	'blockquote',
+	'list'
+]);
+
+/** Word indices at the start of each prose paragraph segment in a section stream. */
+export function paragraphStartsFromSegments(segments: NormalizedSegment[]): number[] {
+	const starts: number[] = [];
+	let wordIndex = 0;
+
+	for (const segment of segments) {
+		if (segment.skip || !PROSE_PARAGRAPH_KINDS.has(segment.kind)) {
+			continue;
+		}
+		if (!segment.body?.trim()) {
+			continue;
+		}
+		const tokens = proseToWordTokens(segment.body);
+		if (tokens.length === 0) {
+			continue;
+		}
+		starts.push(wordIndex);
+		wordIndex += tokens.length;
+	}
+
+	return starts.length > 0 ? starts : [0];
+}
+
 function tableToWordTokens(table: { headers: string[]; rows: string[][] }): StreamToken[] {
 	const tokens: StreamToken[] = [];
 	if (table.headers.length > 0) {
@@ -90,16 +119,22 @@ export function bundleToSectionsProcessed(bundle: NormalizedDocumentBundle): Pro
 		kind: 'sections',
 		processorId: 'sections',
 		meta: buildMeta(bundle),
-		sections: bundle.sections.map((section) => ({
-			sectionId: section.sectionId,
-			title: section.title,
-			stream: segmentsToStream(section.segments)
-		}))
+		sections: bundle.sections.map((section) => {
+			const paragraphStarts = paragraphStartsFromSegments(section.segments);
+			return {
+				sectionId: section.sectionId,
+				title: section.title,
+				stream: segmentsToStream(section.segments),
+				paragraphStarts
+			};
+		})
 	};
 }
 
 export function bundleToStoryProcessed(bundle: NormalizedDocumentBundle): ProcessedDocument {
 	const stream: StreamToken[] = [];
+	const paragraphStarts: number[] = [];
+	let wordOffset = 0;
 
 	for (let i = 0; i < bundle.sections.length; i++) {
 		const section = bundle.sections[i];
@@ -109,14 +144,21 @@ export function bundleToStoryProcessed(bundle: NormalizedDocumentBundle): Proces
 		if (i > 0) {
 			stream.push({ kind: 'section_break', text: section.title });
 		}
-		stream.push(...segmentsToStream(section.segments));
+		const sectionStarts = paragraphStartsFromSegments(section.segments);
+		for (const start of sectionStarts) {
+			paragraphStarts.push(wordOffset + start);
+		}
+		const sectionStream = segmentsToStream(section.segments);
+		wordOffset += sectionStream.filter((t) => t.kind === 'word').length;
+		stream.push(...sectionStream);
 	}
 
 	return {
 		kind: 'single_story',
 		processorId: 'single_story',
 		meta: buildMeta(bundle),
-		stream
+		stream,
+		paragraphStarts: paragraphStarts.length > 0 ? paragraphStarts : [0]
 	};
 }
 

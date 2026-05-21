@@ -7,7 +7,32 @@ export interface DictionaryOverlayHandle {
 	isVisible(): boolean;
 }
 
-export function mountDictionaryOverlay(container: HTMLElement): DictionaryOverlayHandle {
+export function renderDictionaryBody(
+	bodyEl: HTMLElement,
+	outcome: DictionaryLookupOutcome
+): void {
+	bodyEl.empty();
+	if (outcome.kind === 'found') {
+		renderResult(bodyEl, outcome.result);
+		return;
+	}
+	if (outcome.kind === 'not_found') {
+		bodyEl.createDiv({
+			cls: 'speed-reader-ai-dictionary-empty',
+			text: 'No definition found.'
+		});
+		return;
+	}
+	bodyEl.createDiv({
+		cls: 'speed-reader-ai-dictionary-empty',
+		text: outcome.message
+	});
+}
+
+export function mountDictionaryOverlay(
+	container: HTMLElement,
+	onDismiss?: () => void
+): DictionaryOverlayHandle {
 	const root = container.createDiv({ cls: 'speed-reader-ai-dictionary-overlay is-hidden' });
 	const headerEl = root.createDiv({ cls: 'speed-reader-ai-dictionary-header' });
 	const wordEl = headerEl.createSpan({ cls: 'speed-reader-ai-dictionary-word' });
@@ -32,6 +57,9 @@ export function mountDictionaryOverlay(container: HTMLElement): DictionaryOverla
 	};
 
 	const dismiss = () => {
+		if (!visible) {
+			return;
+		}
 		visible = false;
 		setHostOpen(false);
 		root.addClass('is-hidden');
@@ -39,7 +67,7 @@ export function mountDictionaryOverlay(container: HTMLElement): DictionaryOverla
 		phoneticEl.setText('');
 	};
 
-	closeBtn.addEventListener('click', dismiss);
+	closeBtn.addEventListener('click', () => onDismiss?.());
 
 	const showLoading = (word: string) => {
 		visible = true;
@@ -55,27 +83,16 @@ export function mountDictionaryOverlay(container: HTMLElement): DictionaryOverla
 	};
 
 	const showOutcome = (outcome: DictionaryLookupOutcome) => {
-		bodyEl.empty();
 		if (outcome.kind === 'found') {
 			wordEl.setText(outcome.result.word);
 			phoneticEl.setText(outcome.result.phonetic ? ` ${outcome.result.phonetic}` : '');
-			renderResult(bodyEl, outcome.result);
-			return;
-		}
-		if (outcome.kind === 'not_found') {
+		} else if (outcome.kind === 'not_found') {
 			wordEl.setText(outcome.word);
 			phoneticEl.setText('');
-			bodyEl.createDiv({
-				cls: 'speed-reader-ai-dictionary-empty',
-				text: 'No definition found.'
-			});
-			return;
+		} else {
+			phoneticEl.setText('');
 		}
-		phoneticEl.setText('');
-		bodyEl.createDiv({
-			cls: 'speed-reader-ai-dictionary-empty',
-			text: outcome.message
-		});
+		renderDictionaryBody(bodyEl, outcome);
 	};
 
 	return {

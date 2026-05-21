@@ -12,6 +12,7 @@ export function mountSettingsPane(
 		onSave: (settings: SpeedReaderAiSettings) => void;
 		onDefaults: () => SpeedReaderAiSettings;
 		onResetFontSize: () => void;
+		showMobileGesturesGuide?: boolean;
 	}
 ): SettingsPaneHandle {
 	const pane = container.createDiv({ cls: 'speed-reader-ai-pane speed-reader-ai-pane-settings is-hidden' });
@@ -19,6 +20,22 @@ export function mountSettingsPane(
 
 	const render = () => {
 		pane.empty();
+		if (handlers.showMobileGesturesGuide) {
+			const guide = pane.createDiv({ cls: 'speed-reader-ai-settings-gestures-guide' });
+			guide.createEl('h4', { text: 'Mobile gestures' });
+			const list = guide.createEl('ul');
+			const items = [
+				'Tap center of word area to play or pause',
+				'Double-tap left or right to skip back or forward',
+				'Long-press word to look up definition',
+				'Long-press context line to bookmark',
+				'Swipe up while paused for reading controls',
+				'Swipe left or right to skip; swipe chapter pill for prev/next chapter'
+			];
+			for (const text of items) {
+				list.createEl('li', { text });
+			}
+		}
 		const grid = pane.createDiv({ cls: 'speed-reader-ai-settings-grid' });
 		const left = grid.createDiv({ cls: 'speed-reader-ai-settings-col' });
 		const right = grid.createDiv({ cls: 'speed-reader-ai-settings-col' });

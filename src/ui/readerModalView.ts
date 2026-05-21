@@ -42,19 +42,31 @@ import {
 	isMobileReader,
 	mountMobileProgressStrip,
 	removeMobileShellClass,
-	consumeMobileGestureHint,
 	syncMobilePlayingState,
 	syncMobileProgressStrip
 } from './readerShell/mobileLayout';
 import {
-	mountMobileCompactBar,
-	type MobileCompactBarHandle
-} from './readerShell/mobileCompactBar';
-import { mountMobileGestures, type MobileGesturesHandle } from './readerShell/mobileGestures';
+	mountMobileCoachMarks,
+	type MobileCoachMarksHandle
+} from './readerShell/mobileCoachMarks';
+import {
+	mountMobileTransportBar,
+	type MobileTransportBarHandle
+} from './readerShell/mobileTransportBar';
+import {
+	mountMobileGestures,
+	type EdgeSide,
+	type MobileGesturesHandle
+} from './readerShell/mobileGestures';
 import {
 	mountMobileBottomSheet,
 	type MobileBottomSheetHandle
 } from './readerShell/mobileBottomSheet';
+import {
+	mountMobileDictionarySheet,
+	type MobileDictionarySheetHandle
+} from './readerShell/mobileDictionarySheet';
+import { mountMobilePeekSheet, type MobilePeekSheetHandle } from './readerShell/mobilePeekSheet';
 
 const INTER_SECTION_MS = 2000;
 const FONT_SIZE_STEP = 3;
@@ -94,6 +106,8 @@ export class SpeedReaderAiModal extends Modal {
 	private bookmarkHandlers: ReaderBookmarkHandles | null = null;
 	private wordLookupHandlers: ReaderWordLookupHandles | null = null;
 	private dictionaryOverlay: DictionaryOverlayHandle | null = null;
+	private mobileDictionarySheet: MobileDictionarySheetHandle | null = null;
+	private mobilePeekSheet: MobilePeekSheetHandle | null = null;
 	private previousIsPlaying: boolean | null = null;
 
 	private session: StructuredReaderSession | null = null;
@@ -116,11 +130,21 @@ export class SpeedReaderAiModal extends Modal {
 	private controlBar!: ReaderControlBarHandle;
 	private contextLine!: ContextLineHandle;
 	private tabDock: ReaderTabDockHandle | null = null;
-	private mobileCompactBar: MobileCompactBarHandle | null = null;
+	private mobileTransportBar: MobileTransportBarHandle | null = null;
 	private mobileBottomSheet: MobileBottomSheetHandle | null = null;
 	private mobileGestures: MobileGesturesHandle | null = null;
+	private mobileCoachMarks: MobileCoachMarksHandle | null = null;
 	private mobileProgressStripEl: HTMLElement | null = null;
 	private mobileMenuOpen = false;
+	private mobilePeekOpen = false;
+	private mobileDictionaryOpen = false;
+	private wasPlayingBeforeDictionary = false;
+	private mobileCoachOpen = false;
+	private edgeHoldSide: EdgeSide | null = null;
+	private edgeScrubTimer: number | null = null;
+	private edgeScrubTickCount = 0;
+	private skipFlashEl: HTMLElement | null = null;
+	private skipFlashTimer: number | null = null;
 	private readonly mobileReader = isMobileReader();
 	private contentPane!: ContentPaneHandle;
 	private settingsPane!: SettingsPaneHandle;
@@ -217,26 +241,6 @@ export class SpeedReaderAiModal extends Modal {
 		if (this.mobileReader) {
 			applyMobileShellClass(this.shellEl);
 			this.mobileProgressStripEl = mountMobileProgressStrip(this.shellEl);
-			if (this.readerOpen.kind !== 'preferences') {
-				this.mobileCompactBar = mountMobileCompactBar(this.shellEl, {
-					onWpmDelta: (delta) => this.adjustWpm(delta),
-					onFontDelta: (delta) => this.adjustFontSize(delta),
-					onToggleMode: () => {
-						this.engine.togglePlaybackMode();
-						this.render();
-					},
-					onPlayPause: () => {
-						this.engine.togglePlayPause();
-						this.refocusContent();
-					}
-				});
-				this.mobileCompactBar.onChapterPillTap(() => {
-					if (this.state?.isPlaying) {
-						return;
-					}
-					this.mobileBottomSheet?.open({ showChapterPicker: true });
-				});
-			}
 		}
 
 		this.paneStackEl = this.shellEl.createDiv({ cls: 'speed-reader-ai-pane-stack' });
@@ -260,7 +264,18 @@ export class SpeedReaderAiModal extends Modal {
 		this.prepareOverlaySublineEl = this.prepareOverlayEl.createSpan({
 			cls: 'speed-reader-ai-prepare-subline is-hidden'
 		});
-		this.dictionaryOverlay = mountDictionaryOverlay(this.wordContainer);
+		const onDictionaryDismiss = () => {
+			this.dismissDictionaryOverlayIfVisible();
+		};
+		if (this.mobileReader) {
+			this.mobileDictionarySheet = mountMobileDictionarySheet(this.shellEl, onDictionaryDismiss);
+			this.mobileDictionarySheet.onOpenChange((open) => {
+				this.mobileDictionaryOpen = open;
+				this.render();
+			});
+		} else {
+			this.dictionaryOverlay = mountDictionaryOverlay(this.wordContainer, onDictionaryDismiss);
+		}
 
 		this.structuredBarEl = this.homePaneEl.createDiv({
 			cls: 'speed-reader-ai-structured-bar is-hidden'
@@ -281,14 +296,20 @@ export class SpeedReaderAiModal extends Modal {
 			onResetFontSize: () => {
 				this.applyFontSize();
 				this.engine.setSettings(this.settings);
-			}
+			},
+			showMobileGesturesGuide: this.mobileReader
 		});
 		this.shortcutsPane = mountShortcutsPane(this.paneStackEl);
 		this.advancedPane = mountAdvancedPane(this.paneStackEl, this.settings, {
 			onSave: (next) => this.persistSettings(next)
 		});
 
-		this.contextLine = mountContextLine(this.shellEl);
+		this.contextLine = mountContextLine(this.shellEl, {
+			enableClickActivation: !this.mobileReader,
+			onWordActivate: (word) => {
+				void this.wordLookupHandlers?.lookupWord(word);
+			}
+		});
 		this.controlBar = mountReaderControlBar(
 			this.shellEl,
 			this.settings,
@@ -321,20 +342,79 @@ export class SpeedReaderAiModal extends Modal {
 			}
 		);
 
+		if (this.mobileReader && this.readerOpen.kind !== 'preferences') {
+			this.mobileTransportBar = mountMobileTransportBar(
+				this.shellEl,
+				this.mobileProgressStripEl
+			);
+			this.mobileTransportBar.onSkipBack(() => this.handleArrowLeft());
+			this.mobileTransportBar.onSkipForward(() => this.handleArrowRight());
+			this.mobileTransportBar.onPlayPause(() => {
+				this.engine.togglePlayPause();
+				this.refocusContent();
+			});
+			this.mobileTransportBar.onBookmark(() => {
+				void this.createMobileBookmark();
+			});
+			this.mobileTransportBar.onDefine(() => {
+				void this.wordLookupHandlers?.lookupCurrentWord();
+			});
+			this.mobileTransportBar.onMenu(() => {
+				this.openMobileMenu();
+			});
+			this.mobileTransportBar.onClose(() => this.close());
+			this.mobileTransportBar.onChapterTitleTap(() => {
+				if (this.state?.isPlaying) {
+					return;
+				}
+				this.openMobileMenu('chapters');
+			});
+
+			this.mobilePeekSheet = mountMobilePeekSheet(this.shellEl, {
+				getSettings: () => this.settings,
+				getState: () => this.state,
+				onWpmChange: (wpm) => this.setReaderWpm(wpm),
+				onFontChange: (fontSize) => this.setReaderFontSize(fontSize),
+				onToggleMode: () => {
+					this.engine.togglePlaybackMode();
+					this.render();
+				}
+			});
+			this.mobilePeekSheet.onOpenChange((open) => {
+				this.mobilePeekOpen = open;
+				if (open) {
+					this.mobileBottomSheet?.close();
+					this.dismissDictionaryUi(false);
+				}
+				this.render();
+			});
+		}
+
 		if (this.mobileReader) {
 			this.mobileBottomSheet = mountMobileBottomSheet(
 				this.shellEl,
 				this.engine,
 				{
 					preferencesOnly: this.readerOpen.kind === 'preferences',
-					initialTab: this.activeTab,
 					onSelectTab: (tab) => this.setActiveTab(tab),
 					onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId),
-					canNavigateSections: () => this.canNavigateSections()
+					canNavigateSections: () => this.canNavigateSections(),
+					getSettings: () => this.settings,
+					getState: () => this.state,
+					onWpmChange: (wpm) => this.setReaderWpm(wpm),
+					onFontChange: (fontSize) => this.setReaderFontSize(fontSize),
+					onToggleMode: () => {
+						this.engine.togglePlaybackMode();
+						this.render();
+					}
 				}
 			);
 			this.mobileBottomSheet.onOpenChange((open) => {
 				this.mobileMenuOpen = open;
+				if (open) {
+					this.mobilePeekSheet?.close();
+					this.dismissDictionaryUi(false);
+				}
 				this.render();
 			});
 		} else {
@@ -404,14 +484,9 @@ export class SpeedReaderAiModal extends Modal {
 		this.registerKeyboardHandlers();
 		this.registerFocusHandlers();
 		this.mountMobileGesturesIfNeeded();
+		this.mountMobileCoachMarksIfNeeded();
 		this.updateModeSpecificUi();
 		this.scheduleAutoStart();
-		if (this.mobileReader && consumeMobileGestureHint()) {
-			new Notice(
-				'Mobile: tap the word area to play/pause, swipe for prev/next, ☰ for tabs and chapters.',
-				8000
-			);
-		}
 	}
 
 	onClose() {
@@ -421,6 +496,10 @@ export class SpeedReaderAiModal extends Modal {
 		this.wordLookupHandlers = null;
 		this.dictionaryOverlay?.dismiss();
 		this.dictionaryOverlay = null;
+		this.mobileDictionarySheet?.destroy();
+		this.mobileDictionarySheet = null;
+		this.mobilePeekSheet?.destroy();
+		this.mobilePeekSheet = null;
 		this.clearInterSectionTimer();
 		this.hidePrepareOverlay();
 		this.modePicker?.destroy();
@@ -431,9 +510,13 @@ export class SpeedReaderAiModal extends Modal {
 		this.controlBar?.destroy();
 		this.contextLine?.destroy();
 		this.tabDock?.destroy();
-		this.mobileCompactBar?.destroy();
+		this.mobileTransportBar?.destroy();
 		this.mobileBottomSheet?.destroy();
 		this.mobileGestures?.destroy();
+		this.stopEdgeScrub();
+		this.clearSkipFlash();
+		this.mobileCoachMarks?.destroy();
+		this.mobileCoachMarks = null;
 		removeMobileShellClass(this.shellEl);
 		this.contentPane?.destroy();
 		this.settingsPane?.destroy();
@@ -549,23 +632,81 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	isDictionaryOverlayVisible(): boolean {
+		if (this.mobileReader) {
+			return this.mobileDictionarySheet?.isVisible() ?? false;
+		}
 		return this.dictionaryOverlay?.isVisible() ?? false;
 	}
 
 	dismissDictionaryOverlay(): void {
-		this.dictionaryOverlay?.dismiss();
+		this.dismissDictionaryUi(false);
+	}
+
+	private dismissDictionaryUi(resumePlayback: boolean): void {
+		if (!this.isDictionaryOverlayVisible()) {
+			return;
+		}
+		const shouldResume = resumePlayback && this.wasPlayingBeforeDictionary;
+		this.wasPlayingBeforeDictionary = false;
+		if (this.mobileReader) {
+			this.mobileDictionarySheet?.dismiss();
+		} else {
+			this.dictionaryOverlay?.dismiss();
+		}
+		if (shouldResume) {
+			this.engine.play();
+		}
 	}
 
 	showDictionaryLoading(word: string): void {
+		if (this.mobileReader) {
+			this.mobilePeekSheet?.close();
+			this.mobileBottomSheet?.close();
+			this.mobileDictionarySheet?.showLoading(word);
+			return;
+		}
 		this.dictionaryOverlay?.showLoading(word);
 	}
 
 	showDictionaryOutcome(outcome: DictionaryLookupOutcome): void {
+		if (this.mobileReader) {
+			this.mobileDictionarySheet?.showOutcome(outcome);
+			return;
+		}
 		this.dictionaryOverlay?.showOutcome(outcome);
 	}
 
+	private openMobileMenu(initialTab: 'chapters' | 'reading' = 'chapters'): void {
+		this.mobilePeekSheet?.close();
+		this.dismissDictionaryUi(false);
+		this.mobileBottomSheet?.open({ initialMenuTab: initialTab });
+	}
+
+	private openMobilePeek(): void {
+		if (this.state?.isPlaying) {
+			return;
+		}
+		this.mobileBottomSheet?.close();
+		this.dismissDictionaryUi(false);
+		this.mobilePeekSheet?.open();
+	}
+
+	private closeMobileOverlays(): void {
+		this.mobilePeekSheet?.close();
+		this.mobileBottomSheet?.close();
+		this.dismissDictionaryUi(false);
+	}
+
+	private isMobileOverlayOpen(): boolean {
+		return this.mobileMenuOpen || this.mobilePeekOpen || this.mobileDictionaryOpen;
+	}
+
 	enginePauseForLookup(): void {
-		this.engine.pause();
+		const state = this.state;
+		this.wasPlayingBeforeDictionary = Boolean(state?.isPlaying && !state.finished);
+		if (this.wasPlayingBeforeDictionary) {
+			this.engine.pause();
+		}
 	}
 
 	getReaderOpen(): SpeedReaderOpen {
@@ -726,7 +867,8 @@ export class SpeedReaderAiModal extends Modal {
 		this.prepareControls = this.controlBar?.getPrepareControls() ?? null;
 
 		if (this.sectionNav) {
-			const showSectionNav = isStructured && (profile?.sectionNav ?? false);
+			const showSectionNav =
+				!this.mobileReader && isStructured && (profile?.sectionNav ?? false);
 			this.sectionNav.setVisible(showSectionNav);
 			if (showSectionNav) {
 				this.sectionNav.refresh();
@@ -734,7 +876,7 @@ export class SpeedReaderAiModal extends Modal {
 		}
 
 		if (this.chapterNav) {
-			const showChapterNav = isBook && (profile?.sectionNav ?? false);
+			const showChapterNav = !this.mobileReader && isBook && (profile?.sectionNav ?? false);
 			this.chapterNav.setVisible(showChapterNav);
 			if (showChapterNav) {
 				this.chapterNav.refresh();
@@ -823,18 +965,18 @@ export class SpeedReaderAiModal extends Modal {
 		if (this.isDictionaryOverlayVisible()) {
 			return true;
 		}
+		if (this.mobilePeekOpen) {
+			return true;
+		}
 		return false;
 	}
 
-	private dismissDictionaryOverlayIfVisible(resumePlayback = false): boolean {
+	private dismissDictionaryOverlayIfVisible(): boolean {
 		if (!this.isDictionaryOverlayVisible()) {
 			return false;
 		}
-		this.dismissDictionaryOverlay();
+		this.dismissDictionaryUi(true);
 		this.refocusContent();
-		if (resumePlayback) {
-			this.engine.play();
-		}
 		return true;
 	}
 
@@ -864,7 +1006,7 @@ export class SpeedReaderAiModal extends Modal {
 	private registerKeyboardHandlers() {
 		this.scope.register([], ' ', (event) => {
 			event.preventDefault();
-			if (this.dismissDictionaryOverlayIfVisible(true)) {
+			if (this.dismissDictionaryOverlayIfVisible()) {
 				return false;
 			}
 			if (this.isInputBlockedByOverlay()) {
@@ -974,7 +1116,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.contentEl.addEventListener('keydown', (event) => {
 			if (event.key === ' ') {
 				event.preventDefault();
-				if (this.dismissDictionaryOverlayIfVisible(true)) {
+				if (this.dismissDictionaryOverlayIfVisible()) {
 					return;
 				}
 				if (this.isInputBlockedByOverlay()) {
@@ -1141,6 +1283,37 @@ export class SpeedReaderAiModal extends Modal {
 		new Notice(`Speed: ${newWpm} WPM`);
 	}
 
+	private setReaderWpm(wpm: number) {
+		const clamped = Math.max(50, Math.min(5000, Math.round(wpm)));
+		const delta = clamped - this.settings.reader.wpm;
+		if (delta === 0) {
+			return;
+		}
+		const newWpm = this.engine.adjustWpm(delta);
+		this.settings = {
+			...this.settings,
+			reader: { ...this.settings.reader, wpm: newWpm }
+		};
+		this.engine.setSettings(this.settings);
+		this.mobilePeekSheet?.refresh();
+		this.mobileBottomSheet?.refreshReadingControls();
+	}
+
+	private setReaderFontSize(fontSize: number) {
+		const clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Math.round(fontSize)));
+		if (clamped === this.settings.reader.fontSize) {
+			return;
+		}
+		this.settings = {
+			...this.settings,
+			reader: { ...this.settings.reader, fontSize: clamped }
+		};
+		this.applyFontSize();
+		this.engine.setSettings(this.settings);
+		this.mobilePeekSheet?.refresh();
+		this.mobileBottomSheet?.refreshReadingControls();
+	}
+
 	private applyFontSize() {
 		this.wordContainer?.style.setProperty(
 			'--speed-reader-ai-font-size',
@@ -1198,15 +1371,23 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		const isHome = this.activeTab === 'home';
 		const playing = Boolean(state?.isPlaying && !state.finished && isHome);
-		syncMobilePlayingState(this.shellEl, playing, this.mobileMenuOpen);
+		if (playing) {
+			this.closeMobileOverlays();
+		}
+		syncMobilePlayingState(this.shellEl, playing, this.isMobileOverlayOpen());
+		if (this.mobilePeekSheet && state && !playing) {
+			this.mobilePeekSheet.refresh();
+		}
 		syncMobileProgressStrip(
 			this.mobileProgressStripEl,
 			isHome ? state : null,
 			this.settings.reader.display.showProgress
 		);
-		if (this.mobileCompactBar && state) {
-			this.mobileCompactBar.update(state, this.settings);
-			this.mobileCompactBar.setChapterNavVisible(this.canNavigateSections());
+		if (this.mobileTransportBar && state) {
+			this.mobileTransportBar.update(state, this.settings);
+			this.mobileTransportBar.setChapterNavVisible(this.canNavigateSections());
+			const showChrome = !playing && isHome;
+			this.mobileTransportBar.setVisible(showChrome);
 		}
 	}
 
@@ -1216,20 +1397,135 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		this.mobileGestures = mountMobileGestures(
 			this.wordContainer,
-			this.mobileCompactBar?.getChapterPillEl() ?? null,
+			this.mobileTransportBar?.getTopBarEl() ?? null,
+			this.contextLine.getRootEl(),
 			{
 				onTapWordArea: () => {
+					if (this.isDictionaryOverlayVisible()) {
+						this.dismissDictionaryOverlayIfVisible();
+						this.refocusContent();
+						return;
+					}
 					this.engine.togglePlayPause();
 					this.refocusContent();
+				},
+				onDoubleTapLeft: () => {
+					this.flashSkipEdge('left');
+					this.handleArrowLeft();
+				},
+				onDoubleTapRight: () => {
+					this.flashSkipEdge('right');
+					this.handleArrowRight();
+				},
+				onLongPressWord: () => {
+					void this.wordLookupHandlers?.lookupCurrentWord();
+				},
+				onLongPressContextLine: () => {
+					void this.createMobileBookmark();
+				},
+				onTapContextWord: (word) => {
+					void this.wordLookupHandlers?.lookupWord(word);
 				},
 				onSwipeLeft: () => this.handleArrowLeft(),
 				onSwipeRight: () => this.handleArrowRight(),
 				onSwipeChapterLeft: () => this.handleShiftArrowLeft(),
 				onSwipeChapterRight: () => this.handleShiftArrowRight(),
-				isBlocked: () => this.isInputBlockedByOverlay(),
-				isHomeActive: () => this.activeTab === 'home'
+				onEdgeHoldStart: (side) => this.startEdgeScrub(side),
+				onEdgeHoldEnd: () => this.stopEdgeScrub(),
+				onSwipeUp: () => this.openMobilePeek(),
+				isBlocked: () => {
+					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
+						return true;
+					}
+					if (!this.prepareOverlayEl?.hasClass('is-hidden')) {
+						return true;
+					}
+					return (
+						this.mobileMenuOpen || this.mobilePeekOpen || this.mobileCoachOpen
+					);
+				},
+				isHomeActive: () => this.activeTab === 'home',
+				isPaused: () => !this.state?.isPlaying
 			}
 		);
+	}
+
+	private mountMobileCoachMarksIfNeeded() {
+		if (!this.mobileReader || this.mobileCoachMarks || this.readerOpen.kind === 'preferences') {
+			return;
+		}
+		this.mobileCoachMarks = mountMobileCoachMarks(this.shellEl, (open) => {
+			this.mobileCoachOpen = open;
+		});
+	}
+
+	private async createMobileBookmark(): Promise<void> {
+		await this.bookmarkHandlers?.createBookmark();
+		if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+			navigator.vibrate(10);
+		}
+	}
+
+	private startEdgeScrub(side: EdgeSide) {
+		this.stopEdgeScrub();
+		this.edgeHoldSide = side;
+		this.edgeScrubTickCount = 0;
+		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
+		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
+		this.shellEl.addClass(
+			side === 'left'
+				? 'speed-reader-ai-mobile-edge-hold-left'
+				: 'speed-reader-ai-mobile-edge-hold-right'
+		);
+		this.runEdgeScrubTick();
+	}
+
+	private runEdgeScrubTick() {
+		if (this.edgeHoldSide === null) {
+			return;
+		}
+		if (this.edgeHoldSide === 'left') {
+			this.handleArrowLeft();
+		} else {
+			this.handleArrowRight();
+		}
+		this.edgeScrubTickCount += 1;
+		const delay =
+			this.edgeScrubTickCount <= 2 ? 150 : this.edgeScrubTickCount <= 5 ? 100 : 50;
+		this.edgeScrubTimer = window.setTimeout(() => this.runEdgeScrubTick(), delay);
+	}
+
+	private stopEdgeScrub() {
+		if (this.edgeScrubTimer !== null) {
+			window.clearTimeout(this.edgeScrubTimer);
+			this.edgeScrubTimer = null;
+		}
+		this.edgeHoldSide = null;
+		this.edgeScrubTickCount = 0;
+		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
+		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
+	}
+
+	private flashSkipEdge(side: 'left' | 'right') {
+		this.clearSkipFlash();
+		const flash = this.wordContainer.createDiv({
+			cls:
+				side === 'left'
+					? 'speed-reader-ai-mobile-skip-flash speed-reader-ai-mobile-skip-flash-left'
+					: 'speed-reader-ai-mobile-skip-flash speed-reader-ai-mobile-skip-flash-right',
+			text: side === 'left' ? '◀' : '▶'
+		});
+		this.skipFlashEl = flash;
+		this.skipFlashTimer = window.setTimeout(() => this.clearSkipFlash(), 300);
+	}
+
+	private clearSkipFlash() {
+		if (this.skipFlashTimer !== null) {
+			window.clearTimeout(this.skipFlashTimer);
+			this.skipFlashTimer = null;
+		}
+		this.skipFlashEl?.remove();
+		this.skipFlashEl = null;
 	}
 
 	private onMobileChapterSelect(sectionId: string) {

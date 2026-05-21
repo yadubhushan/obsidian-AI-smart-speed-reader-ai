@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { parseEpubBytes } from '../src/formats/epub/epubParse';
+import {
+	htmlToPlainText,
+	parseEpubBytes,
+	tokenizePlainWithParagraphStarts
+} from '../src/formats/epub/epubParse';
 import {
 	parseEpubChapterIndexResponse,
 	resolveChapterTitlesViaLlm
@@ -158,7 +162,45 @@ describe('epubChapterIndexLlm', () => {
 	});
 });
 
+describe('epubHtmlExtract', () => {
+	it('preserves paragraph breaks between block elements', () => {
+		const html = `<html><body>
+<p>First paragraph here.</p>
+<p>Second paragraph follows.</p>
+</body></html>`;
+		const plain = htmlToPlainText(html);
+		expect(plain).toContain('\n\n');
+		expect(plain).toContain('First paragraph here.');
+		expect(plain).toContain('Second paragraph follows.');
+	});
+
+	it('records paragraphStarts when tokenizing plain text', () => {
+		const { words, paragraphStarts } = tokenizePlainWithParagraphStarts(
+			'First para.\n\nSecond para.'
+		);
+		expect(words.length).toBeGreaterThan(2);
+		expect(paragraphStarts).toEqual([0, expect.any(Number)]);
+		expect(paragraphStarts[1]).toBeGreaterThan(0);
+	});
+});
+
 describe('epubParse', () => {
+	it('stores paragraphStarts on parsed chapters', async () => {
+		const bytes = await buildMinimalEpubBytes({
+			chapters: [
+				{
+					id: 'ch1',
+					href: 'text/chapter1.xhtml',
+					title: 'Chapter',
+					body: '<html><body><p>Alpha one.</p><p>Beta two.</p></body></html>'
+				}
+			],
+			nav: [{ label: 'Chapter', href: 'text/chapter1.xhtml' }]
+		});
+		const { index } = await parseEpubBytes('books/paragraphs.epub', bytes);
+		expect(index.chapters[0]?.paragraphStarts?.length).toBeGreaterThanOrEqual(2);
+	});
+
 	it('extracts title, author, chapter count, and word counts', async () => {
 		const bytes = await buildMinimalEpubBytes({
 			title: 'Test EPUB',

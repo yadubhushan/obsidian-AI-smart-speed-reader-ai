@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	formatBookBookmarkUri,
 	formatBookmarkBlock,
-	formatNoteBookmarkUri
+	formatNoteBookmarkUri,
+	formatPassageWithHighlight
 } from '../src/bookmarks/bookmarkBlock';
 
 describe('bookmarkBlock', () => {
@@ -17,6 +18,36 @@ describe('bookmarkBlock', () => {
 
 		expect(block).toContain(`\`${uri}\``);
 		expect(block).not.toContain(`\n${uri}\n`);
+	});
+
+	it('wraps highlighted sentence in bold italic markdown', () => {
+		const passage = formatPassageWithHighlight({
+			paragraphText: 'The room was bright. The wheels were turning. A large room.',
+			highlightedSentence: 'The wheels were turning.'
+		});
+		expect(passage).toContain('***The wheels were turning.***');
+		expect(passage).not.toContain('***The room');
+	});
+
+	it('appends highlighted sentence when no exact match', () => {
+		const passage = formatPassageWithHighlight({
+			paragraphText: 'Different paragraph text.',
+			highlightedSentence: 'Missing sentence.'
+		});
+		expect(passage).toBe('Different paragraph text. ***Missing sentence.***');
+	});
+
+	it('escapes blockquote lines in formatBookmarkBlock', () => {
+		const block = formatBookmarkBlock({
+			timestamp: new Date('2026-05-21T12:00:00Z'),
+			passage: formatPassageWithHighlight({
+				paragraphText: 'Line one.\nLine two.',
+				highlightedSentence: 'Line one.'
+			}),
+			positionLine: 'section s word 0'
+		});
+		expect(block).toContain('> ***Line one.***');
+		expect(block).toContain('> Line two.');
 	});
 
 	it('builds book and note resume URIs with encoded paths', () => {
