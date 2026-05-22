@@ -100,6 +100,14 @@ function normalizePrepareSingleCallMaxLines(value: unknown): number {
 	return n;
 }
 
+function normalizeMaxPrepareVersions(value: unknown): number {
+	const n = Math.floor(toNumber(value, DEFAULT_SETTINGS.ai.maxPrepareVersions));
+	if (!Number.isFinite(n) || n < 1) {
+		return DEFAULT_SETTINGS.ai.maxPrepareVersions;
+	}
+	return Math.min(n, 50);
+}
+
 const LLM_BACKENDS: LlmBackend[] = ['auto', 'cursor-cli', 'ai-providers', 'openai-compatible'];
 const API_PRESETS: ApiProviderPreset[] = ['openai', 'openrouter', 'custom'];
 
@@ -225,6 +233,10 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			prepareSingleCallMaxLines: toNumber(
 				raw.prepareSingleCallMaxLines,
 				DEFAULT_SETTINGS.ai.prepareSingleCallMaxLines
+			),
+			maxPrepareVersions: toNumber(
+				raw.maxPrepareVersions,
+				DEFAULT_SETTINGS.ai.maxPrepareVersions
 			)
 		},
 		bookmarks: {
@@ -383,6 +395,9 @@ function normalizeAiSettings(
 		),
 		prepareSingleCallMaxLines: normalizePrepareSingleCallMaxLines(
 			firstDefined(a.prepareSingleCallMaxLines, flat.prepareSingleCallMaxLines)
+		),
+		maxPrepareVersions: normalizeMaxPrepareVersions(
+			firstDefined(a.maxPrepareVersions, flat.maxPrepareVersions)
 		)
 	};
 }

@@ -1,7 +1,8 @@
 import { Editor, MarkdownView, Menu, Notice, Plugin } from 'obsidian';
 import { initAI } from '@obsidian-ai-providers/sdk';
 import { initCursorCliDesktopSupport } from './llm/cursorCliDesktopBridge';
-import { contentChecksum } from './crypto-checksum';
+import { noteContentChecksum } from './crypto-checksum';
+import { activeVersionStatus } from './store/cacheIndexUtils';
 import { registerFeature1 } from './features/feature1/registerFeature1';
 import {
 	attachNoteReadingSession,
@@ -277,7 +278,10 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	}
 
 	private async openStructuredNote(sourcePath: string, text: string, startOffset: number) {
-		const checksum = await contentChecksum(text);
+		const checksum = await noteContentChecksum(
+			text,
+			this.settings.bookmarks.noteBookmarkSectionHeading
+		);
 		await this.openSpeedReader({
 			kind: 'structured',
 			sourcePath,
@@ -333,7 +337,8 @@ export default class SpeedReaderAiPlugin extends Plugin {
 				...open,
 				startOffset: resumePosition ? undefined : open.startOffset,
 				resumePosition,
-				preferredProcessingMode: existingNoteState?.preferredProcessingMode
+				preferredProcessingMode: existingNoteState?.preferredProcessingMode,
+				preferredAiVersionId: existingNoteState?.preferredAiVersionId
 			};
 		}
 
@@ -418,8 +423,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 			return;
 		}
 
-		const activeMode = index.activeProcessingMode;
-		const modeStatus = index.modes[activeMode]?.status ?? 'none';
+		const modeStatus = activeVersionStatus(index);
 
 		if (modeStatus === 'ready') {
 			el.addClass('is-ready');

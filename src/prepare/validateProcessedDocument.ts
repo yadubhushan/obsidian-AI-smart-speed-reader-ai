@@ -1,5 +1,8 @@
 import type {
 	DocumentCacheIndex,
+	DocumentCacheIndexV1,
+	PrepareVersionEntry,
+	VersionCacheStatus,
 	LlmSectionsResponse,
 	LlmStoryResponse,
 	ModeCacheEntry,
@@ -262,7 +265,99 @@ function parseModeCacheEntry(raw: unknown): ModeCacheEntry | null {
 	return entry;
 }
 
+function parseVersionCacheStatus(raw: unknown): VersionCacheStatus | null {
+	if (raw === 'ready' || raw === 'stale' || raw === 'error') {
+		return raw;
+	}
+	return null;
+}
+
+function parsePrepareVersionEntry(raw: unknown): PrepareVersionEntry | null {
+	if (!isRecord(raw)) {
+		return null;
+	}
+	const modeId = raw.modeId;
+	if (modeId !== 'sections' && modeId !== 'single_story') {
+		return null;
+	}
+	const status = parseVersionCacheStatus(raw.status);
+	if (
+		!status ||
+		!isNonEmptyString(raw.id) ||
+		typeof raw.number !== 'number' ||
+		!isNonEmptyString(raw.preparedAt) ||
+		!isNonEmptyString(raw.model) ||
+		!isNonEmptyString(raw.sourceChecksum)
+	) {
+		return null;
+	}
+	return {
+		id: raw.id,
+		number: raw.number,
+		modeId,
+		preparedAt: raw.preparedAt,
+		model: raw.model,
+		sourceChecksum: raw.sourceChecksum,
+		status
+	};
+}
+
+export function parseDocumentCacheIndexV2(raw: unknown): DocumentCacheIndex | null {
+	if (!isRecord(raw) || raw.version !== 2) {
+		return null;
+	}
+	if (
+		!isNonEmptyString(raw.sourcePath) ||
+		!isNonEmptyString(raw.sourceChecksum) ||
+		!isNonEmptyString(raw.updatedAt)
+	) {
+		return null;
+	}
+	const mode = raw.activeProcessingMode;
+	if (mode !== 'sections' && mode !== 'single_story') {
+		return null;
+	}
+	if (typeof raw.nextVersionNumber !== 'number' || raw.nextVersionNumber < 1) {
+		return null;
+	}
+	if (!Array.isArray(raw.versions)) {
+		return null;
+	}
+	const versions: PrepareVersionEntry[] = [];
+	for (const item of raw.versions) {
+		const entry = parsePrepareVersionEntry(item);
+		if (!entry) {
+			return null;
+		}
+		versions.push(entry);
+	}
+	const activeVersionId =
+		raw.activeVersionId === null
+			? null
+			: isNonEmptyString(raw.activeVersionId)
+				? raw.activeVersionId
+				: null;
+	if (raw.activeVersionId !== null && raw.activeVersionId !== undefined && activeVersionId === null) {
+		return null;
+	}
+	return {
+		version: 2,
+		sourcePath: raw.sourcePath,
+		sourceChecksum: raw.sourceChecksum,
+		activeProcessingMode: mode,
+		activeVersionId,
+		nextVersionNumber: raw.nextVersionNumber,
+		versions,
+		updatedAt: raw.updatedAt
+	};
+}
+
+/** Parses v2 index; returns null for v1 (migrate separately). */
 export function parseDocumentCacheIndex(raw: unknown): DocumentCacheIndex | null {
+	return parseDocumentCacheIndexV2(raw);
+}
+
+export function parseDocumentCacheIndexV1(raw: unknown): DocumentCacheIndexV1 | null {
 	if (!isRecord(raw) || raw.version !== 1) {
 		return null;
 	}

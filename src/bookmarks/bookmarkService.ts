@@ -1,5 +1,6 @@
 import { Notice, type App } from 'obsidian';
-import { contentChecksum } from '../crypto-checksum';
+import { noteContentChecksum } from '../crypto-checksum';
+import type { PlaybackLoadKind } from '../ui/structuredReaderSession';
 import type { RSVPEngine } from '../engine/rsvpEngine';
 import { bookPositionFromEngine, notePositionFromEngine } from '../reader/readingProgress';
 import type { BookCacheIndex, BookPosition, NotePosition } from '../types/m2Contracts';
@@ -22,6 +23,7 @@ export interface BookmarkReaderContext {
 	sourcePath: string | null;
 	bookIndex?: BookCacheIndex;
 	session?: StructuredReaderSession | null;
+	onNoteReloaded?: (kind: PlaybackLoadKind) => void;
 }
 
 export interface BookmarkServiceDeps {
@@ -154,12 +156,16 @@ export class BookmarkService {
 		);
 		await this.deps.app.vault.modify(file, next);
 
-		const checksum = await contentChecksum(next);
+		const checksum = await noteContentChecksum(
+			next,
+			settings.bookmarks.noteBookmarkSectionHeading
+		);
 		if (session) {
-			await session.reloadFromVaultText(next, checksum, engine, {
+			const kind = await session.reloadFromVaultText(next, checksum, engine, {
 				sectionIndex: ctx.readerState?.currentSectionIndex,
 				tokenIndex: ctx.readerState?.currentTokenIndex
 			});
+			ctx.onNoteReloaded?.(kind);
 		}
 
 		new Notice('Bookmark added to note.');

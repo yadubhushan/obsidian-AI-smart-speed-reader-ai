@@ -55,22 +55,28 @@ describe('historyListModel notes', () => {
 
 	it('derives AI ready vs Deterministic badge from manifest index', () => {
 		const readyIndex: DocumentCacheIndex = {
-			version: 1,
+			version: 2,
 			sourcePath: 'notes/ready.md',
 			sourceChecksum: 'x',
 			activeProcessingMode: 'sections',
-			modes: {
-				sections: { status: 'ready' },
-				single_story: { status: 'none' }
-			},
+			activeVersionId: 'v1',
+			nextVersionNumber: 2,
+			versions: [
+				{
+					id: 'v1',
+					number: 1,
+					modeId: 'sections',
+					preparedAt: '2026-05-01T00:00:00.000Z',
+					model: 'gpt',
+					sourceChecksum: 'x',
+					status: 'ready'
+				}
+			],
 			updatedAt: '2026-05-01T00:00:00.000Z'
 		};
 		const staleIndex: DocumentCacheIndex = {
 			...readyIndex,
-			modes: {
-				sections: { status: 'stale' },
-				single_story: { status: 'none' }
-			}
+			versions: [{ ...readyIndex.versions[0]!, status: 'stale' }]
 		};
 
 		expect(noteBadgeFromIndex(readyIndex)).toBe('ai');

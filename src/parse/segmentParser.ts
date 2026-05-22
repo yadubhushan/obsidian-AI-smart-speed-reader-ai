@@ -67,6 +67,19 @@ function splitLinesWithOffsets(text: string): LineInfo[] {
 	return lines;
 }
 
+/** Body used for RSVP, AI prepare, and note checksum (bookmark section excluded). */
+export function readableNoteBody(
+	text: string,
+	bookmarkSectionHeading: string | undefined
+): string {
+	const normalized = text.replace(/\r\n/g, '\n');
+	const lineInfos = truncateBeforeBookmarkSection(
+		splitLinesWithOffsets(normalized),
+		bookmarkSectionHeading
+	);
+	return lineInfos.map((info) => info.line).join('\n');
+}
+
 function makeSegment(
 	kind: DocumentSegment['kind'],
 	lineInfos: LineInfo[],

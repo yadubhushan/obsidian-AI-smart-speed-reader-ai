@@ -1,7 +1,9 @@
 import type { DataAdapter } from 'obsidian';
 import type {
 	DocumentCacheIndex,
+	DocumentCacheIndexV1,
 	ModeCacheEntry,
+	PrepareVersionEntry,
 	ProcessedDocument,
 	ProcessingModeId,
 	SectionsModeIndex,
@@ -16,10 +18,17 @@ import {
 } from './readCachePaths';
 import {
 	parseDocumentCacheIndex,
+	parseDocumentCacheIndexV1,
+	parseDocumentCacheIndexV2,
 	parseSectionsModeIndex,
 	parseSingleStoryManifest,
 	parseSpeedReadSectionManifest
 } from '../prepare/validateProcessedDocument';
+import {
+	latestVersion,
+	sortVersionsNewestFirst,
+	versionIdFromNumber
+} from './cacheIndexUtils';
 
 export interface ManifestStoreAdapter {
 	exists(path: string): Promise<boolean>;
@@ -39,24 +48,16 @@ function joinPath(base: string, ...parts: string[]): string {
 	return normalized.replace(/\/+/g, '/');
 }
 
-function emptyModeEntry(): ModeCacheEntry {
-	return { status: 'none' };
-}
-
-function defaultDocumentIndex(
-	sourcePath: string,
-	sourceChecksum: string
-): DocumentCacheIndex {
+function defaultDocumentIndex(sourcePath: string, sourceChecksum: string): DocumentCacheIndex {
 	const now = new Date().toISOString();
 	return {
-		version: 1,
+		version: 2,
 		sourcePath,
 		sourceChecksum,
 		activeProcessingMode: 'sections',
-		modes: {
-			sections: emptyModeEntry(),
-			single_story: emptyModeEntry()
-		},
+		activeVersionId: null,
+		nextVersionNumber: 1,
+		versions: [],
 		updatedAt: now
 	};
 }
@@ -85,11 +86,24 @@ export class ManifestStore {
 		return joinPath(this.docRoot(docKey), 'index.json');
 	}
 
-	private sectionsModeRoot(docKey: string): string {
+	private versionsRoot(docKey: string): string {
+		return joinPath(this.docRoot(docKey), 'versions');
+	}
+
+	private versionRoot(docKey: string, versionId: string): string {
+		return joinPath(this.versionsRoot(docKey), versionId);
+	}
+
+	private versionPayloadRoot(docKey: string, versionId: string): string {
+		return joinPath(this.versionRoot(docKey, versionId), 'payload');
+	}
+
+	/** Legacy v1 paths (migration only). */
+	private legacySectionsModeRoot(docKey: string): string {
 		return joinPath(this.docRoot(docKey), 'modes', 'sections');
 	}
 
-	private singleStoryManifestPath(docKey: string): string {
+	private legacySingleStoryManifestPath(docKey: string): string {
 		return joinPath(this.docRoot(docKey), 'modes', 'single_story', 'manifest.json');
 	}
 
@@ -97,19 +111,51 @@ export class ManifestStore {
 		const docKey = docKeyFromSourcePath(sourcePath);
 		const path = this.rootIndexPath(docKey);
 		if (!(await this.adapter.exists(path))) {
-			return null;
+			return this.migrateLegacyLayoutWithoutIndex(docKey, sourcePath);
 		}
 		try {
 			const text = await this.adapter.read(path);
 			const parsed: unknown = JSON.parse(text);
-			const index = parseDocumentCacheIndex(parsed);
+			let index = parseDocumentCacheIndexV2(parsed);
+			if (!index) {
+				const v1 = parseDocumentCacheIndexV1(parsed);
+				if (v1 && v1.sourcePath === sourcePath) {
+					index = await this.migrateFromV1(docKey, v1);
+				}
+			}
 			if (!index || index.sourcePath !== sourcePath) {
 				return null;
+			}
+			if (index.versions.length === 0) {
+				const migrated = await this.migrateLegacyLayoutWithoutIndex(docKey, sourcePath);
+				if (migrated) {
+					return migrated;
+				}
 			}
 			return index;
 		} catch {
 			return null;
 		}
+	}
+
+	listVersions(index: DocumentCacheIndex): PrepareVersionEntry[] {
+		return sortVersionsNewestFirst(index.versions);
+	}
+
+	async setActiveVersion(sourcePath: string, versionId: string): Promise<void> {
+		const docKey = docKeyFromSourcePath(sourcePath);
+		const index = await this.getDocumentIndex(sourcePath);
+		if (!index) {
+			return;
+		}
+		const entry = index.versions.find((v) => v.id === versionId);
+		if (!entry) {
+			return;
+		}
+		index.activeVersionId = versionId;
+		index.activeProcessingMode = entry.modeId;
+		index.updatedAt = new Date().toISOString();
+		await this.writeJson(this.rootIndexPath(docKey), index);
 	}
 
 	async setActiveMode(sourcePath: string, modeId: ProcessingModeId): Promise<void> {
@@ -137,34 +183,179 @@ export class ManifestStore {
 		}
 		index.sourceChecksum = checksum;
 		index.updatedAt = new Date().toISOString();
-		for (const modeId of ['sections', 'single_story'] as const) {
-			const entry = index.modes[modeId];
+		let changed = false;
+		for (const entry of index.versions) {
 			if (entry.status === 'ready') {
-				index.modes[modeId] = { ...entry, status: 'stale' };
+				entry.status = 'stale';
+				changed = true;
 			}
 		}
+		if (changed) {
+			await this.writeJson(this.rootIndexPath(docKey), index);
+		}
+		return index;
+	}
+
+	async reconcileStaleModes(
+		sourcePath: string,
+		readableChecksum: string
+	): Promise<DocumentCacheIndex | null> {
+		const docKey = docKeyFromSourcePath(sourcePath);
+		const index = await this.getDocumentIndex(sourcePath);
+		if (!index) {
+			return null;
+		}
+
+		let changed = false;
+		for (const entry of index.versions) {
+			if (entry.status === 'stale' && entry.sourceChecksum === readableChecksum) {
+				entry.status = 'ready';
+				changed = true;
+			}
+		}
+		if (!changed) {
+			return index;
+		}
+
+		index.sourceChecksum = readableChecksum;
+		index.updatedAt = new Date().toISOString();
 		await this.writeJson(this.rootIndexPath(docKey), index);
 		return index;
 	}
 
 	async saveProcessedDocument(
 		docKey: string,
-		processed: ProcessedDocument
-	): Promise<void> {
-		if (processed.kind === 'sections') {
-			await this.saveSectionsDocument(docKey, processed);
-		} else {
-			await this.saveSingleStoryDocument(docKey, processed);
-		}
-		await this.updateRootIndexAfterSave(docKey, processed);
+		processed: ProcessedDocument,
+		maxVersions = 10
+	): Promise<PrepareVersionEntry> {
+		return this.saveNewVersion(docKey, processed, maxVersions);
 	}
 
-	private async saveSectionsDocument(
+	async saveNewVersion(
 		docKey: string,
+		processed: ProcessedDocument,
+		maxVersions: number
+	): Promise<PrepareVersionEntry> {
+		const sourcePath = processed.meta.sourcePath;
+		let index = await this.getDocumentIndex(sourcePath);
+		if (!index) {
+			index = defaultDocumentIndex(sourcePath, processed.meta.sourceChecksum);
+		}
+
+		const versionNumber = index.nextVersionNumber;
+		const versionId = versionIdFromNumber(versionNumber);
+		const payloadRoot = this.versionPayloadRoot(docKey, versionId);
+
+		if (processed.kind === 'sections') {
+			await this.writeSectionsPayload(payloadRoot, processed);
+		} else {
+			await this.writeSingleStoryPayload(payloadRoot, processed);
+		}
+
+		const entry: PrepareVersionEntry = {
+			id: versionId,
+			number: versionNumber,
+			modeId: processed.processorId,
+			preparedAt: processed.meta.processedAt,
+			model: processed.meta.model,
+			sourceChecksum: processed.meta.sourceChecksum,
+			status: 'ready'
+		};
+
+		index.versions.push(entry);
+		index.nextVersionNumber = versionNumber + 1;
+		index.activeVersionId = versionId;
+		index.activeProcessingMode = processed.processorId;
+		index.sourceChecksum = processed.meta.sourceChecksum;
+		index.updatedAt = new Date().toISOString();
+
+		await this.writeJson(this.rootIndexPath(docKey), index);
+		await this.pruneVersions(docKey, index, maxVersions);
+		return entry;
+	}
+
+	private async pruneVersions(
+		docKey: string,
+		index: DocumentCacheIndex,
+		maxVersions: number
+	): Promise<void> {
+		if (index.versions.length <= maxVersions) {
+			return;
+		}
+		const sorted = [...index.versions].sort((a, b) => a.number - b.number);
+		const toRemove = sorted.slice(0, index.versions.length - maxVersions);
+		const removeIds = new Set(toRemove.map((v) => v.id));
+
+		if (index.activeVersionId && removeIds.has(index.activeVersionId)) {
+			const latest = latestVersion(index);
+			index.activeVersionId = latest?.id ?? null;
+			if (latest) {
+				index.activeProcessingMode = latest.modeId;
+			}
+		}
+
+		index.versions = index.versions.filter((v) => !removeIds.has(v.id));
+		index.updatedAt = new Date().toISOString();
+		await this.writeJson(this.rootIndexPath(docKey), index);
+
+		for (const id of removeIds) {
+			await this.adapter.remove(this.versionRoot(docKey, id));
+		}
+	}
+
+	async loadProcessedDocument(
+		docKey: string,
+		modeId: ProcessingModeId,
+		versionId?: string | null
+	): Promise<ProcessedDocument | null> {
+		if (versionId) {
+			return this.loadVersion(docKey, versionId);
+		}
+		const index = await this.getDocumentIndexByDocKey(docKey);
+		if (!index) {
+			return this.loadLegacyProcessedDocument(docKey, modeId);
+		}
+		const forMode = sortVersionsNewestFirst(index.versions).find((v) => v.modeId === modeId);
+		if (forMode) {
+			return this.loadVersion(docKey, forMode.id);
+		}
+		if (index.activeVersionId) {
+			return this.loadVersion(docKey, index.activeVersionId);
+		}
+		return this.loadLegacyProcessedDocument(docKey, modeId);
+	}
+
+	async loadVersion(docKey: string, versionId: string): Promise<ProcessedDocument | null> {
+		const index = await this.getDocumentIndexByDocKey(docKey);
+		const entry = index?.versions.find((v) => v.id === versionId);
+		if (!entry) {
+			return null;
+		}
+		const payloadRoot = this.versionPayloadRoot(docKey, versionId);
+		if (entry.modeId === 'sections') {
+			return this.loadSectionsPayload(payloadRoot);
+		}
+		return this.loadSingleStoryPayload(payloadRoot);
+	}
+
+	private async getDocumentIndexByDocKey(docKey: string): Promise<DocumentCacheIndex | null> {
+		const path = this.rootIndexPath(docKey);
+		if (!(await this.adapter.exists(path))) {
+			return null;
+		}
+		try {
+			const text = await this.adapter.read(path);
+			return parseDocumentCacheIndex(JSON.parse(text));
+		} catch {
+			return null;
+		}
+	}
+
+	private async writeSectionsPayload(
+		payloadRoot: string,
 		processed: Extract<ProcessedDocument, { kind: 'sections' }>
 	): Promise<void> {
-		const modeRoot = this.sectionsModeRoot(docKey);
-		const sectionsDir = joinPath(modeRoot, 'sections');
+		const sectionsDir = joinPath(payloadRoot, 'sections');
 		await this.adapter.mkdir(sectionsDir);
 
 		const modeIndex: SectionsModeIndex = {
@@ -181,7 +372,7 @@ export class ManifestStore {
 				status: 'ready' as const
 			}))
 		};
-		await this.writeJson(joinPath(modeRoot, 'index.json'), modeIndex);
+		await this.writeJson(joinPath(payloadRoot, 'index.json'), modeIndex);
 
 		for (const section of processed.sections) {
 			const manifest: SpeedReadSectionManifest = {
@@ -194,19 +385,15 @@ export class ManifestStore {
 				model: processed.meta.model,
 				stream: section.stream
 			};
-			await this.writeJson(
-				joinPath(sectionsDir, `${section.sectionId}.json`),
-				manifest
-			);
+			await this.writeJson(joinPath(sectionsDir, `${section.sectionId}.json`), manifest);
 		}
 	}
 
-	private async saveSingleStoryDocument(
-		docKey: string,
+	private async writeSingleStoryPayload(
+		payloadRoot: string,
 		processed: Extract<ProcessedDocument, { kind: 'single_story' }>
 	): Promise<void> {
-		const manifestPath = this.singleStoryManifestPath(docKey);
-		await this.adapter.mkdir(joinPath(this.docRoot(docKey), 'modes', 'single_story'));
+		await this.adapter.mkdir(payloadRoot);
 		const manifest: SingleStoryManifest = {
 			version: 1,
 			sourcePath: processed.meta.sourcePath,
@@ -216,46 +403,11 @@ export class ManifestStore {
 			model: processed.meta.model,
 			stream: processed.stream
 		};
-		await this.writeJson(manifestPath, manifest);
+		await this.writeJson(joinPath(payloadRoot, 'manifest.json'), manifest);
 	}
 
-	private async updateRootIndexAfterSave(
-		docKey: string,
-		processed: ProcessedDocument
-	): Promise<void> {
-		const sourcePath = processed.meta.sourcePath;
-		let index = await this.getDocumentIndex(sourcePath);
-		if (!index) {
-			index = defaultDocumentIndex(
-				sourcePath,
-				processed.meta.sourceChecksum
-			);
-		}
-		index.sourceChecksum = processed.meta.sourceChecksum;
-		index.updatedAt = new Date().toISOString();
-		const modeId = processed.processorId;
-		index.modes[modeId] = {
-			status: 'ready',
-			preparedAt: processed.meta.processedAt,
-			model: processed.meta.model,
-			sourceChecksum: processed.meta.sourceChecksum
-		};
-		await this.writeJson(this.rootIndexPath(docKey), index);
-	}
-
-	async loadProcessedDocument(
-		docKey: string,
-		modeId: ProcessingModeId
-	): Promise<ProcessedDocument | null> {
-		if (modeId === 'sections') {
-			return this.loadSectionsDocument(docKey);
-		}
-		return this.loadSingleStoryDocument(docKey);
-	}
-
-	private async loadSectionsDocument(docKey: string): Promise<ProcessedDocument | null> {
-		const modeRoot = this.sectionsModeRoot(docKey);
-		const indexPath = joinPath(modeRoot, 'index.json');
+	private async loadSectionsPayload(payloadRoot: string): Promise<ProcessedDocument | null> {
+		const indexPath = joinPath(payloadRoot, 'index.json');
 		if (!(await this.adapter.exists(indexPath))) {
 			return null;
 		}
@@ -265,7 +417,7 @@ export class ManifestStore {
 			if (!modeIndex) {
 				return null;
 			}
-			const sectionsDir = joinPath(modeRoot, 'sections');
+			const sectionsDir = joinPath(payloadRoot, 'sections');
 			const sections = [];
 			const sorted = [...modeIndex.sections].sort((a, b) => a.order - b.order);
 			for (const entry of sorted) {
@@ -304,10 +456,8 @@ export class ManifestStore {
 		}
 	}
 
-	private async loadSingleStoryDocument(
-		docKey: string
-	): Promise<ProcessedDocument | null> {
-		const manifestPath = this.singleStoryManifestPath(docKey);
+	private async loadSingleStoryPayload(payloadRoot: string): Promise<ProcessedDocument | null> {
+		const manifestPath = joinPath(payloadRoot, 'manifest.json');
 		if (!(await this.adapter.exists(manifestPath))) {
 			return null;
 		}
@@ -332,6 +482,130 @@ export class ManifestStore {
 		} catch {
 			return null;
 		}
+	}
+
+	private async loadLegacyProcessedDocument(
+		docKey: string,
+		modeId: ProcessingModeId
+	): Promise<ProcessedDocument | null> {
+		if (modeId === 'sections') {
+			return this.loadLegacySections(docKey);
+		}
+		return this.loadLegacySingleStory(docKey);
+	}
+
+	private async loadLegacySections(docKey: string): Promise<ProcessedDocument | null> {
+		return this.loadSectionsPayload(this.legacySectionsModeRoot(docKey));
+	}
+
+	private async loadLegacySingleStory(docKey: string): Promise<ProcessedDocument | null> {
+		const manifestPath = this.legacySingleStoryManifestPath(docKey);
+		if (!(await this.adapter.exists(manifestPath))) {
+			return null;
+		}
+		return this.loadSingleStoryPayload(joinPath(this.docRoot(docKey), 'modes', 'single_story'));
+	}
+
+	private async migrateFromV1(
+		docKey: string,
+		v1: DocumentCacheIndexV1
+	): Promise<DocumentCacheIndex> {
+		const index = defaultDocumentIndex(v1.sourcePath, v1.sourceChecksum);
+		index.activeProcessingMode = v1.activeProcessingMode;
+		index.updatedAt = new Date().toISOString();
+
+		const modeOrder: ProcessingModeId[] = ['sections', 'single_story'];
+		for (const modeId of modeOrder) {
+			const entry = v1.modes[modeId];
+			if (entry.status !== 'ready' || !entry.preparedAt || !entry.model || !entry.sourceChecksum) {
+				continue;
+			}
+			const versionNumber = index.nextVersionNumber;
+			const versionId = versionIdFromNumber(versionNumber);
+			const payloadRoot = this.versionPayloadRoot(docKey, versionId);
+			const legacyDoc = await this.loadLegacyProcessedDocument(docKey, modeId);
+			if (!legacyDoc) {
+				continue;
+			}
+			if (legacyDoc.kind === 'sections') {
+				await this.writeSectionsPayload(payloadRoot, legacyDoc);
+			} else {
+				await this.writeSingleStoryPayload(payloadRoot, legacyDoc);
+			}
+			index.versions.push({
+				id: versionId,
+				number: versionNumber,
+				modeId,
+				preparedAt: entry.preparedAt,
+				model: entry.model,
+				sourceChecksum: entry.sourceChecksum,
+				status: entry.status === 'ready' ? 'ready' : 'stale'
+			});
+			index.nextVersionNumber = versionNumber + 1;
+		}
+
+		const latest = latestVersion(index);
+		index.activeVersionId = latest?.id ?? null;
+		if (latest) {
+			index.activeProcessingMode = latest.modeId;
+		}
+
+		await this.writeJson(this.rootIndexPath(docKey), index);
+		return index;
+	}
+
+	private async migrateLegacyLayoutWithoutIndex(
+		docKey: string,
+		sourcePath: string
+	): Promise<DocumentCacheIndex | null> {
+		const hasSections = await this.adapter.exists(
+			joinPath(this.legacySectionsModeRoot(docKey), 'index.json')
+		);
+		const hasStory = await this.adapter.exists(this.legacySingleStoryManifestPath(docKey));
+		if (!hasSections && !hasStory) {
+			return null;
+		}
+
+		const v1: DocumentCacheIndexV1 = {
+			version: 1,
+			sourcePath,
+			sourceChecksum: '',
+			activeProcessingMode: 'sections',
+			modes: {
+				sections: { status: hasSections ? 'ready' : 'none' },
+				single_story: { status: hasStory ? 'ready' : 'none' }
+			},
+			updatedAt: new Date().toISOString()
+		};
+
+		if (hasSections) {
+			const doc = await this.loadLegacySections(docKey);
+			if (doc) {
+				v1.modes.sections = {
+					status: 'ready',
+					preparedAt: doc.meta.processedAt,
+					model: doc.meta.model,
+					sourceChecksum: doc.meta.sourceChecksum
+				};
+				v1.sourceChecksum = doc.meta.sourceChecksum;
+			}
+		}
+		if (hasStory) {
+			const doc = await this.loadLegacySingleStory(docKey);
+			if (doc) {
+				v1.modes.single_story = {
+					status: 'ready',
+					preparedAt: doc.meta.processedAt,
+					model: doc.meta.model,
+					sourceChecksum: doc.meta.sourceChecksum
+				};
+				if (!v1.sourceChecksum) {
+					v1.sourceChecksum = doc.meta.sourceChecksum;
+				}
+			}
+		}
+
+		return this.migrateFromV1(docKey, v1);
 	}
 
 	async deleteDocumentCache(sourcePath: string): Promise<boolean> {

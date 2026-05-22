@@ -93,6 +93,7 @@ export interface AiSettings {
 	timeoutSeconds: number;
 	prepareSingleCallMaxChars: number;
 	prepareSingleCallMaxLines: number;
+	maxPrepareVersions: number;
 }
 
 export interface BookmarkSettings {
@@ -200,7 +201,8 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		llmModel: 'composer-2.5-fast',
 		timeoutSeconds: 300,
 		prepareSingleCallMaxChars: 120000,
-		prepareSingleCallMaxLines: 2000
+		prepareSingleCallMaxLines: 2000,
+		maxPrepareVersions: 10
 	},
 	bookmarks: {
 		bookBookmarkNoteTemplate: 'docs/Areas/books/bookmarks/{book_name}.md',

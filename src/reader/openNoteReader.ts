@@ -1,5 +1,5 @@
 import { Notice, type App } from 'obsidian';
-import { contentChecksum } from '../crypto-checksum';
+import { noteContentChecksum } from '../crypto-checksum';
 import { SpeedReaderAiModal } from '../speedReaderAiModal';
 import type { EventBus } from '../services/eventBus';
 import {
@@ -40,7 +40,10 @@ export async function openNoteReader(deps: OpenNoteReaderDeps): Promise<SpeedRea
 	}
 
 	const text = await deps.app.vault.read(file);
-	const checksum = await contentChecksum(text);
+	const checksum = await noteContentChecksum(
+		text,
+		deps.settings.bookmarks.noteBookmarkSectionHeading
+	);
 
 	const { existingState, checksumReset } = await prepareNoteOpenState({
 		sourcePath: deps.request.sourcePath,
@@ -67,7 +70,8 @@ export async function openNoteReader(deps: OpenNoteReaderDeps): Promise<SpeedRea
 			text,
 			checksum,
 			resumePosition,
-			preferredProcessingMode: existingState?.preferredProcessingMode
+			preferredProcessingMode: existingState?.preferredProcessingMode,
+			preferredAiVersionId: existingState?.preferredAiVersionId
 		},
 		{ ...deps.settings },
 		deps.onSettingsChange,

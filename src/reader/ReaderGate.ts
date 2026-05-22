@@ -13,6 +13,7 @@ import type {
 import type { SpeedReaderAiSettings } from '../types';
 import type { PreparePromptSet } from '../llm/promptCatalog';
 import type { PluginServices } from '../services/serviceRegistry';
+import type { PlaybackLoadKind } from '../ui/structuredReaderSession';
 
 export interface ReaderGateDeps {
 	app: App;
@@ -135,7 +136,8 @@ export class ReaderGateImpl implements ReaderGate {
 			readerState: modal.getReaderState(),
 			sourcePath,
 			bookIndex: readerOpen.kind === 'book' ? readerOpen.bookIndex : undefined,
-			session: modal.getStructuredSession()
+			session: modal.getStructuredSession(),
+			onNoteReloaded: (kind: PlaybackLoadKind) => modal.notifyPlaybackReloaded(kind)
 		};
 	}
 

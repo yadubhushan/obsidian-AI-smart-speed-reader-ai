@@ -3,6 +3,7 @@ import { createBookmarkService } from '../../bookmarks/bookmarkService';
 import type { PluginServices } from '../../services/serviceRegistry';
 import { attachReaderBookmarks } from './attachReaderBookmarks';
 import type { SpeedReaderAiModal } from '../../speedReaderAiModal';
+import type { PlaybackLoadKind } from '../../ui/structuredReaderSession';
 
 export function registerFeature4(plugin: SpeedReaderAiPlugin, services: PluginServices): void {
 	const bookmarkService = services.bookmarkService;
@@ -61,6 +62,7 @@ function buildContextFromModal(modal: SpeedReaderAiModal) {
 		readerState: modal.getReaderState(),
 		sourcePath,
 		bookIndex: readerOpen.kind === 'book' ? readerOpen.bookIndex : undefined,
-		session: modal.getStructuredSession()
+		session: modal.getStructuredSession(),
+		onNoteReloaded: (kind: PlaybackLoadKind) => modal.notifyPlaybackReloaded(kind)
 	};
 }

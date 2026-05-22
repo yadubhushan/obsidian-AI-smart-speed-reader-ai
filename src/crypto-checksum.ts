@@ -1,3 +1,5 @@
+import { readableNoteBody } from './parse/segmentParser';
+
 function bytesToHex(buf: ArrayBuffer): string {
 	return Array.from(new Uint8Array(buf))
 		.map((b) => b.toString(16).padStart(2, '0'))
@@ -25,4 +27,12 @@ export async function binaryChecksum(data: ArrayBuffer | ArrayBufferView): Promi
 	const bytes = toDigestBytes(data);
 	const buf = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
 	return bytesToHex(buf);
+}
+
+/** SHA-256 of note body excluding the configured bookmark H1 section (matches parser). */
+export async function noteContentChecksum(
+	markdownBody: string,
+	bookmarkSectionHeading: string | undefined
+): Promise<string> {
+	return contentChecksum(readableNoteBody(markdownBody, bookmarkSectionHeading));
 }

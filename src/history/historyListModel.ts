@@ -1,4 +1,5 @@
 import { docKeyFromSourcePath } from '../store/docKey';
+import { noteHasReadyVersion } from '../store/cacheIndexUtils';
 import type { DocumentCacheIndex } from '../types/processedDocument';
 import type {
 	BookCacheIndex,
@@ -93,8 +94,7 @@ export function noteBadgeFromIndex(index: DocumentCacheIndex | null): NotePlayba
 	if (!index) {
 		return 'deterministic';
 	}
-	const activeMode = index.activeProcessingMode;
-	return index.modes[activeMode]?.status === 'ready' ? 'ai' : 'deterministic';
+	return noteHasReadyVersion(index) ? 'ai' : 'deterministic';
 }
 
 export function buildNoteHistoryModel(

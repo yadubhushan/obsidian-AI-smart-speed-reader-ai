@@ -1,5 +1,6 @@
 import type { BookmarkReaderContext, BookmarkService } from '../../bookmarks/bookmarkService';
 import type { SpeedReaderAiModal } from '../../speedReaderAiModal';
+import type { PlaybackLoadKind } from '../../ui/structuredReaderSession';
 
 export interface ReaderBookmarkHandles {
 	createBookmark: () => void | Promise<void>;
@@ -24,7 +25,8 @@ function buildBookmarkContext(modal: SpeedReaderAiModal): BookmarkReaderContext 
 		readerState: modal.getReaderState(),
 		sourcePath,
 		bookIndex: readerOpen.kind === 'book' ? readerOpen.bookIndex : undefined,
-		session: modal.getStructuredSession()
+		session: modal.getStructuredSession(),
+		onNoteReloaded: (kind: PlaybackLoadKind) => modal.notifyPlaybackReloaded(kind)
 	};
 }
 

@@ -85,6 +85,7 @@ export interface ReadingState {
 	position: BookPosition | NotePosition;
 	progressPercent: number;
 	preferredProcessingMode?: 'sections' | 'single_story';
+	preferredAiVersionId?: string;
 }
 
 export interface ReadingStateFile {

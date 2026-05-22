@@ -54,27 +54,29 @@ describe('ManifestStore', () => {
 		expect(loaded).toEqual(processed);
 	});
 
-	it('writes expected disk layout for sections mode', async () => {
+	it('writes expected disk layout for versioned sections', async () => {
 		const docKey = docKeyFromSourcePath(TEST_SOURCE_PATH);
 		await store.saveProcessedDocument(docKey, sampleSectionsProcessed());
 		const adapter = createNodeManifestAdapter(rootDir);
 		expect(await adapter.exists(join(docKey, 'index.json'))).toBe(true);
-		expect(await adapter.exists(join(docKey, 'modes/sections/index.json'))).toBe(true);
+		expect(await adapter.exists(join(docKey, 'versions/v1/payload/index.json'))).toBe(true);
 		expect(
-			await adapter.exists(join(docKey, 'modes/sections/sections/01-aws-vs-gcp.json'))
+			await adapter.exists(
+				join(docKey, 'versions/v1/payload/sections/01-aws-vs-gcp.json')
+			)
 		).toBe(true);
 	});
 
-	it('writes single_story manifest.json', async () => {
+	it('writes single_story under version payload', async () => {
 		const docKey = docKeyFromSourcePath(TEST_SOURCE_PATH);
 		await store.saveProcessedDocument(docKey, sampleStoryProcessed());
 		const adapter = createNodeManifestAdapter(rootDir);
 		expect(
-			await adapter.exists(join(docKey, 'modes/single_story/manifest.json'))
+			await adapter.exists(join(docKey, 'versions/v1/payload/manifest.json'))
 		).toBe(true);
 	});
 
-	it('dual cache: both modes coexist', async () => {
+	it('dual cache: both modes coexist as separate versions', async () => {
 		const docKey = docKeyFromSourcePath(TEST_SOURCE_PATH);
 		await store.saveProcessedDocument(docKey, sampleSectionsProcessed());
 		await store.saveProcessedDocument(docKey, sampleStoryProcessed());
@@ -83,8 +85,8 @@ describe('ManifestStore', () => {
 		expect(sections?.kind).toBe('sections');
 		expect(story?.kind).toBe('single_story');
 		const index = await store.getDocumentIndex(TEST_SOURCE_PATH);
-		expect(index?.modes.sections.status).toBe('ready');
-		expect(index?.modes.single_story.status).toBe('ready');
+		expect(index?.versions).toHaveLength(2);
+		expect(index?.versions.every((v) => v.status === 'ready')).toBe(true);
 	});
 
 	it('re-prepare sections leaves single_story cache intact', async () => {
@@ -97,7 +99,7 @@ describe('ManifestStore', () => {
 		expect(story?.stream).toEqual([{ kind: 'word', text: 'One' }, { kind: 'word', text: 'story.' }]);
 	});
 
-	it('markStaleIfChecksumMismatch marks ready modes stale', async () => {
+	it('markStaleIfChecksumMismatch marks ready versions stale', async () => {
 		const docKey = docKeyFromSourcePath(TEST_SOURCE_PATH);
 		await store.saveProcessedDocument(docKey, sampleSectionsProcessed());
 		await store.saveProcessedDocument(docKey, sampleStoryProcessed());
@@ -105,9 +107,17 @@ describe('ManifestStore', () => {
 			TEST_SOURCE_PATH,
 			'new-checksum'
 		);
-		expect(index?.modes.sections.status).toBe('stale');
-		expect(index?.modes.single_story.status).toBe('stale');
+		expect(index?.versions.every((v) => v.status === 'stale')).toBe(true);
 		expect(index?.sourceChecksum).toBe('new-checksum');
+	});
+
+	it('reconcileStaleModes restores ready when version checksum matches readable body', async () => {
+		const docKey = docKeyFromSourcePath(TEST_SOURCE_PATH);
+		await store.saveProcessedDocument(docKey, sampleSectionsProcessed());
+		await store.markStaleIfChecksumMismatch(TEST_SOURCE_PATH, 'wrong-full-file-hash');
+		const reconciled = await store.reconcileStaleModes(TEST_SOURCE_PATH, TEST_CHECKSUM);
+		expect(reconciled?.versions[0]?.status).toBe('ready');
+		expect(reconciled?.sourceChecksum).toBe(TEST_CHECKSUM);
 	});
 
 	it('setActiveMode updates root index', async () => {

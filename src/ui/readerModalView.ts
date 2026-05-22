@@ -10,12 +10,13 @@ import { DEFAULT_SETTINGS, HeadingInfo, ReaderState, SpeedReaderAiSettings, Word
 import type { PreparePromptSet } from '../llm/promptCatalog';
 import type { ProcessingModeId } from '../types/processedDocument';
 import { mountModePicker, type ModePickerHandle } from './modePicker';
+import { mountVersionPicker, type VersionPickerHandle } from './versionPicker';
 import { mountPrepareControls, type PrepareControlsHandle } from './prepareControls';
 import { mountChapterNavControls, type ChapterNavControlsHandle } from './chapterNavControls';
 import { mountSectionNavControls, type SectionNavControlsHandle } from './sectionNavControls';
 import { applyNoteResumePosition } from '../reader/readingProgress';
 import type { SpeedReaderOpen } from './speedReaderOpen';
-import { StructuredReaderSession } from './structuredReaderSession';
+import { StructuredReaderSession, type PlaybackLoadKind } from './structuredReaderSession';
 import { bookIndexToProcessedDocument } from '../formats/bookIndexToProcessedDocument';
 import { bookCacheBasePath, bookCacheCoverPath } from '../store/bookCachePaths';
 import type { ReaderSessionHooks } from '../reader/readingProgressTracker';
@@ -162,6 +163,7 @@ export class SpeedReaderAiModal extends Modal {
 	private shortcutsPane!: ShortcutsPaneHandle;
 	private advancedPane!: AdvancedPaneHandle;
 	private modePickerHost!: HTMLElement;
+	private versionPickerHost!: HTMLElement;
 	private structuredBarEl!: HTMLElement;
 	private headingSelectWrapper!: HTMLElement;
 	private sectionSelect!: HTMLSelectElement;
@@ -171,6 +173,7 @@ export class SpeedReaderAiModal extends Modal {
 	private interSectionTimer: number | null = null;
 
 	private modePicker: ModePickerHandle | null = null;
+	private versionPicker: VersionPickerHandle | null = null;
 	private prepareControls: PrepareControlsHandle | null = null;
 	private sectionNav: SectionNavControlsHandle | null = null;
 	private chapterNav: ChapterNavControlsHandle | null = null;
@@ -335,6 +338,9 @@ export class SpeedReaderAiModal extends Modal {
 			cls: 'speed-reader-ai-structured-bar is-hidden'
 		});
 		this.modePickerHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-mode-picker-host' });
+		this.versionPickerHost = this.structuredBarEl.createDiv({
+			cls: 'speed-reader-ai-version-picker-host'
+		});
 		this.headingSelectWrapper = this.structuredBarEl.createDiv({
 			cls: 'speed-reader-ai-section-select-wrapper is-hidden'
 		});
@@ -488,9 +494,14 @@ export class SpeedReaderAiModal extends Modal {
 				this.readerOpen.startOffset ?? 0,
 				this.settings
 			);
-			await this.session.initialize(this.readerOpen.preferredProcessingMode);
+			const playbackOpts = this.playbackOptions();
+			await this.session.initialize(this.readerOpen.preferredProcessingMode, playbackOpts);
 			this.mountStructuredControls();
-			const kind = await this.session.loadPlayback(this.engine, this.session.activeModeId);
+			const kind = await this.session.loadPlayback(
+				this.engine,
+				this.session.activeModeId,
+				playbackOpts
+			);
 			if (this.readerOpen.resumePosition) {
 				const processed = this.engine.getLoadedProcessedDocument();
 				if (processed) {
@@ -558,6 +569,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.clearInterSectionTimer();
 		this.hidePrepareOverlay();
 		this.modePicker?.destroy();
+		this.versionPicker?.destroy();
 		this.prepareControls?.destroy();
 		this.sectionNav?.destroy();
 		this.chapterNav?.destroy();
@@ -778,6 +790,11 @@ export class SpeedReaderAiModal extends Modal {
 		return this.session;
 	}
 
+	notifyPlaybackReloaded(kind: PlaybackLoadKind): void {
+		this.syncPrepareStatus(kind);
+		void this.onCacheCleared?.();
+	}
+
 	getEngine(): RSVPEngine {
 		return this.engine;
 	}
@@ -797,6 +814,42 @@ export class SpeedReaderAiModal extends Modal {
 		}
 	}
 
+	private playbackOptions() {
+		const preferredVersionId =
+			this.readerOpen.kind === 'structured'
+				? this.readerOpen.preferredAiVersionId
+				: undefined;
+		return {
+			preferLatestReady: this.mobileReader,
+			preferredVersionId
+		};
+	}
+
+	private refreshVersionPicker(): void {
+		if (!this.session || this.mobileReader) {
+			return;
+		}
+		const versions = this.session.listVersionsForUi();
+		if (versions.length === 0) {
+			this.versionPicker?.setVisible(false);
+			return;
+		}
+		if (!this.versionPicker) {
+			this.versionPicker = mountVersionPicker(
+				this.versionPickerHost,
+				versions,
+				this.session.activeVersionId,
+				(versionId) => this.onVersionChange(versionId)
+			);
+		} else {
+			this.versionPicker.refresh(versions);
+			if (this.session.activeVersionId) {
+				this.versionPicker.setValue(this.session.activeVersionId);
+			}
+			this.versionPicker.setVisible(true);
+		}
+	}
+
 	private mountStructuredControls() {
 		if (!this.session) return;
 
@@ -805,6 +858,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.session.activeModeId,
 			(modeId) => this.onModeChange(modeId)
 		);
+		this.refreshVersionPicker();
 
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
 		this.sectionNav = mountSectionNavControls(sectionHost, this.engine, () => this.refocusContent());
@@ -818,11 +872,32 @@ export class SpeedReaderAiModal extends Modal {
 		this.chapterNav = mountChapterNavControls(sectionHost, this.engine, () => this.refocusContent());
 	}
 
+	private async onVersionChange(versionId: string) {
+		if (!this.session) return;
+		await this.session.setActiveVersion(versionId);
+		this.versionPicker?.setValue(versionId);
+		this.modePicker?.setValue(this.session.activeModeId);
+		const kind = await this.session.loadPlayback(
+			this.engine,
+			this.session.activeModeId,
+			this.playbackOptions()
+		);
+		this.syncPrepareStatus(kind);
+		this.rebuildHeadingSelector();
+		this.sectionNav?.refresh();
+		this.updateModeSpecificUi();
+		void this.onCacheCleared?.();
+	}
+
 	private async onModeChange(modeId: ProcessingModeId) {
 		if (!this.session) return;
 		await this.session.setActiveMode(modeId);
 		this.modePicker?.setValue(modeId);
-		const kind = await this.session.loadPlayback(this.engine, modeId);
+		const kind = await this.session.loadPlayback(
+			this.engine,
+			modeId,
+			this.playbackOptions()
+		);
 		this.syncPrepareStatus(kind);
 		this.rebuildHeadingSelector();
 		this.sectionNav?.refresh();
@@ -847,6 +922,7 @@ export class SpeedReaderAiModal extends Modal {
 
 		const removed = await this.session.clearCache(this.engine);
 		this.syncPrepareStatus('deterministic');
+		this.versionPicker?.setVisible(false);
 		this.rebuildHeadingSelector();
 		this.sectionNav?.refresh();
 		this.updateModeSpecificUi();
@@ -888,10 +964,13 @@ export class SpeedReaderAiModal extends Modal {
 				this.engine
 			);
 			await this.session.refreshIndex();
-			this.prepareControls?.setStatus('prepared');
+			this.modePicker?.setValue(this.session.activeModeId);
+			this.refreshVersionPicker();
+			this.syncPrepareStatus('ai');
 			this.rebuildHeadingSelector();
 			this.sectionNav?.refresh();
 			this.updateModeSpecificUi();
+			void this.onCacheCleared?.();
 		} catch (e: unknown) {
 			this.prepareControls?.setStatus('error');
 			const message = e instanceof Error ? e.message : String(e);

@@ -58,8 +58,9 @@ describe('validateProcessedDocument', () => {
 		expect(validateProcessedDocument(sampleSectionsProcessed())).not.toBeNull();
 	});
 
-	it('rejects invalid version in cache index', () => {
+	it('rejects incomplete v2 cache index', () => {
 		expect(parseDocumentCacheIndex({ version: 2 })).toBeNull();
+		expect(parseDocumentCacheIndex({ version: 3 })).toBeNull();
 	});
 
 	it('rejects ProcessedDocument with empty stream', () => {

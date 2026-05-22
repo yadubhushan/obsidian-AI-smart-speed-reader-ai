@@ -88,12 +88,36 @@ export interface ModeCacheEntry {
 	sourceChecksum?: string;
 }
 
-export interface DocumentCacheIndex {
+export type VersionCacheStatus = 'ready' | 'stale' | 'error';
+
+export interface PrepareVersionEntry {
+	id: string;
+	number: number;
+	modeId: ProcessingModeId;
+	preparedAt: string;
+	model: string;
+	sourceChecksum: string;
+	status: VersionCacheStatus;
+}
+
+/** @deprecated v1 layout; used only during lazy migration */
+export interface DocumentCacheIndexV1 {
 	version: 1;
 	sourcePath: string;
 	sourceChecksum: string;
 	activeProcessingMode: ProcessingModeId;
 	modes: Record<ProcessingModeId, ModeCacheEntry>;
+	updatedAt: string;
+}
+
+export interface DocumentCacheIndex {
+	version: 2;
+	sourcePath: string;
+	sourceChecksum: string;
+	activeProcessingMode: ProcessingModeId;
+	activeVersionId: string | null;
+	nextVersionNumber: number;
+	versions: PrepareVersionEntry[];
 	updatedAt: string;
 }
 

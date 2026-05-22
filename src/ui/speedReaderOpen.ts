@@ -13,6 +13,7 @@ export type SpeedReaderOpen =
 			tokenIndex?: number;
 			resumePosition?: NotePosition;
 			preferredProcessingMode?: 'sections' | 'single_story';
+			preferredAiVersionId?: string;
 	  }
 	| {
 			kind: 'book';
