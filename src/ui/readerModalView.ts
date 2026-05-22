@@ -810,7 +810,9 @@ export class SpeedReaderAiModal extends Modal {
 
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
 		this.sectionNav = mountSectionNavControls(sectionHost, this.engine, () => this.refocusContent());
-		this.structuredBarEl.removeClass('is-hidden');
+		if (!this.mobileReader) {
+			this.structuredBarEl.removeClass('is-hidden');
+		}
 	}
 
 	private mountBookControls() {
@@ -920,7 +922,9 @@ export class SpeedReaderAiModal extends Modal {
 		const profile = this.engine.getReaderUxProfile();
 		const isStructured = this.readerOpen.kind === 'structured';
 		const isBook = this.readerOpen.kind === 'book';
-		this.structuredBarEl?.toggleClass('is-hidden', !isStructured && !isBook);
+		const hideStructuredBar =
+			(!isStructured && !isBook) || this.mobileReader;
+		this.structuredBarEl?.toggleClass('is-hidden', hideStructuredBar);
 
 		this.controlBar?.setPrepareVisible(isStructured);
 		this.prepareControls = this.controlBar?.getPrepareControls() ?? null;
