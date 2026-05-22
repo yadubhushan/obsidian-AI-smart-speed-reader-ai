@@ -88,12 +88,13 @@ On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout an
 | Double-tap left / right | Skip back / forward |
 | Hold screen edge | Continuous rewind / fast-forward |
 | Long-press word | Dictionary (bottom sheet) |
-| Long-press context line | Bookmark (paragraph + highlighted sentence) |
-| Swipe up (paused) | Quick settings peek (WPM, font, mode) |
+| Tap context word | Dictionary for that word |
+| Swipe up / down (playing) | Increase / decrease WPM (brief toast) |
 | Swipe down top bar | Expand chapter + progress; second swipe closes reader |
+| 🔖 (transport dock) | Bookmark (paragraph + highlighted sentence) |
 | ☰ (transport dock) | Menu: Chapters · Reading · Settings · Advanced |
 
-While **playing**, chrome collapses to the RSVP word and progress strip. While **paused**, the transport dock and top bar appear. First mobile session shows a 3-step coach-mark overlay for gesture discovery.
+While **playing**, chrome collapses to the RSVP word and progress strip. While **paused**, the transport dock shows **▶** plus 🔖 📖 ☰ (skip buttons hidden; use gestures to skip). Pause context shows the **current line only**; font size is configurable via **Context line font size** in Settings. First mobile session shows a 4-step coach-mark overlay for gesture discovery.
 
 **Bookmarks on mobile:** passage saves the full paragraph; the current sentence is marked with `***like this***` in the blockquote.
 

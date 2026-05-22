@@ -113,4 +113,31 @@ describe('mobileGestures helpers', () => {
 			expect(isSwipeDown(-50, 0, 300)).toBe(false);
 		});
 	});
+
+	describe('playing-only WPM swipe gate', () => {
+		function wouldAdjustWpmFromSwipe(
+			isPlaying: boolean,
+			dy: number,
+			dx: number,
+			elapsed: number
+		): 'up' | 'down' | null {
+			if (!isPlaying) {
+				return null;
+			}
+			if (isSwipeUp(dy, dx, elapsed)) {
+				return 'up';
+			}
+			if (isSwipeDown(dy, dx, elapsed)) {
+				return 'down';
+			}
+			return null;
+		}
+
+		it('allows vertical swipes only while playing', () => {
+			expect(wouldAdjustWpmFromSwipe(true, -50, 5, 300)).toBe('up');
+			expect(wouldAdjustWpmFromSwipe(true, 50, 5, 300)).toBe('down');
+			expect(wouldAdjustWpmFromSwipe(false, -50, 5, 300)).toBeNull();
+			expect(wouldAdjustWpmFromSwipe(false, 50, 5, 300)).toBeNull();
+		});
+	});
 });

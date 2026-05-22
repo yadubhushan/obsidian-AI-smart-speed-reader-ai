@@ -175,17 +175,12 @@
 }
 
 .speed-reader-ai-context-line.is-paused {
-	font-size: 1.05rem;
+	font-size: var(--speed-reader-ai-context-line-font-size, 1.05rem);
 	line-height: 1.5;
 	white-space: normal;
 	overflow: visible;
 	text-overflow: unset;
 	max-height: none;
-}
-
-.speed-reader-ai-mobile .speed-reader-ai-context-line.is-paused {
-	font-size: 1.12rem;
-	line-height: 1.55;
 }
 
 .speed-reader-ai-context-line .speed-reader-ai-context-paragraph {
@@ -1060,6 +1055,15 @@
 	display: flex;
 	align-items: center;
 	gap: 0.35rem;
+}
+
+.speed-reader-ai-mobile-transport-left.speed-reader-ai-mobile-transport-left-paused {
+	flex: 1;
+	justify-content: center;
+}
+
+.speed-reader-ai-mobile-transport-btn.is-hidden {
+	display: none;
 }
 
 .speed-reader-ai-mobile-transport-divider {

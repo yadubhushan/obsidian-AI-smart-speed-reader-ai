@@ -28,8 +28,8 @@ export function mountSettingsPane(
 				'Tap center of word area to play or pause',
 				'Double-tap left or right to skip back or forward',
 				'Long-press word to look up definition',
-				'Long-press context line to bookmark',
-				'Swipe up while paused for reading controls',
+				'Tap 🔖 to bookmark; tap a context word to define',
+				'Swipe up or down while playing to adjust speed',
 				'Swipe left or right to skip; swipe chapter pill for prev/next chapter'
 			];
 			for (const text of items) {
@@ -53,6 +53,13 @@ export function mountSettingsPane(
 			attr: { type: 'number', min: '24', max: '200' }
 		});
 		fontSizeInput.value = String(draft.reader.fontSize);
+
+		left.createEl('label', { text: 'Context line font size (pixels)' });
+		const contextLineFontSizeInput = left.createEl('input', {
+			cls: 'speed-reader-ai-settings-input',
+			attr: { type: 'number', min: '12', max: '32' }
+		});
+		contextLineFontSizeInput.value = String(draft.reader.contextLineFontSize);
 
 		left.createEl('label', { text: 'Words per minute (WPM)' });
 		const wpmInput = left.createEl('input', {
@@ -135,6 +142,7 @@ export function mountSettingsPane(
 					...draft.reader,
 					font: fontSelect.value as SpeedReaderAiSettings['reader']['font'],
 					fontSize: Number(fontSizeInput.value),
+					contextLineFontSize: Number(contextLineFontSizeInput.value),
 					wpm: Number(wpmInput.value),
 					chunkSize: Number(chunkInput.value),
 					colorScheme: schemeSelect.value as SpeedReaderAiSettings['reader']['colorScheme'],

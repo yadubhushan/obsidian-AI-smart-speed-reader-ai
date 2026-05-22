@@ -248,6 +248,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.homePaneEl = this.paneStackEl.createDiv({ cls: 'speed-reader-ai-pane speed-reader-ai-pane-home' });
 		this.wordContainer = this.homePaneEl.createDiv({ cls: 'speed-reader-ai-word-container' });
 		this.applyFontSize();
+		this.applyContextLineFontSize();
 
 		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
 		this.interSectionOverlayEl = this.wordContainer.createDiv({
@@ -295,6 +296,7 @@ export class SpeedReaderAiModal extends Modal {
 			onDefaults: () => structuredClone(DEFAULT_SETTINGS),
 			onResetFontSize: () => {
 				this.applyFontSize();
+		this.applyContextLineFontSize();
 				this.engine.setSettings(this.settings);
 			},
 			showMobileGesturesGuide: this.mobileReader
@@ -306,6 +308,7 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.contextLine = mountContextLine(this.shellEl, {
 			enableClickActivation: !this.mobileReader,
+			lineOnlyContext: this.mobileReader,
 			onWordActivate: (word) => {
 				void this.wordLookupHandlers?.lookupWord(word);
 			}
@@ -582,6 +585,7 @@ export class SpeedReaderAiModal extends Modal {
 		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme);
 		this.applyFontFamily();
 		this.applyFontSize();
+		this.applyContextLineFontSize();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
 		this.onSettingsChange(this.settings);
 		new Notice('Settings saved');
@@ -1309,6 +1313,7 @@ export class SpeedReaderAiModal extends Modal {
 			reader: { ...this.settings.reader, fontSize: clamped }
 		};
 		this.applyFontSize();
+		this.applyContextLineFontSize();
 		this.engine.setSettings(this.settings);
 		this.mobilePeekSheet?.refresh();
 		this.mobileBottomSheet?.refreshReadingControls();
@@ -1319,6 +1324,22 @@ export class SpeedReaderAiModal extends Modal {
 			'--speed-reader-ai-font-size',
 			`${this.settings.reader.fontSize}px`
 		);
+	}
+
+	private applyContextLineFontSize() {
+		this.contextLine?.getRootEl().style.setProperty(
+			'--speed-reader-ai-context-line-font-size',
+			`${this.settings.reader.contextLineFontSize}px`
+		);
+	}
+
+	private showBriefWpmNotice(wpm: number) {
+		new Notice(`${wpm} WPM`, 800);
+	}
+
+	private adjustWpmFromSwipe(delta: number) {
+		this.adjustWpm(delta);
+		this.showBriefWpmNotice(this.settings.reader.wpm);
 	}
 
 	private adjustFontSize(delta: number) {
@@ -1335,6 +1356,7 @@ export class SpeedReaderAiModal extends Modal {
 			reader: { ...this.settings.reader, fontSize: newSize }
 		};
 		this.applyFontSize();
+		this.applyContextLineFontSize();
 		new Notice(`Font size: ${newSize}px`);
 	}
 
@@ -1420,9 +1442,6 @@ export class SpeedReaderAiModal extends Modal {
 				onLongPressWord: () => {
 					void this.wordLookupHandlers?.lookupCurrentWord();
 				},
-				onLongPressContextLine: () => {
-					void this.createMobileBookmark();
-				},
 				onTapContextWord: (word) => {
 					void this.wordLookupHandlers?.lookupWord(word);
 				},
@@ -1432,7 +1451,8 @@ export class SpeedReaderAiModal extends Modal {
 				onSwipeChapterRight: () => this.handleShiftArrowRight(),
 				onEdgeHoldStart: (side) => this.startEdgeScrub(side),
 				onEdgeHoldEnd: () => this.stopEdgeScrub(),
-				onSwipeUp: () => this.openMobilePeek(),
+				onSwipeUp: () => this.adjustWpmFromSwipe(25),
+				onSwipeDown: () => this.adjustWpmFromSwipe(-25),
 				isBlocked: () => {
 					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
 						return true;
@@ -1445,7 +1465,8 @@ export class SpeedReaderAiModal extends Modal {
 					);
 				},
 				isHomeActive: () => this.activeTab === 'home',
-				isPaused: () => !this.state?.isPlaying
+				isPlaying: () =>
+					Boolean(this.state?.isPlaying && !this.state.finished)
 			}
 		);
 	}

@@ -77,6 +77,8 @@ export interface ReaderSettings {
 	micropauseIntensity: number;
 	/** Words on each side of current word in context line */
 	contextWords: number;
+	/** Font size (px) for paused context line subtitle */
+	contextLineFontSize: number;
 }
 
 export interface AiSettings {
@@ -184,7 +186,8 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		lineRepeatGapMs: 600,
 		enableMicropause: true,
 		micropauseIntensity: 1.5,
-		contextWords: 8
+		contextWords: 8,
+		contextLineFontSize: 18
 	},
 	ai: {
 		llmBackend: 'auto',

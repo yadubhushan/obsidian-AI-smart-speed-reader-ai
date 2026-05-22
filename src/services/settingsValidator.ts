@@ -199,7 +199,11 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 				raw.micropauseIntensity,
 				DEFAULT_SETTINGS.reader.micropauseIntensity
 			),
-			contextWords: toNumber(raw.contextWords, DEFAULT_SETTINGS.reader.contextWords)
+			contextWords: toNumber(raw.contextWords, DEFAULT_SETTINGS.reader.contextWords),
+			contextLineFontSize: toNumber(
+				raw.contextLineFontSize,
+				DEFAULT_SETTINGS.reader.contextLineFontSize
+			)
 		},
 		ai: {
 			llmBackend: normalizeLlmBackend(raw.llmBackend),
@@ -334,6 +338,16 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			Math.round(toNumber(firstDefined(r.contextWords, flat.contextWords), DEFAULT_SETTINGS.reader.contextWords)),
 			1,
 			20
+		),
+		contextLineFontSize: clamp(
+			Math.round(
+				toNumber(
+					firstDefined(r.contextLineFontSize, flat.contextLineFontSize),
+					DEFAULT_SETTINGS.reader.contextLineFontSize
+				)
+			),
+			12,
+			32
 		)
 	};
 }

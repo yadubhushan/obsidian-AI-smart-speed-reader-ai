@@ -1,9 +1,10 @@
-export const MOBILE_COACH_MARKS_KEY = 'speed-reader-ai-mobile-coach-v1';
+export const MOBILE_COACH_MARKS_KEY = 'speed-reader-ai-mobile-coach-v2';
 
 const COACH_STEPS = [
 	'Tap center to play or pause',
 	'Double-tap sides to skip',
-	'Hold word for definition · Hold subtitle to bookmark'
+	'Hold word for definition · Tap 🔖 to bookmark',
+	'Swipe up or down while playing to adjust speed'
 ];
 
 export interface MobileCoachMarksHandle {

@@ -12,6 +12,8 @@ export interface MountContextLineOptions {
 	onWordActivate?: (word: string) => void;
 	/** Desktop uses click; mobile uses pointer gestures in mobileGestures.ts */
 	enableClickActivation?: boolean;
+	/** Mobile: show current sentence only when paused (no paragraph prefix/suffix). */
+	lineOnlyContext?: boolean;
 }
 
 export function wordTextFromContextEvent(event: Event): string | null {
@@ -76,7 +78,10 @@ export function mountContextLine(
 				el.removeClass('is-hidden');
 				el.addClass('is-paused');
 
-				if (sentenceContext.paragraphPrefix?.trim()) {
+				if (
+					!options.lineOnlyContext &&
+					sentenceContext.paragraphPrefix?.trim()
+				) {
 					el.createSpan({
 						cls: 'speed-reader-ai-context-paragraph speed-reader-ai-context-paragraph-prefix',
 						text: `${sentenceContext.paragraphPrefix.trim()} `
@@ -94,7 +99,10 @@ export function mountContextLine(
 					});
 				}
 
-				if (sentenceContext.paragraphSuffix?.trim()) {
+				if (
+					!options.lineOnlyContext &&
+					sentenceContext.paragraphSuffix?.trim()
+				) {
 					el.createSpan({
 						cls: 'speed-reader-ai-context-paragraph speed-reader-ai-context-paragraph-suffix',
 						text: ` ${sentenceContext.paragraphSuffix.trim()}`

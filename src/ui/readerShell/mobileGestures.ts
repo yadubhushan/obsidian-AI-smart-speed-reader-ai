@@ -26,7 +26,6 @@ export interface MobileGesturesCallbacks {
 	onDoubleTapLeft: () => void;
 	onDoubleTapRight: () => void;
 	onLongPressWord: () => void;
-	onLongPressContextLine: () => void;
 	onTapContextWord: (word: string) => void;
 	onSwipeLeft: () => void;
 	onSwipeRight: () => void;
@@ -35,9 +34,10 @@ export interface MobileGesturesCallbacks {
 	onEdgeHoldStart: (side: EdgeSide) => void;
 	onEdgeHoldEnd: () => void;
 	onSwipeUp?: () => void;
+	onSwipeDown?: () => void;
 	isBlocked: () => boolean;
 	isHomeActive: () => boolean;
-	isPaused: () => boolean;
+	isPlaying: () => boolean;
 }
 
 export function classifyLateralZone(clientX: number, rect: DOMRect): LateralZone {
@@ -150,8 +150,6 @@ export function mountMobileGestures(
 	let contextStartX = 0;
 	let contextStartY = 0;
 	let contextStartTime = 0;
-	let contextLongPressFired = false;
-	let contextLongPressTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const isGestureAllowed = () =>
 		enabled && callbacks.isHomeActive() && !callbacks.isBlocked();
@@ -179,13 +177,6 @@ export function mountMobileGestures(
 		clearEdgeHoldStartTimer();
 	};
 
-	const clearContextLongPressTimer = () => {
-		if (contextLongPressTimer !== null) {
-			clearTimeout(contextLongPressTimer);
-			contextLongPressTimer = null;
-		}
-	};
-
 	const resetWordPointer = () => {
 		endEdgeHold();
 		wordPointerId = null;
@@ -195,8 +186,25 @@ export function mountMobileGestures(
 
 	const resetContextPointer = () => {
 		contextPointerId = null;
-		contextLongPressFired = false;
-		clearContextLongPressTimer();
+	};
+
+	const handleVerticalWpmSwipe = (dy: number, dx: number, elapsed: number): boolean => {
+		if (!callbacks.isPlaying()) {
+			return false;
+		}
+		if (callbacks.onSwipeUp && isSwipeUp(dy, dx, elapsed)) {
+			lastTapZone = null;
+			lastTapTime = 0;
+			callbacks.onSwipeUp();
+			return true;
+		}
+		if (callbacks.onSwipeDown && isSwipeDown(dy, dx, elapsed)) {
+			lastTapZone = null;
+			lastTapTime = 0;
+			callbacks.onSwipeDown();
+			return true;
+		}
+		return false;
 	};
 
 	const onWordPointerDown = (event: PointerEvent) => {
@@ -298,14 +306,7 @@ export function mountMobileGestures(
 		const absX = Math.abs(dx);
 		const absY = Math.abs(dy);
 
-		if (
-			callbacks.isPaused() &&
-			callbacks.onSwipeUp &&
-			isSwipeUp(dy, dx, elapsed)
-		) {
-			lastTapZone = null;
-			lastTapTime = 0;
-			callbacks.onSwipeUp();
+		if (handleVerticalWpmSwipe(dy, dx, elapsed)) {
 			return;
 		}
 
@@ -383,41 +384,18 @@ export function mountMobileGestures(
 		contextStartX = event.clientX;
 		contextStartY = event.clientY;
 		contextStartTime = Date.now();
-		contextLongPressFired = false;
-		clearContextLongPressTimer();
-
-		contextLongPressTimer = setTimeout(() => {
-			contextLongPressTimer = null;
-			if (contextPointerId === null || contextLongPressFired) {
-				return;
-			}
-			contextLongPressFired = true;
-			callbacks.onLongPressContextLine();
-		}, LONG_PRESS_MS);
-	};
-
-	const onContextPointerMove = (event: PointerEvent) => {
-		if (contextPointerId === null || event.pointerId !== contextPointerId) {
-			return;
-		}
-		const dx = event.clientX - contextStartX;
-		const dy = event.clientY - contextStartY;
-		if (exceedsTapMovement(dx, dy)) {
-			clearContextLongPressTimer();
-		}
 	};
 
 	const onContextPointerUp = (event: PointerEvent) => {
 		if (contextPointerId === null || event.pointerId !== contextPointerId) {
 			return;
 		}
-		const wasLongPress = contextLongPressFired;
 		const savedStartX = contextStartX;
 		const savedStartY = contextStartY;
 		const savedStartTime = contextStartTime;
 		resetContextPointer();
 
-		if (!isGestureAllowed() || wasLongPress) {
+		if (!isGestureAllowed()) {
 			return;
 		}
 
@@ -461,12 +439,10 @@ export function mountMobileGestures(
 
 	const registerContextTarget = (el: HTMLElement) => {
 		el.addEventListener('pointerdown', onContextPointerDown);
-		el.addEventListener('pointermove', onContextPointerMove);
 		el.addEventListener('pointerup', onContextPointerUp);
 		el.addEventListener('pointercancel', onContextPointerCancel);
 		cleanups.push(() => {
 			el.removeEventListener('pointerdown', onContextPointerDown);
-			el.removeEventListener('pointermove', onContextPointerMove);
 			el.removeEventListener('pointerup', onContextPointerUp);
 			el.removeEventListener('pointercancel', onContextPointerCancel);
 		});

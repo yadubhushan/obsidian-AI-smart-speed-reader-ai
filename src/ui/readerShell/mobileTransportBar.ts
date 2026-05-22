@@ -224,6 +224,10 @@ export function mountMobileTransportBar(
 		},
 		update(state, _settings) {
 			playBtn.setText(state?.isPlaying ? '⏸' : '▶');
+			const paused = !state?.isPlaying;
+			skipBackBtn.toggleClass('is-hidden', paused);
+			skipForwardBtn.toggleClass('is-hidden', paused);
+			transportLeft.toggleClass('speed-reader-ai-mobile-transport-left-paused', paused);
 			chapterTitle.setText(formatChapterTitle(state));
 			const progress = Math.min(Math.round(state?.progress ?? 0), 100);
 			progressEl.setText(`${progress}%`);

@@ -44,6 +44,19 @@ describe('migrateFlatSettings', () => {
 		expect(validateSettings(null, defaultCatalog)).toEqual(DEFAULT_SETTINGS);
 	});
 
+	it('clamps contextLineFontSize to 12–32', () => {
+		const low = validateSettings(
+			{ reader: { ...DEFAULT_SETTINGS.reader, contextLineFontSize: 8 } },
+			defaultCatalog
+		);
+		expect(low.reader.contextLineFontSize).toBe(12);
+		const high = validateSettings(
+			{ reader: { ...DEFAULT_SETTINGS.reader, contextLineFontSize: 48 } },
+			defaultCatalog
+		);
+		expect(high.reader.contextLineFontSize).toBe(32);
+	});
+
 	it('validateSettings merges flat legacy fields via migration', () => {
 		const result = validateSettings({ wpm: 99999, chunkSize: 0 }, defaultCatalog);
 		expect(result.reader.wpm).toBe(5000);
