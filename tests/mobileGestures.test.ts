@@ -6,8 +6,10 @@ import {
 	isEdgeZone,
 	isSwipeDown,
 	isSwipeUp,
+	shouldSuppressContextWordRetap,
 	EDGE_ZONE_RATIO
 } from '../src/ui/readerShell/mobileGestures';
+import { shouldIgnoreBackdropDismiss } from '../src/ui/readerShell/mobileDictionarySheet';
 
 function rect(left: number, width: number): DOMRect {
 	return { left, width, top: 0, height: 100, right: left + width, bottom: 100, x: left, y: 0, toJSON: () => ({}) };
@@ -47,6 +49,45 @@ describe('mobileGestures helpers', () => {
 
 		it('returns null for zero-width rect', () => {
 			expect(isEdgeZone(50, rect(0, 0))).toBe(null);
+		});
+	});
+
+	describe('shouldSuppressContextWordRetap', () => {
+		it('suppresses second tap on same word within window', () => {
+			const now = 1000;
+			expect(shouldSuppressContextWordRetap('hello', 800, 'hello', now)).toBe(true);
+		});
+
+		it('allows tap on different word', () => {
+			const now = 1000;
+			expect(shouldSuppressContextWordRetap('hello', 800, 'world', now)).toBe(false);
+		});
+
+		it('allows tap outside the window', () => {
+			const now = 1000;
+			expect(shouldSuppressContextWordRetap('hello', 600, 'hello', now)).toBe(false);
+		});
+
+		it('allows first tap when no prior tap', () => {
+			expect(shouldSuppressContextWordRetap(null, 0, 'hello', 1000)).toBe(false);
+		});
+	});
+
+	describe('shouldIgnoreBackdropDismiss', () => {
+		it('ignores dismiss within grace period after open', () => {
+			const openedAt = 1000;
+			expect(shouldIgnoreBackdropDismiss(openedAt, 1200)).toBe(true);
+			expect(shouldIgnoreBackdropDismiss(openedAt, 1349)).toBe(true);
+		});
+
+		it('allows dismiss after grace period', () => {
+			const openedAt = 1000;
+			expect(shouldIgnoreBackdropDismiss(openedAt, 1350)).toBe(false);
+			expect(shouldIgnoreBackdropDismiss(openedAt, 2000)).toBe(false);
+		});
+
+		it('allows dismiss when sheet was never opened', () => {
+			expect(shouldIgnoreBackdropDismiss(0, 1000)).toBe(false);
 		});
 	});
 

@@ -76,6 +76,22 @@ export function isEdgeZone(
 	return null;
 }
 
+export function shouldSuppressContextWordRetap(
+	lastWord: string | null,
+	lastTapTime: number,
+	word: string,
+	now: number,
+	maxMs = DOUBLE_TAP_MAX_MS
+): boolean {
+	if (lastWord === null || lastTapTime === 0) {
+		return false;
+	}
+	if (word !== lastWord) {
+		return false;
+	}
+	return now - lastTapTime <= maxMs;
+}
+
 export function isDoubleTap(
 	lastZone: LateralZone | null,
 	lastTapTime: number,
@@ -150,6 +166,8 @@ export function mountMobileGestures(
 	let contextStartX = 0;
 	let contextStartY = 0;
 	let contextStartTime = 0;
+	let lastContextWord: string | null = null;
+	let lastContextWordTapTime = 0;
 
 	const isGestureAllowed = () =>
 		enabled && callbacks.isHomeActive() && !callbacks.isBlocked();
@@ -414,6 +432,14 @@ export function mountMobileGestures(
 		if (word) {
 			event.preventDefault();
 			event.stopPropagation();
+			const now = Date.now();
+			if (shouldSuppressContextWordRetap(lastContextWord, lastContextWordTapTime, word, now)) {
+				lastContextWord = null;
+				lastContextWordTapTime = 0;
+				return;
+			}
+			lastContextWord = word;
+			lastContextWordTapTime = now;
 			callbacks.onTapContextWord(word);
 		}
 	};

@@ -288,15 +288,6 @@ export class SpeedReaderAiModal extends Modal {
 			});
 		}
 
-		const contextLineParent = this.mobilePausedStackEl ?? this.shellEl;
-		this.contextLine = mountContextLine(contextLineParent, {
-			enableClickActivation: !this.mobileReader,
-			lineOnlyContext: this.mobileReader,
-			onWordActivate: (word) => {
-				void this.wordLookupHandlers?.lookupWord(word);
-			}
-		});
-
 		const paneParent = this.mobilePausedStackEl ?? this.shellEl;
 		this.paneStackEl = paneParent.createDiv({ cls: 'speed-reader-ai-pane-stack' });
 
@@ -319,6 +310,13 @@ export class SpeedReaderAiModal extends Modal {
 		});
 		this.prepareOverlaySublineEl = this.prepareOverlayEl.createSpan({
 			cls: 'speed-reader-ai-prepare-subline is-hidden'
+		});
+		this.contextLine = mountContextLine(this.homePaneEl, {
+			enableClickActivation: !this.mobileReader,
+			lineOnlyContext: this.mobileReader,
+			onWordActivate: (word) => {
+				void this.wordLookupHandlers?.lookupWord(word);
+			}
 		});
 		const onDictionaryDismiss = () => {
 			this.dismissDictionaryOverlayIfVisible();
@@ -1580,7 +1578,10 @@ export class SpeedReaderAiModal extends Modal {
 						return true;
 					}
 					return (
-						this.mobileMenuOpen || this.mobilePeekOpen || this.mobileCoachOpen
+						this.mobileMenuOpen ||
+						this.mobilePeekOpen ||
+						this.mobileCoachOpen ||
+						this.isDictionaryOverlayVisible()
 					);
 				},
 				isHomeActive: () => this.activeTab === 'home',

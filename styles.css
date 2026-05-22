@@ -161,6 +161,11 @@
 	padding: 0.5rem 1rem;
 }
 
+.speed-reader-ai-pane-home > .speed-reader-ai-context-line {
+	align-self: stretch;
+	width: 100%;
+}
+
 .speed-reader-ai-context-line {
 	flex-shrink: 0;
 	padding: 0.4rem 1rem;
@@ -947,6 +952,7 @@
 	padding-bottom: 0;
 	min-height: 0;
 	flex: 0 0 auto;
+	gap: 0;
 }
 
 .speed-reader-ai-mobile-paused .speed-reader-ai-word-container {

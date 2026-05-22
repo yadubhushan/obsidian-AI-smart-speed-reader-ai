@@ -1,6 +1,16 @@
 import type { DictionaryLookupOutcome } from '../../dictionary/dictionaryTypes';
 import { renderDictionaryBody } from '../dictionaryOverlay';
 
+export const DICTIONARY_BACKDROP_DISMISS_GRACE_MS = 350;
+
+export function shouldIgnoreBackdropDismiss(
+	openedAt: number,
+	now: number,
+	graceMs = DICTIONARY_BACKDROP_DISMISS_GRACE_MS
+): boolean {
+	return openedAt > 0 && now - openedAt < graceMs;
+}
+
 export interface MobileDictionarySheetHandle {
 	showLoading(word: string): void;
 	showOutcome(outcome: DictionaryLookupOutcome): void;
@@ -39,6 +49,7 @@ export function mountMobileDictionarySheet(
 	});
 
 	let visible = false;
+	let openedAt = 0;
 	const openListeners: Array<(open: boolean) => void> = [];
 
 	const notifyOpenChange = () => {
@@ -52,6 +63,7 @@ export function mountMobileDictionarySheet(
 			return;
 		}
 		visible = false;
+		openedAt = 0;
 		backdrop.addClass('is-hidden');
 		sheet.addClass('is-hidden');
 		root.removeClass('is-sheet-open');
@@ -62,10 +74,16 @@ export function mountMobileDictionarySheet(
 	};
 
 	closeBtn.addEventListener('click', () => onDismiss?.());
-	backdrop.addEventListener('click', () => onDismiss?.());
+	backdrop.addEventListener('click', () => {
+		if (shouldIgnoreBackdropDismiss(openedAt, Date.now())) {
+			return;
+		}
+		onDismiss?.();
+	});
 
 	const showLoading = (word: string) => {
 		visible = true;
+		openedAt = Date.now();
 		backdrop.removeClass('is-hidden');
 		sheet.removeClass('is-hidden');
 		root.addClass('is-sheet-open');

@@ -63,10 +63,6 @@ export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 			await performLookup(rawWord);
 		},
 		lookupWord: async (rawWord: string) => {
-			if (modal.isDictionaryOverlayVisible()) {
-				modal.dismissDictionaryOverlay();
-			}
-
 			const trimmed = rawWord.trim();
 			if (!trimmed) {
 				return;
