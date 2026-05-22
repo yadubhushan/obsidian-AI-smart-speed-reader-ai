@@ -22,7 +22,11 @@ function escapeBlockquote(text: string): string {
 		.join('\n');
 }
 
-/** Wrap the first exact match of highlightedSentence in ***bold italic*** markdown. */
+function wrapHighlightedSentence(sentence: string): string {
+	return `==***${sentence}***==`;
+}
+
+/** Wrap the first exact match of highlightedSentence in Obsidian highlight + bold italic. */
 export function formatPassageWithHighlight(input: BookmarkPassageInput): string {
 	const paragraph = input.paragraphText.trim();
 	const sentence = input.highlightedSentence.trim();
@@ -32,17 +36,17 @@ export function formatPassageWithHighlight(input: BookmarkPassageInput): string 
 	}
 
 	if (!paragraph) {
-		return `***${sentence}***`;
+		return wrapHighlightedSentence(sentence);
 	}
 
 	const index = paragraph.indexOf(sentence);
 	if (index === -1) {
-		return `${paragraph} ***${sentence}***`;
+		return `${paragraph} ${wrapHighlightedSentence(sentence)}`;
 	}
 
 	return (
 		paragraph.slice(0, index) +
-		`***${sentence}***` +
+		wrapHighlightedSentence(sentence) +
 		paragraph.slice(index + sentence.length)
 	);
 }

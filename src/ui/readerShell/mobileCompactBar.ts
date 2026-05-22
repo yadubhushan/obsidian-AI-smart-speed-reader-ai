@@ -5,9 +5,12 @@ export { getSectionPickerOptions } from './mobileSectionPicker';
 export interface MobileCompactBarHandle {
 	destroy(): void;
 	update(state: ReaderState | null, settings: SpeedReaderAiSettings): void;
+	setVisible(visible: boolean): void;
 	setChapterNavVisible(visible: boolean): void;
+	getRootEl(): HTMLElement;
 	getChapterPillEl(): HTMLElement | null;
 	onChapterPillTap(cb: () => void): void;
+	onClose(cb: () => void): void;
 }
 
 export interface MobileCompactBarHandlers {
@@ -34,6 +37,12 @@ export function mountMobileCompactBar(
 		cls: 'speed-reader-ai-mobile-chapter-pill is-hidden',
 		text: 'Chapter',
 		attr: { type: 'button' }
+	});
+
+	const closeBtn = top.createEl('button', {
+		cls: 'speed-reader-ai-mobile-compact-close',
+		text: '✕',
+		attr: { type: 'button', 'aria-label': 'Close reader' }
 	});
 
 	const row = bar.createDiv({ cls: 'speed-reader-ai-mobile-compact-row' });
@@ -71,10 +80,12 @@ export function mountMobileCompactBar(
 	});
 
 	let chapterPillTapHandler: (() => void) | null = null;
+	let closeHandler: (() => void) | null = null;
 
 	playBtn.addEventListener('click', () => handlers.onPlayPause());
 	modeBtn.addEventListener('click', () => handlers.onToggleMode());
 	chapterPill.addEventListener('click', () => chapterPillTapHandler?.());
+	closeBtn.addEventListener('click', () => closeHandler?.());
 
 	return {
 		destroy() {
@@ -99,12 +110,21 @@ export function mountMobileCompactBar(
 				chapterPill.setText('Section');
 			}
 		},
+		setVisible(visible) {
+			bar.toggleClass('is-hidden', !visible);
+		},
+		getRootEl() {
+			return bar;
+		},
 		setChapterNavVisible(visible) {
 			chapterPill.toggleClass('is-hidden', !visible);
 		},
 		getChapterPillEl: () => chapterPill,
 		onChapterPillTap(cb) {
 			chapterPillTapHandler = cb;
+		},
+		onClose(cb) {
+			closeHandler = cb;
 		}
 	};
 }

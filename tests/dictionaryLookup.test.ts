@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	extractLookupWordFromReaderState,
-	normalizeWordForLookup,
-	parseFreeDictionaryResponse
+	normalizeWordForLookup
 } from '../src/dictionary/dictionaryLookup';
+import { parseDictionaryApiDevResponse } from '../src/dictionary/providers/dictionaryApiDevProvider';
+import { parseFreeDictionaryApiResponse } from '../src/dictionary/providers/freeDictionaryApiProvider';
 import type { ReaderState } from '../src/types';
 
 describe('normalizeWordForLookup', () => {
@@ -46,7 +47,7 @@ describe('extractLookupWordFromReaderState', () => {
 	});
 });
 
-describe('parseFreeDictionaryResponse', () => {
+describe('parseDictionaryApiDevResponse', () => {
 	it('parses meanings and limits output shape', () => {
 		const json = JSON.stringify([
 			{
@@ -72,17 +73,18 @@ describe('parseFreeDictionaryResponse', () => {
 			}
 		]);
 
-		const result = parseFreeDictionaryResponse(json);
+		const result = parseDictionaryApiDevResponse(json);
 		expect(result).not.toBeNull();
 		expect(result?.word).toBe('hello');
 		expect(result?.phonetic).toBe('/həˈloʊ/');
 		expect(result?.meanings).toHaveLength(2);
 		expect(result?.meanings[0]?.definitions).toHaveLength(2);
 		expect(result?.meanings[0]?.definitions[0]?.example).toBe('Hello there.');
+		expect(result?.attribution.label).toBe('dictionaryapi.dev');
 	});
 
 	it('returns null for empty arrays', () => {
-		expect(parseFreeDictionaryResponse('[]')).toBeNull();
+		expect(parseDictionaryApiDevResponse('[]')).toBeNull();
 	});
 
 	it('parses admires verb conjugation from API shape', () => {
@@ -113,11 +115,43 @@ describe('parseFreeDictionaryResponse', () => {
 			}
 		]);
 
-		const result = parseFreeDictionaryResponse(json);
+		const result = parseDictionaryApiDevResponse(json);
 		expect(result).not.toBeNull();
 		expect(result?.word).toBe('admires');
 		expect(result?.meanings[0]?.partOfSpeech).toBe('verb');
 		expect(result?.meanings[0]?.definitions[0]?.text).toContain('amazed');
 		expect(result?.meanings[0]?.definitions).toHaveLength(2);
+	});
+});
+
+describe('parseFreeDictionaryApiResponse', () => {
+	it('parses entries, senses, and attribution', () => {
+		const json = JSON.stringify({
+			word: 'ephemeral',
+			entries: [
+				{
+					partOfSpeech: 'adjective',
+					pronunciations: [{ text: '/ɪˈfɛməɹəl/' }],
+					senses: [
+						{
+							definition: 'Lasting for a short period of time.',
+							examples: ['An ephemeral pleasure.']
+						},
+						{ definition: 'Second sense.' }
+					]
+				}
+			]
+		});
+
+		const result = parseFreeDictionaryApiResponse(json);
+		expect(result).not.toBeNull();
+		expect(result?.word).toBe('ephemeral');
+		expect(result?.phonetic).toBe('/ɪˈfɛməɹəl/');
+		expect(result?.meanings[0]?.definitions[0]?.example).toBe('An ephemeral pleasure.');
+		expect(result?.attribution.label).toBe('FreeDictionaryAPI.com');
+	});
+
+	it('returns null for empty entries', () => {
+		expect(parseFreeDictionaryApiResponse(JSON.stringify({ word: 'x', entries: [] }))).toBeNull();
 	});
 });

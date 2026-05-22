@@ -96,7 +96,7 @@ On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout an
 
 While **playing**, chrome collapses to the RSVP word and progress strip. While **paused**, the transport dock shows **▶** plus 🔖 📖 ☰ (skip buttons hidden; use gestures to skip). Pause context shows the **current line only**; font size is configurable via **Context line font size** in Settings. First mobile session shows a 4-step coach-mark overlay for gesture discovery.
 
-**Bookmarks on mobile:** passage saves the full paragraph; the current sentence is marked with `***like this***` in the blockquote.
+**Bookmarks on mobile:** passage saves the full paragraph; the current sentence is marked with `==***like this***==` in the blockquote.
 
 ## Build from source
 
@@ -142,7 +142,7 @@ Open without a document: command palette **Open speed reader preferences**, or *
 
 ## Network and privacy
 
-Word lookup sends only the looked-up word to the [Free Dictionary API](https://dictionaryapi.dev/) (`api.dictionaryapi.dev`). No API key is required. Disable lookup in the reader **Advanced** tab.
+Word lookup sends only the looked-up word to online dictionary APIs (no API key). The plugin tries [dictionaryapi.dev](https://dictionaryapi.dev/) first, then [FreeDictionaryAPI.com](https://freedictionaryapi.com/) (Wiktionary data) if the primary source has no entry. Attribution in the dictionary footer reflects which source returned the definition. Disable lookup in the reader **Advanced** tab.
 
 AI prepare sends note text to your configured LLM backend:
 

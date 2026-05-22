@@ -27,7 +27,7 @@ export function mountMobileDictionarySheet(
 	const phoneticEl = headerEl.createSpan({ cls: 'speed-reader-ai-dictionary-phonetic' });
 	const bodyEl = sheet.createDiv({ cls: 'speed-reader-ai-dictionary-body' });
 	const footerEl = sheet.createDiv({ cls: 'speed-reader-ai-dictionary-footer' });
-	footerEl.createEl('a', {
+	const attributionEl = footerEl.createEl('a', {
 		cls: 'speed-reader-ai-dictionary-attribution',
 		text: 'dictionaryapi.dev',
 		href: 'https://dictionaryapi.dev/'
@@ -86,6 +86,8 @@ export function mountMobileDictionarySheet(
 		if (outcome.kind === 'found') {
 			wordEl.setText(outcome.result.word);
 			phoneticEl.setText(outcome.result.phonetic ? ` ${outcome.result.phonetic}` : '');
+			attributionEl.setText(outcome.result.attribution.label);
+			attributionEl.setAttr('href', outcome.result.attribution.href);
 		} else if (outcome.kind === 'not_found') {
 			wordEl.setText(outcome.word);
 			phoneticEl.setText('');

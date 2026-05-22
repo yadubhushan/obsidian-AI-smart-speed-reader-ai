@@ -43,6 +43,10 @@ describe('stripMarkdown', () => {
 		expect(stripMarkdown('This is ==highlighted== text')).toBe('This is highlighted text');
 	});
 
+	it('strips bookmark highlight + bold italic', () => {
+		expect(stripMarkdown('Before ==***bold italic***== after')).toBe('Before bold italic after');
+	});
+
 	it('strips comments', () => {
 		expect(stripMarkdown('This is %%hidden%% text')).toBe('This is  text');
 	});

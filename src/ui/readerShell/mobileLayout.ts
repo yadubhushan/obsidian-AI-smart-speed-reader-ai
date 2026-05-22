@@ -11,9 +11,10 @@ export function applyMobileShellClass(shellEl: HTMLElement): void {
 	shellEl.addClass('speed-reader-ai-mobile');
 }
 
-export function removeMobileShellClass(shellEl: HTMLElement): void {
+export function 	removeMobileShellClass(shellEl: HTMLElement): void {
 	shellEl.removeClass('speed-reader-ai-mobile');
 	shellEl.removeClass('speed-reader-ai-mobile-playing');
+	shellEl.removeClass('speed-reader-ai-mobile-paused');
 	shellEl.removeClass('speed-reader-ai-mobile-menu-open');
 }
 
@@ -24,6 +25,10 @@ export function syncMobilePlayingState(
 ): void {
 	shellEl.toggleClass('speed-reader-ai-mobile-playing', isPlaying && !overlayOpen);
 	shellEl.toggleClass('speed-reader-ai-mobile-menu-open', overlayOpen);
+}
+
+export function syncMobilePausedState(shellEl: HTMLElement, isPausedHome: boolean): void {
+	shellEl.toggleClass('speed-reader-ai-mobile-paused', isPausedHome);
 }
 
 export function syncMobileProgressStrip(

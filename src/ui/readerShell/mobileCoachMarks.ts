@@ -3,12 +3,13 @@ export const MOBILE_COACH_MARKS_KEY = 'speed-reader-ai-mobile-coach-v2';
 const COACH_STEPS = [
 	'Tap center to play or pause',
 	'Double-tap sides to skip',
-	'Hold word for definition · Tap 🔖 to bookmark',
+	'Hold word for definition · Use action bar to bookmark or open settings',
 	'Swipe up or down while playing to adjust speed'
 ];
 
 export interface MobileCoachMarksHandle {
 	isOpen(): boolean;
+	dismiss(): void;
 	destroy(): void;
 }
 
@@ -98,13 +99,9 @@ export function mountMobileCoachMarks(
 		isOpen() {
 			return open;
 		},
+		dismiss,
 		destroy() {
-			if (!destroyed) {
-				root.remove();
-				destroyed = true;
-				open = false;
-				notifyOpenChange();
-			}
+			dismiss();
 		}
 	};
 }

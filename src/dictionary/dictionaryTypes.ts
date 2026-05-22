@@ -8,10 +8,16 @@ export interface DictionaryMeaning {
 	definitions: DictionaryDefinition[];
 }
 
+export interface DictionaryAttribution {
+	label: string;
+	href: string;
+}
+
 export interface DictionaryResult {
 	word: string;
 	phonetic?: string;
 	meanings: DictionaryMeaning[];
+	attribution: DictionaryAttribution;
 }
 
 export type DictionaryLookupOutcome =

@@ -20,13 +20,13 @@ describe('bookmarkBlock', () => {
 		expect(block).not.toContain(`\n${uri}\n`);
 	});
 
-	it('wraps highlighted sentence in bold italic markdown', () => {
+	it('wraps highlighted sentence in Obsidian highlight + bold italic', () => {
 		const passage = formatPassageWithHighlight({
 			paragraphText: 'The room was bright. The wheels were turning. A large room.',
 			highlightedSentence: 'The wheels were turning.'
 		});
-		expect(passage).toContain('***The wheels were turning.***');
-		expect(passage).not.toContain('***The room');
+		expect(passage).toContain('==***The wheels were turning.***==');
+		expect(passage).not.toContain('==***The room');
 	});
 
 	it('appends highlighted sentence when no exact match', () => {
@@ -34,7 +34,7 @@ describe('bookmarkBlock', () => {
 			paragraphText: 'Different paragraph text.',
 			highlightedSentence: 'Missing sentence.'
 		});
-		expect(passage).toBe('Different paragraph text. ***Missing sentence.***');
+		expect(passage).toBe('Different paragraph text. ==***Missing sentence.***==');
 	});
 
 	it('escapes blockquote lines in formatBookmarkBlock', () => {
@@ -46,7 +46,7 @@ describe('bookmarkBlock', () => {
 			}),
 			positionLine: 'section s word 0'
 		});
-		expect(block).toContain('> ***Line one.***');
+		expect(block).toContain('> ==***Line one.***==');
 		expect(block).toContain('> Line two.');
 	});
 

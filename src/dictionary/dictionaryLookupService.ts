@@ -2,20 +2,32 @@ import { request } from 'obsidian';
 import {
 	getCachedDictionaryOutcome,
 	normalizeWordForLookup,
-	parseFreeDictionaryResponse,
 	setCachedDictionaryOutcome
 } from './dictionaryLookup';
+import type { DictionaryProvider, DictionaryRequestFn } from './dictionaryProvider';
 import type { DictionaryLookupOutcome } from './dictionaryTypes';
+import { DictionaryApiDevProvider } from './providers/dictionaryApiDevProvider';
+import { FreeDictionaryApiProvider } from './providers/freeDictionaryApiProvider';
 
-const API_BASE = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
+export type { DictionaryRequestFn } from './dictionaryProvider';
 
-export type DictionaryRequestFn = (options: { url: string }) => Promise<string>;
+function createDefaultProviders(requestFn: DictionaryRequestFn): DictionaryProvider[] {
+	return [
+		new DictionaryApiDevProvider(requestFn),
+		new FreeDictionaryApiProvider(requestFn)
+	];
+}
 
 export class DictionaryLookupService {
+	private readonly providers: DictionaryProvider[];
+
 	constructor(
-		private readonly requestFn: DictionaryRequestFn = (options) => request(options),
-		private cacheEnabled = true
-	) {}
+		requestFn: DictionaryRequestFn = (options) => request(options),
+		private cacheEnabled = true,
+		providers?: DictionaryProvider[]
+	) {
+		this.providers = providers ?? createDefaultProviders(requestFn);
+	}
 
 	setCacheEnabled(enabled: boolean): void {
 		this.cacheEnabled = enabled;
@@ -34,33 +46,36 @@ export class DictionaryLookupService {
 			}
 		}
 
-		try {
-			const response = await this.requestFn({
-				url: `${API_BASE}${encodeURIComponent(normalized)}`
-			});
-			const result = parseFreeDictionaryResponse(response);
-			if (!result) {
-				const outcome: DictionaryLookupOutcome = { kind: 'not_found', word: normalized };
+		let sawMiss = false;
+		let sawUnavailable = false;
+
+		for (const provider of this.providers) {
+			const providerResult = await provider.lookup(normalized);
+			if (providerResult.status === 'found') {
+				const outcome: DictionaryLookupOutcome = {
+					kind: 'found',
+					result: providerResult.result
+				};
 				if (this.cacheEnabled) {
 					setCachedDictionaryOutcome(normalized, outcome);
 				}
 				return outcome;
 			}
-
-			const outcome: DictionaryLookupOutcome = { kind: 'found', result };
-			if (this.cacheEnabled) {
-				setCachedDictionaryOutcome(normalized, outcome);
+			if (providerResult.status === 'miss') {
+				sawMiss = true;
+			} else {
+				sawUnavailable = true;
 			}
-			return outcome;
-		} catch {
-			const outcome: DictionaryLookupOutcome = {
-				kind: 'not_found',
-				word: normalized
-			};
-			if (this.cacheEnabled) {
-				setCachedDictionaryOutcome(normalized, outcome);
-			}
-			return outcome;
 		}
+
+		if (sawUnavailable && !sawMiss) {
+			return { kind: 'error', message: 'Dictionary temporarily unavailable.' };
+		}
+
+		const outcome: DictionaryLookupOutcome = { kind: 'not_found', word: normalized };
+		if (this.cacheEnabled) {
+			setCachedDictionaryOutcome(normalized, outcome);
+		}
+		return outcome;
 	}
 }
