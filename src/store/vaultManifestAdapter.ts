@@ -7,7 +7,7 @@ function joinBase(base: string, relative: string): string {
 	return r.length ? `${b}/${r}` : b;
 }
 
-/** Obsidian vault adapter rooted at `.speedreader/read-cache/`. */
+/** Obsidian vault adapter rooted at plugin read-cache base path. */
 export function createVaultManifestAdapter(
 	adapter: DataAdapter,
 	readCacheBasePath: string

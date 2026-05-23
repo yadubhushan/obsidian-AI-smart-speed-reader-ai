@@ -5,7 +5,7 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../src/services/eventBus';
 import { BookCacheStoreImpl } from '../src/store/BookCacheStore';
-import { bookCacheBasePath } from '../src/store/bookCachePaths';
+import { createPluginDataPaths } from '../src/store/pluginDataPaths';
 import { docKeyFromSourcePath } from '../src/store/docKey';
 import { createEpubSourceFormatProcessor } from '../src/formats/epub/epubSourceFormatProcessor';
 import { createNodeDataAdapter } from './nodeDataAdapter';
@@ -52,11 +52,12 @@ describe('BookCacheStore', () => {
 		const onUpdated = vi.fn();
 		eventBus.on('book-cache-updated', onUpdated);
 		const processor = createEpubSourceFormatProcessor(app);
+		const paths = createPluginDataPaths(app.vault.configDir, 'speed-reader-ai');
 		const store = new BookCacheStoreImpl(
 			app,
 			processor,
 			eventBus,
-			bookCacheBasePath()
+			paths.bookCacheBase
 		);
 
 		const first = await store.ensureParsed(sourcePath);
@@ -93,11 +94,12 @@ describe('BookCacheStore', () => {
 			}
 		} as App;
 
+		const paths = createPluginDataPaths(app.vault.configDir, 'speed-reader-ai');
 		const store = new BookCacheStoreImpl(
 			app,
 			createEpubSourceFormatProcessor(app),
 			new EventBus(),
-			bookCacheBasePath()
+			paths.bookCacheBase
 		);
 
 		const first = await store.ensureParsed(sourcePath);

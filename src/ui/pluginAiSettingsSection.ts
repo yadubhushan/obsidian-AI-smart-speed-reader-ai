@@ -17,7 +17,6 @@ import {
 	parsePrepareSingleCallMaxLinesFromInput,
 	parseTimeoutSecondsFromInput
 } from '../services/settingsValidator';
-import { speedReaderReadCacheDisplayPath } from '../store/speedReaderVaultPaths';
 
 const BUTTON_SMOKE_CURSOR_LABEL = 'Test Cursor CLI connection';
 const BUTTON_SMOKE_API_LABEL = 'Test API connection';
@@ -464,7 +463,7 @@ async function displayReadCacheClearSetting(
 	containerEl: HTMLElement
 ): Promise<void> {
 	const { plugin } = host;
-	const cachePath = speedReaderReadCacheDisplayPath();
+	const cachePath = plugin.getReadCacheDisplayPath();
 	const count = await plugin.countCachedDocuments();
 	const countLabel = count === 1 ? '1 cached document' : `${count} cached documents`;
 

@@ -68,15 +68,15 @@ Reload Obsidian and enable the plugin.
 
 ### Obsidian Sync and mobile
 
-Do **not** rely on Sync to deliver plugin binaries. Install via BRAT or the community catalog on each device (~350 KB per install).
+Install plugin binaries on each device via BRAT or the community catalog (~350 KB per install). Enable **Settings → Sync → Plugin settings** to sync settings, reading progress, and caches across devices.
 
 | Path | Sync? | Why |
 |------|-------|-----|
-| `.obsidian/plugins/` | **No** | Large; changes every release — use BRAT/catalog instead |
-| `.speedreader/` | **Yes** | Reading progress, AI prepare cache, EPUB parse cache |
+| `{configDir}/plugins/speed-reader-ai/data.json` | **With plugin sync** | Reader and AI settings |
+| `{configDir}/plugins/speed-reader-ai/data/` | **With plugin sync** | Reading progress, AI prepare cache, EPUB parse cache, LLM model list, prompts |
 | Notes and EPUBs | **Yes** | Source content |
 
-Plugin settings (API keys, reader prefs) live in `.obsidian/plugins/speed-reader-ai/data.json`. If you exclude the plugins folder from Sync, configure LLM settings once on each device.
+Replace `{configDir}` with your vault config folder (usually `.obsidian`). Do not rely on Sync to deliver `main.js` — use BRAT or the catalog per device.
 
 ### Mobile reader
 
@@ -157,16 +157,20 @@ Configure AI in **Settings → Community plugins → Speed Reader AI**. API keys
 
 ## Data storage
 
-Prepared documents, book parse cache, and reading progress are stored in the vault at:
+Prepared documents, book parse cache, and reading progress are stored under the plugin data folder (syncs when Obsidian plugin settings sync is enabled):
 
 ```
-.speedreader/
-├── read-cache/          # AI prepare output (per note/doc key)
-├── book-cache/          # Parsed EPUB cache
-└── reading-state.json   # Resume positions and pins
+{configDir}/plugins/speed-reader-ai/
+├── data.json              # settings (loadData/saveData)
+└── data/
+    ├── reading-state.json # resume positions and pins
+    ├── read-cache/        # AI prepare output (per note/doc key)
+    ├── book-cache/        # parsed EPUB cache
+    ├── llm-models.json    # editable model list
+    └── prompts/*.txt      # AI prepare prompt templates
 ```
 
-This folder survives plugin redeploys and syncs with your vault. On first load after upgrading, existing data under `.obsidian/speed-reader-ai/` is copied into `.speedreader/` automatically when the new paths are empty.
+On first load after upgrading, existing data under `vault/.speedreader/` or legacy `.obsidian/speed-reader-ai/` is copied into `data/` automatically when the new paths are still empty. You can delete the old `.speedreader/` folder manually afterward.
 
 ## License
 

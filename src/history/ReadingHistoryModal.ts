@@ -49,6 +49,12 @@ export class ReadingHistoryModal extends Modal {
 	}
 
 	onOpen(): void {
+		void this.openWithFreshState();
+	}
+
+	private async openWithFreshState(): Promise<void> {
+		await this.deps.services.readingStateStore.reloadFromDisk();
+
 		const { contentEl, modalEl } = this;
 		contentEl.empty();
 		modalEl.addClass('speed-reader-history-modal');

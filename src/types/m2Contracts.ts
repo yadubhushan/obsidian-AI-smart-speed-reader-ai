@@ -95,6 +95,8 @@ export interface ReadingStateFile {
 
 export interface ReadingStateStore {
 	load(): Promise<ReadingStateFile>;
+	reloadFromDisk(): Promise<boolean>;
+	isDirty(): boolean;
 	get(sourcePath: string): ReadingState | undefined;
 	upsert(state: ReadingState): Promise<void>;
 	setLastGlobal(sourcePath: string): Promise<void>;

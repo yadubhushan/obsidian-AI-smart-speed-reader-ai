@@ -1,10 +1,4 @@
 import type { DataAdapter } from 'obsidian';
-import { joinSpeedReaderVaultPath } from './speedReaderVaultPaths';
-
-/** AI prepare cache (manifests, section JSON) under `.speedreader/read-cache/`. */
-export function readCacheBasePath(): string {
-	return joinSpeedReaderVaultPath('read-cache');
-}
 
 function joinCachePath(basePath: string, relativePath?: string): string {
 	const base = basePath.replace(/\\/g, '/').replace(/\/+$/, '');

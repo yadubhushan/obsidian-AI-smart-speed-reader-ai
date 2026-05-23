@@ -1,5 +1,5 @@
 import { Notice, type App } from 'obsidian';
-import { bookCacheBasePath, bookCacheCoverPath } from '../store/bookCachePaths';
+import { bookCacheCoverPath } from '../store/bookCachePaths';
 import type { PluginServices } from '../services/serviceRegistry';
 import type { BookPosition } from '../types/m2Contracts';
 import {
@@ -95,7 +95,7 @@ export function renderBooksTab(
 			return;
 		}
 		const coverPath = bookCacheCoverPath(
-			bookCacheBasePath(),
+			services.dataPaths.bookCacheBase,
 			docKey
 		);
 		try {

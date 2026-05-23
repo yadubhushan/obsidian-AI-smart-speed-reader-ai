@@ -18,6 +18,14 @@ export class ReadingStateStoreStub implements ReadingStateStore {
 		return this.file;
 	}
 
+	async reloadFromDisk(): Promise<boolean> {
+		return true;
+	}
+
+	isDirty(): boolean {
+		return false;
+	}
+
 	get(_sourcePath: string): ReadingState | undefined {
 		return undefined;
 	}

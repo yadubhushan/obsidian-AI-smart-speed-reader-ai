@@ -1,10 +1,4 @@
 import type { DataAdapter } from 'obsidian';
-import { joinSpeedReaderVaultPath } from './speedReaderVaultPaths';
-
-/** Parsed EPUB cache under `.speedreader/book-cache/`. */
-export function bookCacheBasePath(): string {
-	return joinSpeedReaderVaultPath('book-cache');
-}
 
 function joinCachePath(basePath: string, relativePath?: string): string {
 	const base = basePath.replace(/\\/g, '/').replace(/\/+$/, '');

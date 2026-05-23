@@ -5,7 +5,7 @@ import type {
 	ReadingStateFile,
 	ReadingStateStore
 } from '../types/m2Contracts';
-import { readingStateDataDir, readingStateFilePath } from './readingStatePaths';
+import { ensureParentFolderForFile } from '../utils/vaultAdapterDirs';
 
 const EMPTY_FILE: ReadingStateFile = {
 	lastGlobalSourcePath: '',
@@ -25,12 +25,8 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 		private readonly filePath: string
 	) {}
 
-	static create(app: App, eventBus: EventBus): ReadingStateStoreImpl {
-		return new ReadingStateStoreImpl(
-			app,
-			eventBus,
-			readingStateFilePath()
-		);
+	static create(app: App, eventBus: EventBus, readingStateFile: string): ReadingStateStoreImpl {
+		return new ReadingStateStoreImpl(app, eventBus, readingStateFile);
 	}
 
 	async load(): Promise<ReadingStateFile> {
@@ -38,6 +34,26 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 			return this.file;
 		}
 
+		await this.readFileFromDisk();
+		return this.file;
+	}
+
+	isDirty(): boolean {
+		return this.dirty;
+	}
+
+	/** Re-read disk when synced from another device. Skips if local edits are not flushed yet. */
+	async reloadFromDisk(): Promise<boolean> {
+		if (this.dirty) {
+			return false;
+		}
+
+		await this.readFileFromDisk();
+		this.notifyReload();
+		return true;
+	}
+
+	private async readFileFromDisk(): Promise<void> {
 		const adapter = this.app.vault.adapter;
 		try {
 			const raw = await adapter.read(this.filePath);
@@ -49,7 +65,16 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 
 		this.loaded = true;
 		this.dirty = false;
-		return this.file;
+	}
+
+	private notifyReload(): void {
+		for (const callback of this.changedCallbacks) {
+			callback();
+		}
+
+		for (const sourcePath of Object.keys(this.file.sources)) {
+			this.eventBus.emit('reading-state-changed', { sourcePath });
+		}
 	}
 
 	get(sourcePath: string): ReadingState | undefined {
@@ -72,8 +97,7 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 		}
 
 		const adapter = this.app.vault.adapter;
-		const dataDir = readingStateDataDir();
-		await adapter.mkdir(dataDir).catch(() => undefined);
+		await ensureParentFolderForFile(adapter, this.filePath);
 		await adapter.write(this.filePath, JSON.stringify(this.file, null, 2));
 
 		const changedPaths = [...this.pendingChangedPaths];

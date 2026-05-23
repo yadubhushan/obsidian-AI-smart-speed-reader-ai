@@ -18,7 +18,7 @@ import { applyNoteResumePosition } from '../reader/readingProgress';
 import type { SpeedReaderOpen } from './speedReaderOpen';
 import { StructuredReaderSession, type PlaybackLoadKind } from './structuredReaderSession';
 import { bookIndexToProcessedDocument } from '../formats/bookIndexToProcessedDocument';
-import { bookCacheBasePath, bookCacheCoverPath } from '../store/bookCachePaths';
+import { bookCacheCoverPath } from '../store/bookCachePaths';
 import type { ReaderSessionHooks } from '../reader/readingProgressTracker';
 import type { ReaderBookmarkHandles } from '../features/feature4/attachReaderBookmarks';
 import type { ReaderWordLookupHandles } from '../features/word-lookup/attachReaderWordLookup';
@@ -178,6 +178,7 @@ export class SpeedReaderAiModal extends Modal {
 	private sectionNav: SectionNavControlsHandle | null = null;
 	private chapterNav: ChapterNavControlsHandle | null = null;
 	private coverObjectUrl: string | null = null;
+	private readonly bookCacheBase: string;
 	constructor(
 		app: App,
 		readerOpen: SpeedReaderOpen,
@@ -187,9 +188,11 @@ export class SpeedReaderAiModal extends Modal {
 		preparePrompts?: PreparePromptSet,
 		onCacheCleared?: () => void | Promise<void>,
 		onReaderClose?: () => void,
-		llmModelCatalog: LlmModelCatalog = createDefaultLlmModelCatalog()
+		llmModelCatalog: LlmModelCatalog = createDefaultLlmModelCatalog(),
+		bookCacheBase = ''
 	) {
 		super(app);
+		this.bookCacheBase = bookCacheBase;
 		this.readerOpen = readerOpen;
 		this.settings = settings;
 		this.onSettingsChange = onSettingsChange;
@@ -1788,7 +1791,7 @@ export class SpeedReaderAiModal extends Modal {
 			return false;
 		}
 		const coverPath = bookCacheCoverPath(
-			bookCacheBasePath(),
+			this.bookCacheBase,
 			this.readerOpen.bookIndex.docKey
 		);
 		try {

@@ -12,6 +12,7 @@ import {
 	defaultBookPosition
 } from '../formats/bookIndexToProcessedDocument';
 import type { PreparePromptSet } from '../llm/promptCatalog';
+import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 import { wireReaderBookmarks } from '../features/feature4/registerFeature4';
 import { wireReaderWordLookup } from '../features/word-lookup/registerWordLookup';
 import type { PluginServices } from '../services/serviceRegistry';
@@ -82,7 +83,9 @@ export async function openBookReader(deps: OpenBookReaderDeps): Promise<SpeedRea
 		undefined,
 		deps.preparePrompts,
 		undefined,
-		() => deps.onClose?.(deps.request.sourcePath)
+		() => deps.onClose?.(deps.request.sourcePath),
+		createDefaultLlmModelCatalog(),
+		deps.services.dataPaths.bookCacheBase
 	);
 
 	const hooks = attachBookReadingSession({

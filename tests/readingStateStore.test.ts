@@ -3,11 +3,13 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../src/services/eventBus';
+import { createPluginDataPaths } from '../src/store/pluginDataPaths';
 import { ReadingStateStoreImpl } from '../src/store/ReadingStateStore';
-import { readingStateFilePath } from '../src/store/readingStatePaths';
 import { createNodeDataAdapter } from './nodeDataAdapter';
 import type { App } from 'obsidian';
 import type { ReadingState } from '../src/types/m2Contracts';
+
+const PLUGIN_ID = 'speed-reader-ai';
 
 function createMockApp(rootDir: string): App {
 	return {
@@ -46,7 +48,8 @@ describe('ReadingStateStore', () => {
 	it('loads empty file when missing', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();
-		const store = ReadingStateStoreImpl.create(app, eventBus);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
 		const file = await store.load();
 
 		expect(file.lastGlobalSourcePath).toBe('');
@@ -56,13 +59,13 @@ describe('ReadingStateStore', () => {
 	it('upserts and flushes to disk', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();
-		const store = ReadingStateStoreImpl.create(app, eventBus);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
 		await store.load();
 		await store.upsert(sampleState('books/a.epub'));
 		await store.flush();
 
-		const path = readingStateFilePath();
-		const raw = await app.vault.adapter.read(path);
+		const raw = await app.vault.adapter.read(paths.readingStateFile);
 		const parsed = JSON.parse(raw) as { sources: Record<string, ReadingState> };
 		expect(parsed.sources['books/a.epub']?.position).toEqual({ chapterId: 'chapter-01', wordIndex: 12 });
 	});
@@ -70,7 +73,8 @@ describe('ReadingStateStore', () => {
 	it('updates lastGlobalSourcePath on setLastGlobal', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();
-		const store = ReadingStateStoreImpl.create(app, eventBus);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
 		await store.load();
 		await store.setLastGlobal('notes/foo.md');
 		await store.flush();
@@ -83,7 +87,8 @@ describe('ReadingStateStore', () => {
 		const eventBus = new EventBus();
 		const onChanged = vi.fn();
 		eventBus.on('reading-state-changed', onChanged);
-		const store = ReadingStateStoreImpl.create(app, eventBus);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
 		await store.load();
 		await store.upsert(sampleState('books/a.epub'));
 		await store.flush();
@@ -94,7 +99,8 @@ describe('ReadingStateStore', () => {
 	it('notifies onChanged subscribers after flush', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();
-		const store = ReadingStateStoreImpl.create(app, eventBus);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
 		await store.load();
 		const callback = vi.fn();
 		store.onChanged(callback);
@@ -102,5 +108,52 @@ describe('ReadingStateStore', () => {
 		await store.flush();
 
 		expect(callback).toHaveBeenCalled();
+	});
+
+	it('reloadFromDisk picks up external file changes when not dirty', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const onChanged = vi.fn();
+		eventBus.on('reading-state-changed', onChanged);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
+		await store.load();
+		await store.upsert(sampleState('books/a.epub'));
+		await store.flush();
+		onChanged.mockClear();
+
+		const synced = {
+			lastGlobalSourcePath: 'books/b.epub',
+			sources: {
+				'books/b.epub': sampleState('books/b.epub')
+			}
+		};
+		await app.vault.adapter.write(paths.readingStateFile, JSON.stringify(synced));
+
+		const reloaded = await store.reloadFromDisk();
+		expect(reloaded).toBe(true);
+		expect(store.get('books/b.epub')?.sourcePath).toBe('books/b.epub');
+		expect(store.get('books/a.epub')).toBeUndefined();
+		expect(onChanged).toHaveBeenCalledWith({ sourcePath: 'books/b.epub' });
+	});
+
+	it('reloadFromDisk skips when local state is dirty', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
+		await store.load();
+		await store.upsert(sampleState('books/a.epub'));
+
+		const synced = {
+			lastGlobalSourcePath: 'books/b.epub',
+			sources: { 'books/b.epub': sampleState('books/b.epub') }
+		};
+		await app.vault.adapter.write(paths.readingStateFile, JSON.stringify(synced));
+
+		const reloaded = await store.reloadFromDisk();
+		expect(reloaded).toBe(false);
+		expect(store.isDirty()).toBe(true);
+		expect(store.get('books/a.epub')?.sourcePath).toBe('books/a.epub');
 	});
 });

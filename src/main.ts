@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, Menu, Notice, Plugin } from 'obsidian';
+import { Editor, MarkdownView, Menu, Notice, Plugin, type App } from 'obsidian';
 import { initAI } from '@obsidian-ai-providers/sdk';
 import { initCursorCliDesktopSupport } from './llm/cursorCliDesktopBridge';
 import { noteContentChecksum } from './crypto-checksum';
@@ -31,8 +31,13 @@ import {
 	type PreparePromptSet
 } from './llm/promptCatalog';
 import { ManifestStore } from './store/ManifestStore';
-import { migrateSpeedReaderVaultData } from './store/migrateSpeedReaderVaultData';
-import { listReadCacheDocKeys, readCacheBasePath } from './store/readCachePaths';
+import { migratePluginData } from './store/migratePluginData';
+import { createPluginDataPaths, pluginReadCacheDisplayPath, type PluginDataPaths } from './store/pluginDataPaths';
+import {
+	pluginDataFromSettings,
+	settingsFromPluginData
+} from './store/pluginDataStorage';
+import { listReadCacheDocKeys } from './store/readCachePaths';
 import { createVaultManifestAdapter } from './store/vaultManifestAdapter';
 import type { SpeedReaderOpen } from './ui/speedReaderOpen';
 import type { ReaderTabId } from './ui/readerShell/readerTabDock';
@@ -40,6 +45,7 @@ import type { NotePosition } from './types/m2Contracts';
 
 export default class SpeedReaderAiPlugin extends Plugin {
 	settings!: SpeedReaderAiSettings;
+	dataPaths!: PluginDataPaths;
 	llmModelCatalog: LlmModelCatalog = createDefaultLlmModelCatalog();
 	llmModelsConfigPath = '';
 	preparePrompts!: PreparePromptSet;
@@ -47,6 +53,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	private manifestStore: ManifestStore | null = null;
 	private prepareStatusBarEl: HTMLElement | null = null;
 	private services: PluginServices | null = null;
+	private pluginSettingTab: SpeedReaderAiSettingTab | null = null;
 
 	async onload() {
 		initAI(this.app, this, async () => undefined, { disableFallback: true });
@@ -77,11 +84,16 @@ export default class SpeedReaderAiPlugin extends Plugin {
 			this.preparePromptsDirPath
 		);
 		await this.loadSettings();
-		await migrateSpeedReaderVaultData(
+		this.dataPaths = createPluginDataPaths(this.app.vault.configDir, this.manifest.id);
+		const migration = await migratePluginData(
 			this.app.vault.adapter,
-			this.app.vault.configDir
+			this.app.vault.configDir,
+			this.manifest.id
 		);
-		this.services = createPluginServices(this);
+		if (migration.readCache || migration.bookCache || migration.readingState) {
+			new Notice('Speed Reader data moved to plugin folder for sync.');
+		}
+		this.services = createPluginServices(this, this.dataPaths);
 		registerFeature1(this, this.services);
 		registerFeature2(this, this.services);
 		registerFeature3A(this, this.services);
@@ -169,7 +181,8 @@ export default class SpeedReaderAiPlugin extends Plugin {
 			})
 		);
 
-		this.addSettingTab(new SpeedReaderAiSettingTab(this.app, this));
+		this.pluginSettingTab = new SpeedReaderAiSettingTab(this.app, this);
+		this.addSettingTab(this.pluginSettingTab);
 
 		this.prepareStatusBarEl = this.addStatusBarItem();
 		this.prepareStatusBarEl.addClass('speed-reader-ai-statusbar');
@@ -199,13 +212,17 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 	getServices(): PluginServices {
 		if (!this.services) {
-			this.services = createPluginServices(this);
+			this.services = createPluginServices(this, this.dataPaths);
 		}
 		return this.services;
 	}
 
 	getReadCacheBasePath(): string {
-		return readCacheBasePath();
+		return this.dataPaths.readCacheBase;
+	}
+
+	getReadCacheDisplayPath(): string {
+		return pluginReadCacheDisplayPath(this.dataPaths);
 	}
 
 	getManifestStore(): ManifestStore {
@@ -236,21 +253,64 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	}
 
 	async reloadLlmModelCatalog(): Promise<void> {
-		this.llmModelCatalog = await loadLlmModelCatalogFromPath(
-			this.app.vault.adapter,
-			this.llmModelsConfigPath
-		);
+		await this.reloadLlmModelCatalogFromDisk();
 		this.settings.ai.llmModel = this.llmModelCatalog.normalize(this.settings.ai.llmModel);
 		await this.saveSettings();
 	}
 
+	private async reloadLlmModelCatalogFromDisk(): Promise<void> {
+		this.llmModelCatalog = await loadLlmModelCatalogFromPath(
+			this.app.vault.adapter,
+			this.llmModelsConfigPath
+		);
+	}
+
+	private async reloadPreparePromptsFromDisk(): Promise<void> {
+		if (!this.preparePromptsDirPath) {
+			return;
+		}
+		this.preparePrompts = await loadPreparePromptSet(
+			this.app.vault.adapter,
+			this.preparePromptsDirPath
+		);
+	}
+
 	async loadSettings() {
-		const raw = await this.loadData() as Partial<SpeedReaderAiSettings> | null;
-		this.settings = validateSettings(Object.assign({}, DEFAULT_SETTINGS, raw), this.llmModelCatalog);
+		const raw = await this.loadData();
+		this.settings = settingsFromPluginData(raw, this.llmModelCatalog);
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
+		await this.saveData(pluginDataFromSettings(this.settings));
+	}
+
+	async onExternalSettingsChange(): Promise<void> {
+		await this.reloadPluginDataFromSync();
+	}
+
+	/** Reload settings and plugin data files after Obsidian Sync updates the plugin folder. */
+	async reloadPluginDataFromSync(): Promise<void> {
+		await this.reloadLlmModelCatalogFromDisk();
+		await this.loadSettings();
+		await this.reloadPreparePromptsFromDisk();
+
+		if (this.services) {
+			await this.services.readingStateStore.reloadFromDisk();
+		}
+
+		this.refreshOpenSettingsTab();
+		void this.refreshPrepareStatusBar();
+	}
+
+	private refreshOpenSettingsTab(): void {
+		const tab = this.pluginSettingTab;
+		if (!tab) {
+			return;
+		}
+		const setting = (this.app as App & { setting?: { activeTab?: unknown } }).setting;
+		if (setting?.activeTab === tab) {
+			tab.display();
+		}
 	}
 
 	private startSpeedReading(view: MarkdownView, fromCursor = false) {

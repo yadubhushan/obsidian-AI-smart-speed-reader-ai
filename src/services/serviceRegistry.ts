@@ -11,13 +11,14 @@ import type { ReadingStateStore } from '../types/m2Contracts';
 import { createReaderGate, type ReaderGateImpl } from '../reader/ReaderGate';
 import { createEpubSourceFormatProcessor } from '../formats/epub/epubSourceFormatProcessor';
 import type { EpubVaultIndex, SourceFormatProcessor } from '../types/m2Contracts';
-import { bookCacheBasePath } from '../store/bookCachePaths';
+import type { PluginDataPaths } from '../store/pluginDataPaths';
 import { registerSourceFormatProcessor } from '../formats/sourceFormatProcessorRegistry';
 import { createEpubVaultIndex, type EpubVaultIndexImpl } from '../history/epubVaultIndex';
 import { createBookmarkService, type BookmarkService } from '../bookmarks/bookmarkService';
 
 export interface PluginServices {
 	eventBus: EventBus;
+	dataPaths: PluginDataPaths;
 	readingStateStore: ReadingStateStore;
 	bookCacheStore: BookCacheStore;
 	readerGate: ReaderGateImpl;
@@ -26,9 +27,16 @@ export interface PluginServices {
 	bookmarkService: BookmarkService;
 }
 
-export function createPluginServices(plugin: SpeedReaderPluginHost): PluginServices {
+export function createPluginServices(
+	plugin: SpeedReaderPluginHost,
+	dataPaths: PluginDataPaths
+): PluginServices {
 	const eventBus = new EventBus();
-	const readingStateStore = ReadingStateStoreImpl.create(plugin.app, eventBus);
+	const readingStateStore = ReadingStateStoreImpl.create(
+		plugin.app,
+		eventBus,
+		dataPaths.readingStateFile
+	);
 	void readingStateStore.load();
 	const epubProcessor = createEpubSourceFormatProcessor(plugin.app);
 	registerSourceFormatProcessor(epubProcessor);
@@ -36,7 +44,7 @@ export function createPluginServices(plugin: SpeedReaderPluginHost): PluginServi
 		plugin.app,
 		epubProcessor,
 		eventBus,
-		bookCacheBasePath(),
+		dataPaths.bookCacheBase,
 		() => {
 			if (!isLlmBackendConfigured(plugin.settings)) {
 				return undefined;
@@ -55,6 +63,7 @@ export function createPluginServices(plugin: SpeedReaderPluginHost): PluginServi
 	});
 	const services: PluginServices = {
 		eventBus,
+		dataPaths,
 		readingStateStore,
 		bookCacheStore,
 		readerGate: null as unknown as ReaderGateImpl,

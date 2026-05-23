@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createPluginDataPaths } from '../src/store/pluginDataPaths';
 import {
 	listReadCacheDocKeys,
-	readCacheBasePath,
 	readCacheDocKeyExists,
 	removeReadCacheTree
 } from '../src/store/readCachePaths';
@@ -23,8 +23,9 @@ describe('readCachePaths', () => {
 		await rm(rootDir, { recursive: true, force: true });
 	});
 
-	it('readCacheBasePath resolves under .speedreader in the vault', () => {
-		expect(readCacheBasePath()).toBe('.speedreader/read-cache');
+	it('createPluginDataPaths resolves read-cache under plugin data folder', () => {
+		const paths = createPluginDataPaths('.obsidian', 'speed-reader-ai');
+		expect(paths.readCacheBase).toBe('.obsidian/plugins/speed-reader-ai/data/read-cache');
 	});
 
 	it('listReadCacheDocKeys returns top-level doc folders only', async () => {
