@@ -382,10 +382,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 		modal.open();
 
 		wireReaderWordLookup(modal, () => ({
-			dictionary: {
-				enableWordLookup: this.settings.dictionary.enableWordLookup,
-				dictionaryCacheEnabled: this.settings.dictionary.dictionaryCacheEnabled
-			}
+			dictionary: this.settings.dictionary
 		}));
 
 		if (readerOpen.kind === 'structured' || readerOpen.kind === 'book') {

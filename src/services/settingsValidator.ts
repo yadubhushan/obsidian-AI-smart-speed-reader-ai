@@ -254,6 +254,10 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			dictionaryCacheEnabled: toBoolean(
 				raw.dictionaryCacheEnabled,
 				DEFAULT_SETTINGS.dictionary.dictionaryCacheEnabled
+			),
+			merriamWebsterApiKey: toString(
+				raw.merriamWebsterApiKey,
+				DEFAULT_SETTINGS.dictionary.merriamWebsterApiKey
 			)
 		}
 	};
@@ -455,6 +459,14 @@ export function validateSettings(
 					flatRecord.dictionaryCacheEnabled
 				),
 				DEFAULT_SETTINGS.dictionary.dictionaryCacheEnabled
+			),
+			merriamWebsterApiKey: toString(
+				firstDefined(
+					pickNested(input, 'dictionary', 'merriamWebsterApiKey'),
+					isRecord(migrated.dictionary) ? migrated.dictionary.merriamWebsterApiKey : undefined,
+					flatRecord.merriamWebsterApiKey
+				),
+				DEFAULT_SETTINGS.dictionary.merriamWebsterApiKey
 			)
 		}
 	};

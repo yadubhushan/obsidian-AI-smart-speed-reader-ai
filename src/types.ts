@@ -104,6 +104,7 @@ export interface BookmarkSettings {
 export interface DictionarySettings {
 	enableWordLookup: boolean;
 	dictionaryCacheEnabled: boolean;
+	merriamWebsterApiKey: string;
 }
 
 export interface WordData {
@@ -210,6 +211,7 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 	},
 	dictionary: {
 		enableWordLookup: true,
-		dictionaryCacheEnabled: true
+		dictionaryCacheEnabled: true,
+		merriamWebsterApiKey: ''
 	}
 };

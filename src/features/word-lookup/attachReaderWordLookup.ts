@@ -28,7 +28,10 @@ export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 			return;
 		}
 
-		lookupService.setCacheEnabled(getSettings().dictionary.dictionaryCacheEnabled);
+		lookupService.configure({
+			merriamWebsterApiKey: getSettings().dictionary.merriamWebsterApiKey,
+			cacheEnabled: getSettings().dictionary.dictionaryCacheEnabled
+		});
 
 		const normalized = normalizeWordForLookup(rawWord);
 		if (!normalized) {

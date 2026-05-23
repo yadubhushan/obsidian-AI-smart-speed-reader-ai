@@ -5,6 +5,11 @@ import {
 } from '../src/dictionary/dictionaryLookup';
 import { parseDictionaryApiDevResponse } from '../src/dictionary/providers/dictionaryApiDevProvider';
 import { parseFreeDictionaryApiResponse } from '../src/dictionary/providers/freeDictionaryApiProvider';
+import {
+	MERRIAM_WEBSTER_ATTRIBUTION,
+	parseMerriamWebsterResponse,
+	stripMerriamWebsterTokens
+} from '../src/dictionary/providers/merriamWebsterProvider';
 import type { ReaderState } from '../src/types';
 
 describe('normalizeWordForLookup', () => {
@@ -121,6 +126,80 @@ describe('parseDictionaryApiDevResponse', () => {
 		expect(result?.meanings[0]?.partOfSpeech).toBe('verb');
 		expect(result?.meanings[0]?.definitions[0]?.text).toContain('amazed');
 		expect(result?.meanings[0]?.definitions).toHaveLength(2);
+	});
+});
+
+describe('parseMerriamWebsterResponse', () => {
+	it('parses shortdef, phonetic, and attribution', () => {
+		const json = JSON.stringify([
+			{
+				meta: { id: 'abide:1' },
+				hwi: {
+					hw: 'abide',
+					prs: [{ mw: '\u0259\u02C8b\u012Bd' }]
+				},
+				fl: 'verb',
+				shortdef: [
+					'to bear patiently : tolerate',
+					'to endure without yielding : withstand',
+					'to wait for : await'
+				]
+			}
+		]);
+
+		const result = parseMerriamWebsterResponse(json, 'abide');
+		expect(result).not.toBeNull();
+		expect(result?.word).toBe('abide');
+		expect(result?.phonetic).toBe('\u0259\u02C8b\u012Bd');
+		expect(result?.meanings).toHaveLength(1);
+		expect(result?.meanings[0]?.partOfSpeech).toBe('verb');
+		expect(result?.meanings[0]?.definitions).toHaveLength(2);
+		expect(result?.meanings[0]?.definitions[0]?.text).toBe('to bear patiently : tolerate');
+		expect(result?.attribution).toEqual(MERRIAM_WEBSTER_ATTRIBUTION);
+	});
+
+	it('parses homographs into multiple meanings capped at MAX_MEANINGS', () => {
+		const json = JSON.stringify([
+			{
+				meta: { id: 'test:1' },
+				hom: 1,
+				hwi: { hw: 'test', prs: [{ mw: '\u02C8test' }] },
+				fl: 'noun',
+				shortdef: ['a means of testing']
+			},
+			{
+				meta: { id: 'test:2' },
+				hom: 2,
+				hwi: { hw: 'test' },
+				fl: 'verb',
+				shortdef: ['to put to test']
+			},
+			{
+				meta: { id: 'test:3' },
+				hom: 3,
+				hwi: { hw: 'test' },
+				fl: 'adjective',
+				shortdef: ['of or relating to a test']
+			}
+		]);
+
+		const result = parseMerriamWebsterResponse(json, 'test');
+		expect(result?.meanings).toHaveLength(2);
+		expect(result?.meanings[0]?.partOfSpeech).toBe('noun');
+		expect(result?.meanings[1]?.partOfSpeech).toBe('verb');
+	});
+
+	it('returns null for suggestion arrays and empty arrays', () => {
+		expect(parseMerriamWebsterResponse(JSON.stringify(['suggestion']), 'word')).toBeNull();
+		expect(parseMerriamWebsterResponse('[]', 'word')).toBeNull();
+	});
+});
+
+describe('stripMerriamWebsterTokens', () => {
+	it('strips common inline tokens', () => {
+		expect(stripMerriamWebsterTokens('{bc}to bear patiently : tolerate')).toBe(
+			': to bear patiently : tolerate'
+		);
 	});
 });
 

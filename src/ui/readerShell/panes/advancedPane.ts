@@ -61,6 +61,10 @@ export function mountAdvancedPane(
 		const cacheCheck = cacheRow.createEl('input', { attr: { type: 'checkbox' } });
 		cacheCheck.checked = draft.dictionary.dictionaryCacheEnabled;
 		cacheRow.createSpan({ text: 'Cache definitions for this session' });
+		pane.createEl('p', {
+			cls: 'speed-reader-ai-pane-hint',
+			text: 'Merriam Webster API key: Settings → Community plugins → Speed Reader AI → Dictionary.'
+		});
 
 		const actions = pane.createDiv({ cls: 'speed-reader-ai-settings-actions' });
 		const saveBtn = actions.createEl('button', {
@@ -82,6 +86,7 @@ export function mountAdvancedPane(
 					noteBookmarkSectionHeading: noteHeading.value
 				},
 				dictionary: {
+					...draft.dictionary,
 					enableWordLookup: lookupCheck.checked,
 					dictionaryCacheEnabled: cacheCheck.checked
 				}

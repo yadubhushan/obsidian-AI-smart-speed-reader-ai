@@ -1,5 +1,6 @@
 import { request } from 'obsidian';
 import {
+	clearDictionarySessionCache,
 	getCachedDictionaryOutcome,
 	normalizeWordForLookup,
 	setCachedDictionaryOutcome
@@ -8,25 +9,50 @@ import type { DictionaryProvider, DictionaryRequestFn } from './dictionaryProvid
 import type { DictionaryLookupOutcome } from './dictionaryTypes';
 import { DictionaryApiDevProvider } from './providers/dictionaryApiDevProvider';
 import { FreeDictionaryApiProvider } from './providers/freeDictionaryApiProvider';
+import { MerriamWebsterProvider } from './providers/merriamWebsterProvider';
 
 export type { DictionaryRequestFn } from './dictionaryProvider';
 
-function createDefaultProviders(requestFn: DictionaryRequestFn): DictionaryProvider[] {
-	return [
-		new DictionaryApiDevProvider(requestFn),
-		new FreeDictionaryApiProvider(requestFn)
-	];
+function createProviders(
+	requestFn: DictionaryRequestFn,
+	merriamWebsterApiKey?: string
+): DictionaryProvider[] {
+	const providers: DictionaryProvider[] = [];
+	const key = merriamWebsterApiKey?.trim();
+	if (key) {
+		providers.push(new MerriamWebsterProvider(requestFn, key));
+	}
+	providers.push(new DictionaryApiDevProvider(requestFn));
+	providers.push(new FreeDictionaryApiProvider(requestFn));
+	return providers;
 }
 
 export class DictionaryLookupService {
-	private readonly providers: DictionaryProvider[];
+	private providers: DictionaryProvider[];
+	private cacheEnabled = true;
+	private configuredMerriamWebsterApiKey = '';
 
 	constructor(
-		requestFn: DictionaryRequestFn = (options) => request(options),
-		private cacheEnabled = true,
+		private readonly requestFn: DictionaryRequestFn = (options) => request(options),
+		cacheEnabled = true,
 		providers?: DictionaryProvider[]
 	) {
-		this.providers = providers ?? createDefaultProviders(requestFn);
+		this.cacheEnabled = cacheEnabled;
+		this.providers = providers ?? createProviders(this.requestFn);
+	}
+
+	configure(options: { merriamWebsterApiKey?: string; cacheEnabled?: boolean }): void {
+		if (options.cacheEnabled !== undefined) {
+			this.cacheEnabled = options.cacheEnabled;
+		}
+
+		const nextKey = options.merriamWebsterApiKey?.trim() ?? this.configuredMerriamWebsterApiKey;
+		if (nextKey !== this.configuredMerriamWebsterApiKey) {
+			this.configuredMerriamWebsterApiKey = nextKey;
+			clearDictionarySessionCache();
+		}
+
+		this.providers = createProviders(this.requestFn, nextKey);
 	}
 
 	setCacheEnabled(enabled: boolean): void {

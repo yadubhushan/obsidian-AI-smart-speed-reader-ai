@@ -1,12 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
 	clearDictionarySessionCache,
-	getCachedDictionaryOutcome
+	getCachedDictionaryOutcome,
+	setCachedDictionaryOutcome
 } from '../src/dictionary/dictionaryLookup';
 import { DictionaryLookupService } from '../src/dictionary/dictionaryLookupService';
 import type { DictionaryProvider } from '../src/dictionary/dictionaryProvider';
 import { DICTIONARY_API_DEV_ATTRIBUTION } from '../src/dictionary/providers/dictionaryApiDevProvider';
 import { FREE_DICTIONARY_API_ATTRIBUTION } from '../src/dictionary/providers/freeDictionaryApiProvider';
+import { MERRIAM_WEBSTER_ATTRIBUTION } from '../src/dictionary/providers/merriamWebsterProvider';
 
 function mockProvider(
 	id: string,
@@ -106,5 +108,51 @@ describe('DictionaryLookupService', () => {
 			kind: 'not_found',
 			word: 'missing'
 		});
+	});
+
+	it('calls Merriam Webster provider first when configured', async () => {
+		const mw = vi.fn(async () => ({
+			status: 'found' as const,
+			result: {
+				word: 'hello',
+				meanings: [{ partOfSpeech: 'noun', definitions: [{ text: 'A greeting.' }] }],
+				attribution: MERRIAM_WEBSTER_ATTRIBUTION
+			}
+		}));
+		const backup = vi.fn(async () => ({
+			status: 'found' as const,
+			result: {
+				word: 'hello',
+				meanings: [{ partOfSpeech: 'noun', definitions: [{ text: 'Backup.' }] }],
+				attribution: DICTIONARY_API_DEV_ATTRIBUTION
+			}
+		}));
+		const service = new DictionaryLookupService(vi.fn(), false, [
+			mockProvider('merriamWebster', mw),
+			mockProvider('dictionaryApiDev', backup)
+		]);
+
+		const outcome = await service.lookup('hello');
+		expect(outcome.kind).toBe('found');
+		expect(mw).toHaveBeenCalledOnce();
+		expect(backup).not.toHaveBeenCalled();
+	});
+
+	it('clears cache when Merriam Webster key changes', () => {
+		const service = new DictionaryLookupService(vi.fn(), true);
+		service.configure({ merriamWebsterApiKey: 'key-one' });
+
+		setCachedDictionaryOutcome('test', {
+			kind: 'found',
+			result: {
+				word: 'test',
+				meanings: [{ partOfSpeech: 'noun', definitions: [{ text: 'A trial.' }] }],
+				attribution: DICTIONARY_API_DEV_ATTRIBUTION
+			}
+		});
+		expect(getCachedDictionaryOutcome('test')?.kind).toBe('found');
+
+		service.configure({ merriamWebsterApiKey: 'key-two' });
+		expect(getCachedDictionaryOutcome('test')).toBeUndefined();
 	});
 });

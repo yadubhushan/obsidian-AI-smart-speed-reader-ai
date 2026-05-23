@@ -142,7 +142,7 @@ Open without a document: command palette **Open speed reader preferences**, or *
 
 ## Network and privacy
 
-Word lookup sends only the looked-up word to online dictionary APIs (no API key). The plugin tries [dictionaryapi.dev](https://dictionaryapi.dev/) first, then [FreeDictionaryAPI.com](https://freedictionaryapi.com/) (Wiktionary data) if the primary source has no entry. Attribution in the dictionary footer reflects which source returned the definition. Disable lookup in the reader **Advanced** tab.
+Word lookup sends only the looked-up word to online dictionary APIs. Optionally configure a **Merriam Webster** Collegiate Dictionary API key in **Settings → Community plugins → Speed Reader AI → Dictionary** ([register free key](https://dictionaryapi.com/register/index); 1000 requests/day non-commercial). When a key is set, lookups use Merriam Webster first, then fall back to [dictionaryapi.dev](https://dictionaryapi.dev/) and [FreeDictionaryAPI.com](https://freedictionaryapi.com/) (Wiktionary). Without a key, the free chain runs unchanged. Attribution in the dictionary footer reflects which source returned the definition. Disable lookup in the reader **Advanced** tab.
 
 AI prepare sends note text to your configured LLM backend:
 

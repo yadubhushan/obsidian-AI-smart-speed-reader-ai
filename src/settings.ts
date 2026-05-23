@@ -3,6 +3,7 @@ import type SpeedReaderAiPlugin from './main';
 import type { SpeedReaderAiSettings } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { displayPluginAiSettings } from './ui/pluginAiSettingsSection';
+import { displayPluginDictionarySettings } from './ui/pluginDictionarySettingsSection';
 
 export { DEFAULT_SETTINGS };
 export type { SpeedReaderAiSettings };
@@ -32,6 +33,8 @@ export class SpeedReaderAiSettingTab extends PluginSettingTab {
 			},
 			containerEl
 		);
+
+		displayPluginDictionarySettings({ plugin: this.plugin }, containerEl);
 
 		containerEl.createEl('h3', { text: 'Reader' });
 
