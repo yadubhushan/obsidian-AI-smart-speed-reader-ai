@@ -101,12 +101,12 @@ async function migrateReadingStateFromSources(
 	toPath: string,
 	fromPaths: string[]
 ): Promise<boolean> {
-	if (await adapter.exists(toPath)) {
+	if (!(await isReadingStateFileEmptyOnDisk(adapter, toPath))) {
 		return false;
 	}
 
 	for (const fromPath of fromPaths) {
-		if (!(await adapter.exists(fromPath))) {
+		if (!(await legacyReadingStateHasSources(adapter, fromPath))) {
 			continue;
 		}
 		await copyFile(adapter, fromPath, toPath);
@@ -114,6 +114,44 @@ async function migrateReadingStateFromSources(
 	}
 
 	return false;
+}
+
+function isReadingStateFileEmpty(raw: unknown): boolean {
+	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+		return true;
+	}
+	const sources = (raw as Record<string, unknown>).sources;
+	if (typeof sources !== 'object' || sources === null || Array.isArray(sources)) {
+		return true;
+	}
+	return Object.keys(sources).length === 0;
+}
+
+async function isReadingStateFileEmptyOnDisk(
+	adapter: DataAdapter,
+	path: string
+): Promise<boolean> {
+	if (!(await adapter.exists(path))) {
+		return true;
+	}
+	try {
+		const raw = JSON.parse(await adapter.read(path));
+		return isReadingStateFileEmpty(raw);
+	} catch {
+		return true;
+	}
+}
+
+async function legacyReadingStateHasSources(adapter: DataAdapter, path: string): Promise<boolean> {
+	if (!(await adapter.exists(path))) {
+		return false;
+	}
+	try {
+		const raw = JSON.parse(await adapter.read(path));
+		return !isReadingStateFileEmpty(raw);
+	} catch {
+		return false;
+	}
 }
 
 export interface PluginDataMigrationResult {
@@ -169,3 +207,4 @@ export async function migratePluginData(
 }
 
 export type { PluginDataPaths };
+export { isReadingStateFileEmpty };

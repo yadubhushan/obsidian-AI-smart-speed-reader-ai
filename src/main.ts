@@ -199,6 +199,12 @@ export default class SpeedReaderAiPlugin extends Plugin {
 				void this.refreshPrepareStatusBar();
 			})
 		);
+
+		this.registerDomEvent(document, 'visibilitychange', () => {
+			if (document.visibilityState === 'visible') {
+				void this.reloadReadingStateFromSync();
+			}
+		});
 	}
 
 	onunload() {
@@ -300,6 +306,20 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 		this.refreshOpenSettingsTab();
 		void this.refreshPrepareStatusBar();
+	}
+
+	/** Reload reading progress after sync or when the app returns to foreground. */
+	async reloadReadingStateFromSync(): Promise<void> {
+		if (!this.services) {
+			return;
+		}
+
+		await migratePluginData(
+			this.app.vault.adapter,
+			this.app.vault.configDir,
+			this.manifest.id
+		);
+		await this.services.readingStateStore.reloadFromDisk();
 	}
 
 	private refreshOpenSettingsTab(): void {

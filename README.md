@@ -78,6 +78,8 @@ Install plugin binaries on each device via BRAT or the community catalog (~350 K
 
 Replace `{configDir}` with your vault config folder (usually `.obsidian`). Do not rely on Sync to deliver `main.js` — use BRAT or the catalog per device.
 
+**Mobile history empty while desktop shows progress?** Turn on **Plugin settings** sync on mobile, install/update the plugin on that device, force-quit Obsidian, and reopen **Reading history**. Progress is stored in `{configDir}/plugins/speed-reader-ai/data/reading-state.json`. Legacy data under `vault/.speedreader/` is imported automatically when the plugin copy is empty.
+
 ### Mobile reader
 
 On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout and keyboard shortcuts unchanged):
