@@ -7,6 +7,7 @@ import {
 function snapshot(overrides: Partial<ReaderBackSnapshot> = {}): ReaderBackSnapshot {
 	return {
 		activeTab: 'home',
+		mobileRoute: null,
 		preferencesOnly: false,
 		dictionaryVisible: false,
 		coachMarksOpen: false,
@@ -22,7 +23,7 @@ describe('resolveReaderBackAction', () => {
 			resolveReaderBackAction(
 				snapshot({
 					dictionaryVisible: true,
-					activeTab: 'settings',
+					mobileRoute: 'settings',
 					bottomSheetOpen: true
 				})
 			)
@@ -43,24 +44,42 @@ describe('resolveReaderBackAction', () => {
 		);
 	});
 
+	it('returns go-home from mobile menu hub', () => {
+		expect(resolveReaderBackAction(snapshot({ mobileRoute: 'more' }))).toBe('go-home');
+	});
+
 	it('returns go-home from settings while reading', () => {
-		expect(resolveReaderBackAction(snapshot({ activeTab: 'settings' }))).toBe('go-home');
+		expect(
+			resolveReaderBackAction(snapshot({ activeTab: 'settings', mobileRoute: 'settings' }))
+		).toBe('go-home');
 	});
 
 	it('returns go-home from content shortcuts and advanced tabs', () => {
-		expect(resolveReaderBackAction(snapshot({ activeTab: 'content' }))).toBe('go-home');
-		expect(resolveReaderBackAction(snapshot({ activeTab: 'shortcuts' }))).toBe('go-home');
-		expect(resolveReaderBackAction(snapshot({ activeTab: 'advanced' }))).toBe('go-home');
+		expect(resolveReaderBackAction(snapshot({ activeTab: 'content', mobileRoute: 'content' }))).toBe(
+			'go-home'
+		);
+		expect(
+			resolveReaderBackAction(snapshot({ activeTab: 'shortcuts', mobileRoute: 'shortcuts' }))
+		).toBe('go-home');
+		expect(
+			resolveReaderBackAction(snapshot({ activeTab: 'advanced', mobileRoute: 'advanced' }))
+		).toBe('go-home');
 	});
 
 	it('returns go-home from bookmarks explorer', () => {
-		expect(resolveReaderBackAction(snapshot({ activeTab: 'bookmarks' }))).toBe('go-home');
+		expect(
+			resolveReaderBackAction(snapshot({ activeTab: 'bookmarks', mobileRoute: 'bookmarks' }))
+		).toBe('go-home');
 	});
 
 	it('closes preferences-only modal from non-home tab', () => {
 		expect(
 			resolveReaderBackAction(
-				snapshot({ activeTab: 'settings', preferencesOnly: true })
+				snapshot({
+					activeTab: 'settings',
+					mobileRoute: 'settings',
+					preferencesOnly: true
+				})
 			)
 		).toBe('close-modal');
 	});

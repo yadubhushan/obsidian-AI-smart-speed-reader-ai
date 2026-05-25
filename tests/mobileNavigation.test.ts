@@ -15,10 +15,12 @@ describe('mobileNavigation', () => {
 		expect(readerTabToMobileRoute('bookmarks')).toBe('bookmarks');
 		expect(readerTabToMobileRoute('settings')).toBe('settings');
 		expect(mobileRouteToReaderTab('content')).toBe('content');
+		expect(mobileRouteToReaderTab('more')).toBeNull();
 	});
 
 	it('identifies stack routes', () => {
 		expect(isMobileStackRoute('reading')).toBe(false);
+		expect(isMobileStackRoute('more')).toBe(true);
 		expect(isMobileStackRoute('bookmarks')).toBe(true);
 		expect(isMobileStackRoute('advanced')).toBe(true);
 	});

@@ -1,4 +1,5 @@
 import type { ReaderTabId } from './readerTabDock';
+import type { MobileRoute } from './mobileNavigation';
 
 export type ReaderBackAction =
 	| 'dismiss-dictionary'
@@ -10,6 +11,7 @@ export type ReaderBackAction =
 
 export interface ReaderBackSnapshot {
 	activeTab: ReaderTabId;
+	mobileRoute: MobileRoute | null;
 	preferencesOnly: boolean;
 	dictionaryVisible: boolean;
 	coachMarksOpen: boolean;
@@ -27,7 +29,11 @@ export function resolveReaderBackAction(snapshot: ReaderBackSnapshot): ReaderBac
 	if (snapshot.bottomSheetOpen) {
 		return 'close-bottom-sheet';
 	}
-	if (snapshot.activeTab !== 'home') {
+	const onStackPage =
+		snapshot.mobileRoute !== null
+			? snapshot.mobileRoute !== 'reading'
+			: snapshot.activeTab !== 'home';
+	if (onStackPage) {
 		return snapshot.preferencesOnly ? 'close-modal' : 'go-home';
 	}
 	if (snapshot.focusMode) {

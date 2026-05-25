@@ -1435,14 +1435,27 @@
 	min-height: 0;
 }
 
-.speed-reader-ai-mobile .speed-reader-ai-pane-content,
-.speed-reader-ai-mobile .speed-reader-ai-pane-settings,
-.speed-reader-ai-mobile .speed-reader-ai-pane-advanced,
-.speed-reader-ai-mobile .speed-reader-ai-pane-shortcuts {
+.speed-reader-ai-mobile .speed-reader-ai-pane-content:not(.is-hidden),
+.speed-reader-ai-mobile .speed-reader-ai-pane-settings:not(.is-hidden),
+.speed-reader-ai-mobile .speed-reader-ai-pane-advanced:not(.is-hidden),
+.speed-reader-ai-mobile .speed-reader-ai-pane-shortcuts:not(.is-hidden),
+.speed-reader-ai-mobile .speed-reader-ai-pane-more:not(.is-hidden),
+.speed-reader-ai-mobile .speed-reader-ai-pane-bookmarks:not(.is-hidden) {
 	display: flex;
 	flex-direction: column;
 	padding: 0;
 	overflow: hidden;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane-stack.is-stack-active .speed-reader-ai-pane:not(.is-hidden) {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	background: var(--background-primary);
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane.is-hidden {
+	display: none !important;
 }
 
 .speed-reader-ai-mobile .speed-reader-ai-pane-content .speed-reader-ai-content-panel,
@@ -1484,6 +1497,26 @@
 	font-size: var(--font-ui-small);
 	min-height: 44px;
 	padding: 0.5rem 0.75rem;
+	text-align: left;
+}
+
+.speed-reader-ai-mobile-menu-hub-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.speed-reader-ai-mobile-menu-hub-btn {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-medium);
+	min-height: 52px;
+	padding: 0.75rem 1rem;
 	text-align: left;
 }
 

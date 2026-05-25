@@ -45,6 +45,10 @@ import { mountSettingsPane, type SettingsPaneHandle } from './readerShell/panes/
 import { mountShortcutsPane, type ShortcutsPaneHandle } from './readerShell/panes/shortcutsPane';
 import { mountAdvancedPane, type AdvancedPaneHandle } from './readerShell/panes/advancedPane';
 import { mountBookmarksPane, type BookmarksPaneHandle } from './readerShell/panes/bookmarksPane';
+import {
+	mountMobileMenuHubPane,
+	type MobileMenuHubPaneHandle
+} from './readerShell/panes/mobileMenuHubPane';
 import { validateSettings } from '../services/settingsValidator';
 import {
 	applyMobileShellClass,
@@ -85,6 +89,7 @@ import {
 	readerTabToMobileRoute,
 	syncMobileRouteShell,
 	isMobileStackRoute,
+	isMobileReadingRoot,
 	type MobileRoute
 } from './readerShell/mobileNavigation';
 import {
@@ -171,12 +176,14 @@ export class SpeedReaderAiModal extends Modal {
 	private skipFlashTimer: number | null = null;
 	private readonly mobileReader = isMobileReader();
 	private mobileRoute: MobileRoute = 'reading';
+	private mobileRouteStack: MobileRoute[] = ['reading'];
 	private contentPane!: ContentPaneHandle;
 	private bookmarksPane!: BookmarksPaneHandle;
 	private bookmarkContextLines: BookmarkContextLine[] = [];
 	private settingsPane!: SettingsPaneHandle;
 	private shortcutsPane!: ShortcutsPaneHandle;
 	private advancedPane!: AdvancedPaneHandle;
+	private mobileMenuHubPane: MobileMenuHubPaneHandle | null = null;
 	private modePickerHost!: HTMLElement;
 	private versionPickerHost!: HTMLElement;
 	private structuredBarEl!: HTMLElement;
@@ -382,10 +389,10 @@ export class SpeedReaderAiModal extends Modal {
 			this.refocusContent();
 		});
 		this.bookmarksPane.onSwipeBack(() => {
-			this.goToReadingRoot();
+			this.popMobileRoute();
 		});
 		this.contentPane.onSwipeBack(() => {
-			this.goToReadingRoot();
+			this.popMobileRoute();
 		});
 		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
@@ -407,11 +414,11 @@ export class SpeedReaderAiModal extends Modal {
 			isMobile: this.mobileReader
 		});
 		this.settingsPane.onSwipeBack(() => {
-			this.goToReadingRoot();
+			this.popMobileRoute();
 		});
 		this.shortcutsPane = mountShortcutsPane(this.paneStackEl, { isMobile: this.mobileReader });
 		this.shortcutsPane.onSwipeBack(() => {
-			this.goToReadingRoot();
+			this.popMobileRoute();
 		});
 		this.advancedPane = mountAdvancedPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
@@ -421,8 +428,18 @@ export class SpeedReaderAiModal extends Modal {
 			isMobile: this.mobileReader
 		});
 		this.advancedPane.onSwipeBack(() => {
-			this.goToReadingRoot();
+			this.popMobileRoute();
 		});
+
+		if (this.mobileReader) {
+			this.mobileMenuHubPane = mountMobileMenuHubPane(this.paneStackEl, {
+				onSelectRoute: (route) => this.pushMobileRoute(route),
+				preferencesOnly: this.readerOpen.kind === 'preferences'
+			});
+			this.mobileMenuHubPane.onSwipeBack(() => {
+				this.popMobileRoute();
+			});
+		}
 
 		this.controlBar = mountReaderControlBar(
 			this.shellEl,
@@ -465,20 +482,18 @@ export class SpeedReaderAiModal extends Modal {
 				void this.wordLookupHandlers?.lookupCurrentWord();
 			});
 			this.mobileActionBar.onMenu(() => {
-				this.openMobileMenu();
+				this.pushMobileRoute('more');
 			});
 		}
 
 		if (this.mobileReader) {
-			this.mobileBottomSheet = mountMobileBottomSheet(
-				this.shellEl,
-				this.engine,
-				{
-					preferencesOnly: this.readerOpen.kind === 'preferences',
-					onPushRoute: (route) => this.pushMobileRoute(route),
-					onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId)
-				}
-			);
+			this.mobileBottomSheet = mountMobileBottomSheet(this.shellEl, this.engine, {
+				onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId),
+				onFabClick:
+					this.readerOpen.kind === 'preferences'
+						? () => this.pushMobileRoute('more')
+						: undefined
+			});
 			this.mobileBottomSheet.onOpenChange((open) => {
 				this.mobileMenuOpen = open;
 				if (open) {
@@ -614,6 +629,8 @@ export class SpeedReaderAiModal extends Modal {
 		this.settingsPane?.destroy();
 		this.shortcutsPane?.destroy();
 		this.advancedPane?.destroy();
+		this.mobileMenuHubPane?.destroy();
+		this.mobileMenuHubPane = null;
 		this.ownerDoc.removeEventListener('visibilitychange', this.boundVisibilityHandler);
 		this.ownerDoc.defaultView?.removeEventListener('blur', this.boundBlurHandler);
 		this.engine.pause();
@@ -631,7 +648,11 @@ export class SpeedReaderAiModal extends Modal {
 		const snapshot = buildBookmarkContextLines(this.engine);
 		this.bookmarkContextLines = snapshot.lines;
 		this.bookmarksPane?.setContextLines(snapshot.lines, snapshot.currentLineIndex, true);
-		this.setActiveTab('bookmarks');
+		if (this.mobileReader) {
+			this.pushMobileRoute('bookmarks');
+		} else {
+			this.setActiveTab('bookmarks');
+		}
 		void this.refreshBookmarksPaneData();
 	}
 
@@ -704,7 +725,10 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private async refreshBookmarksPaneData(): Promise<void> {
-		if (this.activeTab !== 'bookmarks' || !this.bookmarkHandlers) {
+		if (this.mobileReader ? this.mobileRoute !== 'bookmarks' : this.activeTab !== 'bookmarks') {
+			return;
+		}
+		if (!this.bookmarkHandlers) {
 			return;
 		}
 
@@ -728,7 +752,27 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private goToReadingRoot(): void {
-		this.setActiveTab('home');
+		if (this.readerOpen.kind === 'preferences') {
+			this.forceClose();
+			return;
+		}
+		this.mobileRouteStack = ['reading'];
+		this.applyMobileRoute('reading');
+		this.refocusContent();
+	}
+
+	private popMobileRoute(): void {
+		if (this.mobileRouteStack.length <= 1) {
+			this.goToReadingRoot();
+			return;
+		}
+		this.mobileRouteStack.pop();
+		const route = this.mobileRouteStack[this.mobileRouteStack.length - 1] ?? 'reading';
+		if (route === 'reading' && this.readerOpen.kind === 'preferences') {
+			this.forceClose();
+			return;
+		}
+		this.applyMobileRoute(route);
 		this.refocusContent();
 	}
 
@@ -737,19 +781,106 @@ export class SpeedReaderAiModal extends Modal {
 			this.goToReadingRoot();
 			return;
 		}
-		this.setActiveTab(mobileRouteToReaderTab(route));
+
+		const top = this.mobileRouteStack[this.mobileRouteStack.length - 1] ?? 'reading';
+		if (top === route) {
+			this.applyMobileRoute(route);
+			return;
+		}
+
+		if (top === 'reading') {
+			if (route === 'bookmarks') {
+				this.mobileRouteStack = ['reading', 'bookmarks'];
+			} else if (route === 'more') {
+				this.mobileRouteStack = ['reading', 'more'];
+			} else {
+				this.mobileRouteStack = ['reading', 'more', route];
+			}
+		} else if (top === 'more') {
+			this.mobileRouteStack.push(route);
+		} else {
+			this.mobileRouteStack.pop();
+			this.mobileRouteStack.push(route);
+		}
+
+		this.applyMobileRoute(route);
 	}
 
-	private setActiveTab(tab: ReaderTabId) {
-		this.activeTab = tab;
-		this.tabDock?.setActiveTab(tab);
+	private applyMobileRoute(route: MobileRoute): void {
+		this.mobileRoute = route;
+		const tab = mobileRouteToReaderTab(route);
+
 		if (this.mobileReader) {
-			this.mobileRoute = readerTabToMobileRoute(tab);
-			syncMobileRouteShell(this.shellEl, this.mobileRoute);
-			if (tab !== 'home') {
+			syncMobileRouteShell(this.shellEl, route);
+			if (!isMobileReadingRoot(route)) {
 				this.mobileBottomSheet?.close();
 			}
 		}
+
+		const isReading = isMobileReadingRoot(route);
+		const isMore = route === 'more';
+		this.homePaneEl?.toggleClass('is-hidden', !isReading);
+		this.mobileMenuHubPane?.setVisible(isMore);
+
+		this.paneStackEl
+			?.querySelector('.speed-reader-ai-pane-content')
+			?.toggleClass('is-hidden', route !== 'content');
+		this.paneStackEl
+			?.querySelector('.speed-reader-ai-pane-bookmarks')
+			?.toggleClass('is-hidden', route !== 'bookmarks');
+		this.paneStackEl?.toggleClass('is-stack-active', isMobileStackRoute(route));
+		this.paneStackEl
+			?.querySelector('.speed-reader-ai-pane-settings')
+			?.toggleClass('is-hidden', route !== 'settings');
+		this.paneStackEl
+			?.querySelector('.speed-reader-ai-pane-shortcuts')
+			?.toggleClass('is-hidden', route !== 'shortcuts');
+		this.paneStackEl
+			?.querySelector('.speed-reader-ai-pane-advanced')
+			?.toggleClass('is-hidden', route !== 'advanced');
+
+		if (tab) {
+			this.activeTab = tab;
+			this.tabDock?.setActiveTab(tab);
+		}
+
+		this.header?.setProgressVisible(isReading && this.settings.reader.display.showProgress);
+		this.contextLine?.setVisible(isReading && this.settings.reader.display.showContext);
+		this.controlBar?.setVisible(
+			isReading && !this.mobileReader && this.readerOpen.kind !== 'preferences'
+		);
+		this.shellEl?.toggleClass('is-preferences-only', this.readerOpen.kind === 'preferences');
+
+		if (this.mobileReader) {
+			this.syncMobileChrome(this.state);
+		}
+
+		if (route === 'settings') {
+			this.settingsPane?.refresh(this.settings);
+		}
+		if (route === 'advanced') {
+			this.advancedPane?.refresh(this.settings);
+		}
+		if (route === 'bookmarks') {
+			void this.refreshBookmarksPaneData();
+		}
+		if (isReading) {
+			this.refocusContent();
+		}
+	}
+
+	private setActiveTab(tab: ReaderTabId) {
+		if (this.mobileReader) {
+			if (tab === 'home') {
+				this.goToReadingRoot();
+			} else {
+				this.pushMobileRoute(readerTabToMobileRoute(tab));
+			}
+			return;
+		}
+
+		this.activeTab = tab;
+		this.tabDock?.setActiveTab(tab);
 		const isHome = tab === 'home';
 		this.homePaneEl?.toggleClass('is-hidden', !isHome);
 		this.paneStackEl
@@ -758,7 +889,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-bookmarks')
 			?.toggleClass('is-hidden', tab !== 'bookmarks');
-		this.paneStackEl?.toggleClass('is-stack-active', isMobileStackRoute(this.mobileRoute));
+		this.paneStackEl?.toggleClass('is-stack-active', tab !== 'home');
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-settings')
 			?.toggleClass('is-hidden', tab !== 'settings');
@@ -771,13 +902,8 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.header?.setProgressVisible(isHome && this.settings.reader.display.showProgress);
 		this.contextLine?.setVisible(isHome && this.settings.reader.display.showContext);
-		this.controlBar?.setVisible(
-			isHome && !this.mobileReader && this.readerOpen.kind !== 'preferences'
-		);
+		this.controlBar?.setVisible(isHome && this.readerOpen.kind !== 'preferences');
 		this.shellEl?.toggleClass('is-preferences-only', this.readerOpen.kind === 'preferences');
-		if (this.mobileReader) {
-			this.syncMobileChrome(this.state);
-		}
 
 		if (tab === 'settings') {
 			this.settingsPane?.refresh(this.settings);
@@ -1251,6 +1377,7 @@ export class SpeedReaderAiModal extends Modal {
 	private buildBackSnapshot() {
 		return {
 			activeTab: this.activeTab,
+			mobileRoute: this.mobileReader ? this.mobileRoute : null,
 			preferencesOnly: this.readerOpen.kind === 'preferences',
 			dictionaryVisible: this.isDictionaryOverlayVisible(),
 			coachMarksOpen: this.mobileCoachOpen,
@@ -1271,7 +1398,7 @@ export class SpeedReaderAiModal extends Modal {
 				this.mobileBottomSheet?.close();
 				break;
 			case 'go-home':
-				this.goToReadingRoot();
+				this.popMobileRoute();
 				break;
 			case 'exit-focus-mode':
 				this.setFocusMode(false);
@@ -1707,13 +1834,16 @@ export class SpeedReaderAiModal extends Modal {
 			this.focusMode && !state.isPlaying && !state.finished;
 		const showContext =
 			this.settings.reader.display.showContext || showPauseContextInFocus;
-		this.contextLine?.setVisible(this.activeTab === 'home' && showContext);
+		const onReadingSurface = this.mobileReader
+			? isMobileReadingRoot(this.mobileRoute)
+			: this.activeTab === 'home';
+		this.contextLine?.setVisible(onReadingSurface && showContext);
 		this.contextLine?.render(state, this.engine, showContext);
 		this.renderSectionVisibility();
 		this.sectionNav?.updateFromState(state);
 		this.chapterNav?.updateFromState(state);
 		this.syncMobileChrome(state);
-		if (this.activeTab === 'bookmarks') {
+		if (this.mobileReader ? this.mobileRoute === 'bookmarks' : this.activeTab === 'bookmarks') {
 			this.refreshBookmarksPaneContext(state);
 		}
 	}
@@ -1722,7 +1852,7 @@ export class SpeedReaderAiModal extends Modal {
 		if (!this.mobileReader || !this.shellEl) {
 			return;
 		}
-		const isReadingRoot = this.mobileRoute === 'reading';
+		const isReadingRoot = isMobileReadingRoot(this.mobileRoute);
 		const playing = Boolean(state?.isPlaying && !state.finished && isReadingRoot);
 		if (playing) {
 			this.closeMobileOverlays();
@@ -1800,7 +1930,7 @@ export class SpeedReaderAiModal extends Modal {
 						this.isDictionaryOverlayVisible()
 					);
 				},
-				isHomeActive: () => this.mobileRoute === 'reading',
+				isHomeActive: () => isMobileReadingRoot(this.mobileRoute),
 				isPlaying: () =>
 					Boolean(this.state?.isPlaying && !this.state.finished)
 			}

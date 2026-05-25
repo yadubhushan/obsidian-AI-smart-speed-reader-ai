@@ -21,7 +21,7 @@ export function mountMobileStackChrome(
 	const backBtn = header.createEl('button', {
 		cls: 'speed-reader-ai-mobile-stack-back',
 		text: '‹',
-		attr: { type: 'button', 'aria-label': 'Back to reading' }
+		attr: { type: 'button', 'aria-label': 'Back' }
 	});
 	const titleEl = header.createDiv({
 		cls: 'speed-reader-ai-mobile-stack-title',
