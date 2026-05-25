@@ -8,7 +8,6 @@ import {
 } from './lineRepeatPlayback';
 
 export const LINE_BY_LINE_REWIND_BUFFER_MULTIPLIER = 1.5;
-export const LINE_BY_LINE_MIN_CHUNK_SIZE = 10;
 
 export interface LineChunkBounds {
 	chunkStarts: number[];
@@ -18,7 +17,7 @@ export interface LineChunkBounds {
 }
 
 export function effectiveLineChunkMax(chunkSize: number): number {
-	return Math.max(chunkSize, LINE_BY_LINE_MIN_CHUNK_SIZE);
+	return chunkSize;
 }
 
 export function partitionSentenceIntoEqualChunks(
@@ -56,7 +55,7 @@ export function partitionSentenceIntoChunks(
 	_tokenPunctuation: string[],
 	startSeekIndex: number,
 	endSeekIndex: number,
-	maxWords: number = LINE_BY_LINE_MIN_CHUNK_SIZE
+	maxWords: number = 1
 ): number[] {
 	const wordSeekIndices: number[] = [];
 	for (let i = startSeekIndex; i <= endSeekIndex; i++) {

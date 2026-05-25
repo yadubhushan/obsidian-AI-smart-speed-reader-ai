@@ -1,5 +1,6 @@
 import { Setting } from 'obsidian';
 import type SpeedReaderAiPlugin from '../main';
+import { VaultMarkdownPathSuggest } from './vaultMarkdownPathSuggest';
 
 export interface PluginDictionarySettingsHost {
 	plugin: SpeedReaderAiPlugin;
@@ -35,6 +36,20 @@ export function displayPluginDictionarySettings(
 					plugin.settings.dictionary.merriamWebsterApiKey = value.trim();
 					await plugin.saveSettings();
 				});
+		});
+
+	new Setting(containerEl)
+		.setName('Dictionary note path')
+		.setDesc('Vault-relative path for saved definitions. Default: dictionary.md at vault root.')
+		.addSearch((search) => {
+			search
+				.setPlaceholder('dictionary.md')
+				.setValue(plugin.settings.dictionary.dictionaryNotePath)
+				.onChange(async (value) => {
+					plugin.settings.dictionary.dictionaryNotePath = value.trim().replace(/^\/+/, '');
+					await plugin.saveSettings();
+				});
+			new VaultMarkdownPathSuggest(plugin.app, search.inputEl);
 		});
 
 	const links = containerEl.createEl('p', { cls: 'setting-item-description' });

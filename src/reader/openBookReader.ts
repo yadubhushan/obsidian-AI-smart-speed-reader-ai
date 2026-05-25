@@ -101,7 +101,7 @@ export async function openBookReader(deps: OpenBookReaderDeps): Promise<SpeedRea
 
 	modal.open();
 	modal.getEngine().setPlaybackMode(playbackMode);
-	wireReaderWordLookup(modal, () => ({
+	wireReaderWordLookup(deps.app, modal, () => ({
 		dictionary: deps.getSettings().dictionary
 	}));
 	wireReaderBookmarks(modal, deps.services);

@@ -150,16 +150,17 @@ describe('RSVPEngine progressive RSVP wiring', () => {
 		vi.useRealTimers();
 	});
 
-	it('uses chunk size 1 in RSVP mode even when chunkSize setting is larger', () => {
+	it('uses chunkSize in RSVP mode', () => {
 		settings.reader.chunkSize = 3;
 		engine.setSettings(settings);
 		engine.setPlaybackMode('rsvp');
 		engine.loadText('one two three four five six');
 		engine.play();
 
+		expect(stateChanges[stateChanges.length - 1]?.chunk.length).toBe(3);
 		expect(stateChanges[stateChanges.length - 1]?.chunk[0]?.word).toBe('one');
 		vi.advanceTimersByTime(60000 / settings.reader.wpm);
-		expect(stateChanges[stateChanges.length - 1]?.currentIndex).toBe(1);
+		expect(stateChanges[stateChanges.length - 1]?.currentIndex).toBe(3);
 	});
 
 	it('uses smart bundling in progressive RSVP mode', () => {

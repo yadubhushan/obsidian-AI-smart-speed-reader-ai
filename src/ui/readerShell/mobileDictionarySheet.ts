@@ -1,4 +1,5 @@
 import type { DictionaryLookupOutcome } from '../../dictionary/dictionaryTypes';
+import { mountDictionaryFooter, type DictionaryFooterHandle, type DictionarySaveButtonState } from '../dictionaryFooter';
 import { renderDictionaryBody } from '../dictionaryOverlay';
 
 export const DICTIONARY_BACKDROP_DISMISS_GRACE_MS = 350;
@@ -17,6 +18,8 @@ export interface MobileDictionarySheetHandle {
 	dismiss(): void;
 	isVisible(): boolean;
 	onOpenChange(cb: (open: boolean) => void): void;
+	setSaveHandler(handler: (() => void | Promise<void>) | null): void;
+	setSaveState(state: DictionarySaveButtonState): void;
 	destroy(): void;
 }
 
@@ -37,20 +40,17 @@ export function mountMobileDictionarySheet(
 	const phoneticEl = headerEl.createSpan({ cls: 'speed-reader-ai-dictionary-phonetic' });
 	const bodyEl = sheet.createDiv({ cls: 'speed-reader-ai-dictionary-body' });
 	const footerEl = sheet.createDiv({ cls: 'speed-reader-ai-dictionary-footer' });
-	const attributionEl = footerEl.createEl('a', {
-		cls: 'speed-reader-ai-dictionary-attribution',
-		text: 'dictionaryapi.dev',
-		href: 'https://dictionaryapi.dev/'
-	});
-	footerEl.createSpan({ text: ' · ' });
-	const closeBtn = footerEl.createEl('button', {
-		cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary speed-reader-ai-dictionary-close',
-		text: 'Close'
-	});
 
 	let visible = false;
 	let openedAt = 0;
+	let saveHandler: (() => void | Promise<void>) | null = null;
 	const openListeners: Array<(open: boolean) => void> = [];
+	let footer: DictionaryFooterHandle;
+
+	footer = mountDictionaryFooter(footerEl, {
+		onDismiss,
+		onSave: () => saveHandler?.()
+	});
 
 	const notifyOpenChange = () => {
 		for (const listener of openListeners) {
@@ -69,11 +69,11 @@ export function mountMobileDictionarySheet(
 		root.removeClass('is-sheet-open');
 		bodyEl.empty();
 		phoneticEl.setText('');
+		footer.setSaveState('hidden');
 		notifyOpenChange();
 		onDismiss?.();
 	};
 
-	closeBtn.addEventListener('click', () => onDismiss?.());
 	backdrop.addEventListener('click', () => {
 		if (shouldIgnoreBackdropDismiss(openedAt, Date.now())) {
 			return;
@@ -94,6 +94,7 @@ export function mountMobileDictionarySheet(
 			cls: 'speed-reader-ai-dictionary-loading',
 			text: 'Looking up…'
 		});
+		footer.setSaveState('hidden');
 		notifyOpenChange();
 	};
 
@@ -104,13 +105,15 @@ export function mountMobileDictionarySheet(
 		if (outcome.kind === 'found') {
 			wordEl.setText(outcome.result.word);
 			phoneticEl.setText(outcome.result.phonetic ? ` ${outcome.result.phonetic}` : '');
-			attributionEl.setText(outcome.result.attribution.label);
-			attributionEl.setAttr('href', outcome.result.attribution.href);
+			footer.setAttribution(outcome.result.attribution.label, outcome.result.attribution.href);
+			footer.setSaveState('idle');
 		} else if (outcome.kind === 'not_found') {
 			wordEl.setText(outcome.word);
 			phoneticEl.setText('');
+			footer.setSaveState('hidden');
 		} else {
 			phoneticEl.setText('');
+			footer.setSaveState('hidden');
 		}
 		renderDictionaryBody(bodyEl, outcome);
 	};
@@ -122,6 +125,12 @@ export function mountMobileDictionarySheet(
 		isVisible: () => visible,
 		onOpenChange(cb) {
 			openListeners.push(cb);
+		},
+		setSaveHandler(handler) {
+			saveHandler = handler;
+		},
+		setSaveState(state: DictionarySaveButtonState) {
+			footer.setSaveState(state);
 		},
 		destroy() {
 			root.remove();

@@ -84,6 +84,17 @@ export function mountSettingsPane(
 		});
 		wpmInput.value = String(draft.reader.wpm);
 
+		left.createEl('label', { text: 'Words per chunk' });
+		const chunkSizeInput = left.createEl('input', {
+			cls: 'speed-reader-ai-settings-input',
+			attr: { type: 'number', min: '1', max: '30' }
+		});
+		chunkSizeInput.value = String(draft.reader.chunkSize);
+		left.createSpan({
+			cls: 'speed-reader-ai-settings-hint',
+			text: 'Progressive RSVP uses max word length below instead.'
+		});
+
 		left.createEl('label', { text: 'Default playback mode' });
 		const defaultModeSelect = left.createEl('select', { cls: 'speed-reader-ai-settings-input' });
 		for (const mode of PLAYBACK_MODE_ORDER) {
@@ -167,6 +178,7 @@ export function mountSettingsPane(
 					fontSize: Number(fontSizeInput.value),
 					contextLineFontSize: Number(contextLineFontSizeInput.value),
 					wpm: Number(wpmInput.value),
+					chunkSize: Number(chunkSizeInput.value),
 					defaultPlaybackMode: defaultModeSelect.value as PlaybackMode,
 					progressiveRsvpMaxWordLength: Number(progressiveRsvpInput.value),
 					colorScheme: schemeSelect.value as SpeedReaderAiSettings['reader']['colorScheme'],

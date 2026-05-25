@@ -1,10 +1,13 @@
 import type { DictionaryLookupOutcome, DictionaryResult } from '../dictionary/dictionaryTypes';
+import { mountDictionaryFooter, type DictionaryFooterHandle, type DictionarySaveButtonState } from './dictionaryFooter';
 
 export interface DictionaryOverlayHandle {
 	showLoading(word: string): void;
 	showOutcome(outcome: DictionaryLookupOutcome): void;
 	dismiss(): void;
 	isVisible(): boolean;
+	setSaveHandler(handler: (() => void | Promise<void>) | null): void;
+	setSaveState(state: DictionarySaveButtonState): void;
 }
 
 export function renderDictionaryBody(
@@ -39,18 +42,15 @@ export function mountDictionaryOverlay(
 	const phoneticEl = headerEl.createSpan({ cls: 'speed-reader-ai-dictionary-phonetic' });
 	const bodyEl = root.createDiv({ cls: 'speed-reader-ai-dictionary-body' });
 	const footerEl = root.createDiv({ cls: 'speed-reader-ai-dictionary-footer' });
-	const attributionEl = footerEl.createEl('a', {
-		cls: 'speed-reader-ai-dictionary-attribution',
-		text: 'dictionaryapi.dev',
-		href: 'https://dictionaryapi.dev/'
-	});
-	footerEl.createSpan({ text: ' · ' });
-	const closeBtn = footerEl.createEl('button', {
-		cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary speed-reader-ai-dictionary-close',
-		text: 'Close'
-	});
 
 	let visible = false;
+	let saveHandler: (() => void | Promise<void>) | null = null;
+	let footer: DictionaryFooterHandle;
+
+	footer = mountDictionaryFooter(footerEl, {
+		onDismiss,
+		onSave: () => saveHandler?.()
+	});
 
 	const setHostOpen = (open: boolean) => {
 		container.toggleClass('is-dictionary-open', open);
@@ -65,9 +65,8 @@ export function mountDictionaryOverlay(
 		root.addClass('is-hidden');
 		bodyEl.empty();
 		phoneticEl.setText('');
+		footer.setSaveState('hidden');
 	};
-
-	closeBtn.addEventListener('click', () => onDismiss?.());
 
 	const showLoading = (word: string) => {
 		visible = true;
@@ -80,19 +79,22 @@ export function mountDictionaryOverlay(
 			cls: 'speed-reader-ai-dictionary-loading',
 			text: 'Looking up…'
 		});
+		footer.setSaveState('hidden');
 	};
 
 	const showOutcome = (outcome: DictionaryLookupOutcome) => {
 		if (outcome.kind === 'found') {
 			wordEl.setText(outcome.result.word);
 			phoneticEl.setText(outcome.result.phonetic ? ` ${outcome.result.phonetic}` : '');
-			attributionEl.setText(outcome.result.attribution.label);
-			attributionEl.setAttr('href', outcome.result.attribution.href);
+			footer.setAttribution(outcome.result.attribution.label, outcome.result.attribution.href);
+			footer.setSaveState('idle');
 		} else if (outcome.kind === 'not_found') {
 			wordEl.setText(outcome.word);
 			phoneticEl.setText('');
+			footer.setSaveState('hidden');
 		} else {
 			phoneticEl.setText('');
+			footer.setSaveState('hidden');
 		}
 		renderDictionaryBody(bodyEl, outcome);
 	};
@@ -101,7 +103,13 @@ export function mountDictionaryOverlay(
 		showLoading,
 		showOutcome,
 		dismiss,
-		isVisible: () => visible
+		isVisible: () => visible,
+		setSaveHandler(handler) {
+			saveHandler = handler;
+		},
+		setSaveState(state: DictionarySaveButtonState) {
+			footer.setSaveState(state);
+		}
 	};
 }
 

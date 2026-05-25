@@ -8,7 +8,6 @@ import {
 	partitionSentenceIntoChunks,
 	sumLegacyLineDelayMs,
 	sumManifestLineDelayMs,
-	LINE_BY_LINE_MIN_CHUNK_SIZE,
 	LINE_BY_LINE_REWIND_BUFFER_MULTIPLIER
 } from '../src/engine/lineByLinePlayback';
 import { buildSentenceUnits } from '../src/engine/lineRepeatPlayback';
@@ -36,8 +35,8 @@ function legacyNavWords(text: string) {
 }
 
 describe('lineByLinePlayback', () => {
-	it('uses max(chunkSize, 10) as the effective line chunk max', () => {
-		expect(effectiveLineChunkMax(1)).toBe(LINE_BY_LINE_MIN_CHUNK_SIZE);
+	it('uses chunkSize directly as the effective line chunk max', () => {
+		expect(effectiveLineChunkMax(1)).toBe(1);
 		expect(effectiveLineChunkMax(15)).toBe(15);
 	});
 
@@ -45,7 +44,7 @@ describe('lineByLinePlayback', () => {
 		const { words, navWords } = legacyNavWords('One two. Three four.');
 		const units = buildSentenceUnits(navWords);
 
-		expect(getLegacyLineChunk(words, units, 1)).toEqual({
+		expect(getLegacyLineChunk(words, units, 1, 10)).toEqual({
 			words: words.slice(0, 2),
 			endIndex: 2,
 			lineStartIndex: 0,
@@ -62,7 +61,7 @@ describe('lineByLinePlayback', () => {
 			{ kind: 'word', text: 'Three.' }
 		];
 
-		expect(getManifestLineChunk(stream, units, 1)).toEqual({
+		expect(getManifestLineChunk(stream, units, 1, 10)).toEqual({
 			tokens: stream.slice(0, 2),
 			endIndex: 2,
 			lineStartIndex: 0,
@@ -73,7 +72,7 @@ describe('lineByLinePlayback', () => {
 	it('sums per-word delay for a line instead of using max delay', () => {
 		const { words, navWords } = legacyNavWords('One two.');
 		const units = buildSentenceUnits(navWords);
-		const { words: lineWords } = getLegacyLineChunk(words, units, 0);
+		const { words: lineWords } = getLegacyLineChunk(words, units, 0, 10);
 		const settings = {
 			...DEFAULT_SETTINGS,
 			reader: {
@@ -136,7 +135,7 @@ describe('lineByLinePlayback', () => {
 		const texts = Array.from({ length: 20 }, (_, i) => `word${i + 1}`);
 		const puncts = texts.map(() => '');
 
-		expect(partitionSentenceIntoChunks(texts, puncts, 0, 19)).toEqual([0, 10]);
+		expect(partitionSentenceIntoChunks(texts, puncts, 0, 19, 10)).toEqual([0, 10]);
 	});
 
 	it('returns the correct sub-chunk for a mid-sentence seek index', () => {
@@ -144,12 +143,12 @@ describe('lineByLinePlayback', () => {
 		const { words, navWords } = legacyNavWords(wordsText);
 		const units = buildSentenceUnits(navWords);
 
-		expect(getLegacyLineChunk(words, units, 16)).toEqual({
+		expect(getLegacyLineChunk(words, units, 16, 10)).toEqual({
 			words: words.slice(10, 20),
 			endIndex: 20,
 			lineStartIndex: 10,
 			lineEndSeekIndex: 19
 		});
-		expect(getLegacyLineChunk(words, units, 16).words.length).toBe(10);
+		expect(getLegacyLineChunk(words, units, 16, 10).words.length).toBe(10);
 	});
 });

@@ -1,9 +1,12 @@
-import { Notice } from 'obsidian';
+import { Notice, type App } from 'obsidian';
 import {
 	extractLookupWordFromReaderState,
 	normalizeWordForLookup
 } from '../../dictionary/dictionaryLookup';
 import { DictionaryLookupService } from '../../dictionary/dictionaryLookupService';
+import type { DictionaryLookupOutcome } from '../../dictionary/dictionaryTypes';
+import { saveDictionaryEntry } from '../../dictionary/dictionarySaveService';
+import type { DictionarySaveButtonState } from '../../ui/dictionaryFooter';
 import { recordStudyLoopDictionaryLookup } from '../../study-loop/studyLoopBridge';
 import type { SpeedReaderAiModal } from '../../speedReaderAiModal';
 import type { SpeedReaderAiSettings } from '../../types';
@@ -15,13 +18,46 @@ export interface ReaderWordLookupHandles {
 }
 
 export interface AttachReaderWordLookupDeps {
+	app: App;
 	modal: SpeedReaderAiModal;
 	lookupService: DictionaryLookupService;
 	getSettings: () => Pick<SpeedReaderAiSettings, 'dictionary'>;
 }
 
 export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
-	const { modal, lookupService, getSettings } = deps;
+	const { app, modal, lookupService, getSettings } = deps;
+	let lastOutcome: DictionaryLookupOutcome | null = null;
+
+	const setDictionarySaveState = (state: DictionarySaveButtonState) => {
+		modal.setDictionarySaveState(state);
+	};
+
+	const saveToDictionary = async () => {
+		if (lastOutcome?.kind !== 'found') {
+			return;
+		}
+
+		setDictionarySaveState('saving');
+		try {
+			const { dictionaryNotePath } = getSettings().dictionary;
+			const result = await saveDictionaryEntry(app, dictionaryNotePath, lastOutcome.result);
+			if (result.saved) {
+				setDictionarySaveState('saved');
+				new Notice(`Saved to ${result.path}`);
+				return;
+			}
+			if (result.reason === 'duplicate') {
+				setDictionarySaveState('duplicate');
+			} else {
+				setDictionarySaveState('idle');
+			}
+		} catch {
+			setDictionarySaveState('idle');
+			new Notice('Could not save to dictionary.');
+		}
+	};
+
+	modal.setDictionarySaveHandler(() => saveToDictionary());
 
 	const performLookup = async (rawWord: string) => {
 		if (!getSettings().dictionary.enableWordLookup) {
@@ -40,6 +76,7 @@ export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 			return;
 		}
 
+		lastOutcome = null;
 		modal.enginePauseForLookup();
 		modal.showDictionaryLoading(normalized);
 
@@ -47,6 +84,7 @@ export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 		if (!modal.isDictionaryOverlayVisible()) {
 			return;
 		}
+		lastOutcome = outcome;
 		modal.showDictionaryOutcome(outcome);
 
 		const readerOpen = modal.getReaderOpen();

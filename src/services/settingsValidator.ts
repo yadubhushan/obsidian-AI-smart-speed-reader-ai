@@ -72,6 +72,11 @@ function normalizeNoteBookmarkHeading(value: unknown): string {
 	return raw || DEFAULT_SETTINGS.bookmarks.noteBookmarkSectionHeading;
 }
 
+function normalizeDictionaryNotePath(value: unknown): string {
+	const raw = toString(value, DEFAULT_SETTINGS.dictionary.dictionaryNotePath).trim().replace(/^\/+/, '');
+	return raw || DEFAULT_SETTINGS.dictionary.dictionaryNotePath;
+}
+
 function normalizeTimeoutSeconds(value: unknown): number {
 	const n = Math.floor(toNumber(value, DEFAULT_SETTINGS.ai.timeoutSeconds));
 	if (!Number.isFinite(n) || n < MIN_TIMEOUT_SECONDS) {
@@ -258,7 +263,8 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			merriamWebsterApiKey: toString(
 				raw.merriamWebsterApiKey,
 				DEFAULT_SETTINGS.dictionary.merriamWebsterApiKey
-			)
+			),
+			dictionaryNotePath: normalizeDictionaryNotePath(raw.dictionaryNotePath)
 		}
 	};
 }
@@ -284,7 +290,7 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 		chunkSize: clamp(
 			Math.round(toNumber(firstDefined(r.chunkSize, flat.chunkSize), DEFAULT_SETTINGS.reader.chunkSize)),
 			1,
-			5
+			30
 		),
 		colorScheme: normalizeColorScheme(firstDefined(r.colorScheme, flat.colorScheme)),
 		autoStart: {
@@ -477,6 +483,13 @@ export function validateSettings(
 					flatRecord.merriamWebsterApiKey
 				),
 				DEFAULT_SETTINGS.dictionary.merriamWebsterApiKey
+			),
+			dictionaryNotePath: normalizeDictionaryNotePath(
+				firstDefined(
+					pickNested(input, 'dictionary', 'dictionaryNotePath'),
+					isRecord(migrated.dictionary) ? migrated.dictionary.dictionaryNotePath : undefined,
+					flatRecord.dictionaryNotePath
+				)
 			)
 		}
 	};

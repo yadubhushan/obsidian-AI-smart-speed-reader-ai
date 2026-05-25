@@ -107,6 +107,7 @@ export interface DictionarySettings {
 	enableWordLookup: boolean;
 	dictionaryCacheEnabled: boolean;
 	merriamWebsterApiKey: string;
+	dictionaryNotePath: string;
 }
 
 export interface WordData {
@@ -215,6 +216,7 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 	dictionary: {
 		enableWordLookup: true,
 		dictionaryCacheEnabled: true,
-		merriamWebsterApiKey: ''
+		merriamWebsterApiKey: '',
+		dictionaryNotePath: 'dictionary.md'
 	}
 };

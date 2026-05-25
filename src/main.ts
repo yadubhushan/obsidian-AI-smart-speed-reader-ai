@@ -468,7 +468,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 		modal.open();
 
-		wireReaderWordLookup(modal, () => ({
+		wireReaderWordLookup(this.app, modal, () => ({
 			dictionary: this.settings.dictionary
 		}));
 

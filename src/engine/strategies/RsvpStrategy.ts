@@ -203,9 +203,6 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 	}
 
 	protected getEffectiveChunkSize(ctx: RSVPEngineContext): number {
-		if (ctx.playbackMode === 'rsvp') {
-			return 1;
-		}
 		return ctx.settings.reader.chunkSize;
 	}
 

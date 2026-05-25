@@ -63,6 +63,17 @@ describe('migrateFlatSettings', () => {
 		expect(result.reader.chunkSize).toBe(1);
 	});
 
+	it('clamps chunkSize to 1–30', () => {
+		expect(
+			validateSettings({ reader: { ...DEFAULT_SETTINGS.reader, chunkSize: 50 } }, defaultCatalog)
+				.reader.chunkSize
+		).toBe(30);
+		expect(
+			validateSettings({ reader: { ...DEFAULT_SETTINGS.reader, chunkSize: 15 } }, defaultCatalog)
+				.reader.chunkSize
+		).toBe(15);
+	});
+
 	it('preserves valid defaultPlaybackMode values and migrates unknown to rsvp', () => {
 		expect(
 			validateSettings(

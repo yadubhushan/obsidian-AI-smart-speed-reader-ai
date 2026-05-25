@@ -1,3 +1,4 @@
+import type { App } from 'obsidian';
 import type { SpeedReaderAiSettings } from '../../types';
 import { DictionaryLookupService } from '../../dictionary/dictionaryLookupService';
 import { attachReaderWordLookup } from './attachReaderWordLookup';
@@ -31,10 +32,12 @@ export function registerWordLookup(plugin: SpeedReaderAiPlugin): void {
 }
 
 export function wireReaderWordLookup(
+	app: App,
 	modal: SpeedReaderAiModal,
 	getSettings: () => Pick<SpeedReaderAiSettings, 'dictionary'>
 ): void {
 	attachReaderWordLookup({
+		app,
 		modal,
 		lookupService: getLookupService(),
 		getSettings

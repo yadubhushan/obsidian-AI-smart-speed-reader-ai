@@ -30,6 +30,7 @@ import {
 } from '../bookmarks/bookmarkContextLines';
 import type { ReaderWordLookupHandles } from '../features/word-lookup/attachReaderWordLookup';
 import type { DictionaryLookupOutcome } from '../dictionary/dictionaryTypes';
+import type { DictionarySaveButtonState } from './dictionaryFooter';
 import { mountDictionaryOverlay, type DictionaryOverlayHandle } from './dictionaryOverlay';
 import { applyReaderThemeToElement, readerFontFamily } from './readerShell/readerThemes';
 import { mountReaderHeader, type ReaderHeaderHandle } from './readerShell/readerHeader';
@@ -969,6 +970,16 @@ export class SpeedReaderAiModal extends Modal {
 
 	setWordLookupHandlers(handles: ReaderWordLookupHandles | null): void {
 		this.wordLookupHandlers = handles;
+	}
+
+	setDictionarySaveHandler(handler: (() => void | Promise<void>) | null): void {
+		this.dictionaryOverlay?.setSaveHandler(handler);
+		this.mobileDictionarySheet?.setSaveHandler(handler);
+	}
+
+	setDictionarySaveState(state: DictionarySaveButtonState): void {
+		this.dictionaryOverlay?.setSaveState(state);
+		this.mobileDictionarySheet?.setSaveState(state);
 	}
 
 	getWordLookupHandlers(): ReaderWordLookupHandles | null {
