@@ -62,6 +62,10 @@ describe('resolveReaderBackAction', () => {
 		expect(resolveReaderBackAction(snapshot({ activeTab: 'advanced' }))).toBe('go-home');
 	});
 
+	it('returns go-home from bookmarks explorer', () => {
+		expect(resolveReaderBackAction(snapshot({ activeTab: 'bookmarks' }))).toBe('go-home');
+	});
+
 	it('closes preferences-only modal from non-home tab', () => {
 		expect(
 			resolveReaderBackAction(

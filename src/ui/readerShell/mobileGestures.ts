@@ -139,6 +139,18 @@ export function isSwipeDown(
 	return dy >= minPx && absY > absX && elapsed <= maxMs;
 }
 
+export function isSwipeBack(
+	dx: number,
+	dy: number,
+	elapsed: number,
+	minPx = SWIPE_MIN_PX,
+	maxMs = SWIPE_MAX_MS
+): boolean {
+	const absX = Math.abs(dx);
+	const absY = Math.abs(dy);
+	return dx >= minPx && absX > absY && elapsed <= maxMs;
+}
+
 export function mountMobileGestures(
 	wordContainer: HTMLElement,
 	chapterPillEl: HTMLElement | null,

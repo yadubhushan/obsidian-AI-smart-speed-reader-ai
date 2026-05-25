@@ -1380,6 +1380,24 @@
 	padding-top: 0;
 }
 
+.speed-reader-ai-mobile-bookmarks .speed-reader-ai-mobile-compact-bar,
+.speed-reader-ai-mobile-bookmarks .speed-reader-ai-mobile-action-bar {
+	display: none;
+}
+
+.speed-reader-ai-mobile-bookmarks .speed-reader-ai-bookmarks-header-play,
+.speed-reader-ai-mobile-bookmarks .speed-reader-ai-bookmarks-header-subtitle {
+	display: none;
+}
+
+.speed-reader-ai-mobile-bookmarks .speed-reader-ai-pane-stack {
+	padding-top: 0;
+}
+
+.speed-reader-ai-mobile-bookmarks .speed-reader-ai-bookmarks-scroll {
+	padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 .speed-reader-ai-mobile-paused .speed-reader-ai-pane-stack {
 	flex: 1;
 	min-height: 0;

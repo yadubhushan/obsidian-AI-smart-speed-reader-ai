@@ -6,6 +6,7 @@ import {
 	isEdgeZone,
 	isSwipeDown,
 	isSwipeUp,
+	isSwipeBack,
 	shouldSuppressContextWordRetap,
 	EDGE_ZONE_RATIO
 } from '../src/ui/readerShell/mobileGestures';
@@ -152,6 +153,20 @@ describe('mobileGestures helpers', () => {
 			expect(isSwipeDown(20, 0, 300)).toBe(false);
 			expect(isSwipeDown(50, 0, 500)).toBe(false);
 			expect(isSwipeDown(-50, 0, 300)).toBe(false);
+		});
+	});
+
+	describe('isSwipeBack', () => {
+		it('detects rightward swipe within threshold', () => {
+			expect(isSwipeBack(50, 5, 300)).toBe(true);
+			expect(isSwipeBack(48, 0, 500)).toBe(true);
+		});
+
+		it('rejects leftward, vertical, short, or slow swipes', () => {
+			expect(isSwipeBack(-50, 5, 300)).toBe(false);
+			expect(isSwipeBack(50, 60, 300)).toBe(false);
+			expect(isSwipeBack(20, 0, 300)).toBe(false);
+			expect(isSwipeBack(50, 0, 600)).toBe(false);
 		});
 	});
 

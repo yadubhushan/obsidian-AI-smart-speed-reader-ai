@@ -1,4 +1,5 @@
 import type { BookmarkContextLine } from '../../../bookmarks/bookmarkContextLines';
+import { isSwipeBack } from '../mobileGestures';
 
 export interface BookmarksPaneContext {
 	title: string;
@@ -22,6 +23,7 @@ export interface BookmarksPaneHandle {
 	onRemoveBookmark(cb: (lineIndex: number) => void): void;
 	onOpenInObsidian(cb: () => void): void;
 	onPlayPause(cb: () => void): void;
+	onSwipeBack(cb: () => void): void;
 }
 
 const DOUBLE_ACTIVATION_MS = 300;
@@ -92,6 +94,73 @@ function bindTextCardActivation(
 	});
 }
 
+function isInteractiveBookmarksTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof HTMLElement)) {
+		return false;
+	}
+	return Boolean(
+		target.closest(
+			'button, input, label, .speed-reader-ai-bookmarks-floating-bar, .speed-reader-ai-bookmarks-open-link, .speed-reader-ai-bookmarks-header-play'
+		)
+	);
+}
+
+function mountBookmarksSwipeBack(
+	scrollEl: HTMLElement,
+	onSwipeBack: () => void
+): () => void {
+	let pointerId: number | null = null;
+	let startX = 0;
+	let startY = 0;
+	let startTime = 0;
+
+	const resetPointer = () => {
+		pointerId = null;
+	};
+
+	const onPointerDown = (event: PointerEvent) => {
+		if (event.pointerType === 'mouse' && event.button !== 0) {
+			return;
+		}
+		if (isInteractiveBookmarksTarget(event.target)) {
+			return;
+		}
+		pointerId = event.pointerId;
+		startX = event.clientX;
+		startY = event.clientY;
+		startTime = Date.now();
+	};
+
+	const onPointerUp = (event: PointerEvent) => {
+		if (pointerId === null || event.pointerId !== pointerId) {
+			return;
+		}
+		const dx = event.clientX - startX;
+		const dy = event.clientY - startY;
+		const elapsed = Date.now() - startTime;
+		resetPointer();
+		if (isSwipeBack(dx, dy, elapsed)) {
+			onSwipeBack();
+		}
+	};
+
+	const onPointerCancel = (event: PointerEvent) => {
+		if (event.pointerId === pointerId) {
+			resetPointer();
+		}
+	};
+
+	scrollEl.addEventListener('pointerdown', onPointerDown);
+	scrollEl.addEventListener('pointerup', onPointerUp);
+	scrollEl.addEventListener('pointercancel', onPointerCancel);
+
+	return () => {
+		scrollEl.removeEventListener('pointerdown', onPointerDown);
+		scrollEl.removeEventListener('pointerup', onPointerUp);
+		scrollEl.removeEventListener('pointercancel', onPointerCancel);
+	};
+}
+
 export function mountBookmarksPane(
 	container: HTMLElement,
 	options: BookmarksPaneOptions = {}
@@ -158,6 +227,16 @@ export function mountBookmarksPane(
 	let removeBookmarkHandler: ((lineIndex: number) => void) | null = null;
 	let openObsidianHandler: (() => void) | null = null;
 	let playPauseHandler: (() => void) | null = null;
+	let swipeBackHandler: (() => void) | null = null;
+	const cleanups: Array<() => void> = [];
+
+	if (isMobile) {
+		cleanups.push(
+			mountBookmarksSwipeBack(scroll, () => {
+				swipeBackHandler?.();
+			})
+		);
+	}
 
 	function syncFloatingBar() {
 		const count = selected.size;
@@ -354,6 +433,9 @@ export function mountBookmarksPane(
 
 	return {
 		destroy() {
+			for (const cleanup of cleanups) {
+				cleanup();
+			}
 			pane.remove();
 		},
 		setContextLines(nextLines, nextCurrentLineIndex, resetSelection = false) {
@@ -396,6 +478,9 @@ export function mountBookmarksPane(
 		},
 		onPlayPause(cb) {
 			playPauseHandler = cb;
+		},
+		onSwipeBack(cb) {
+			swipeBackHandler = cb;
 		}
 	};
 }

@@ -376,6 +376,10 @@ export class SpeedReaderAiModal extends Modal {
 			this.engine.togglePlayPause();
 			this.refocusContent();
 		});
+		this.bookmarksPane.onSwipeBack(() => {
+			this.setActiveTab('home');
+			this.refocusContent();
+		});
 		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
 				this.persistSettings(next);
@@ -762,6 +766,10 @@ export class SpeedReaderAiModal extends Modal {
 			isHome && !this.mobileReader && this.readerOpen.kind !== 'preferences'
 		);
 		this.shellEl?.toggleClass('is-preferences-only', this.readerOpen.kind === 'preferences');
+		if (this.mobileReader) {
+			this.shellEl?.toggleClass('speed-reader-ai-mobile-bookmarks', tab === 'bookmarks');
+			this.syncMobileChrome(this.state);
+		}
 
 		if (tab === 'settings') {
 			this.settingsPane?.refresh(this.settings);
