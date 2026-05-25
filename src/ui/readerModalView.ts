@@ -1,6 +1,6 @@
 import { App, Modal, Notice } from 'obsidian';
 import { RSVPEngine } from '../engine/rsvpEngine';
-import { isLinePlaybackMode } from '../engine/playbackMode';
+import { isLinePlaybackMode, getPlaybackModeLabel } from '../engine/playbackMode';
 import { tokenDisplayLabel } from '../engine/manifestPlayback';
 import { SettingsBackedLlmClient, describeActiveLlmBackend } from '../llm/createLlmClient';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
@@ -21,8 +21,12 @@ import { StructuredReaderSession, type PlaybackLoadKind } from './structuredRead
 import { bookIndexToProcessedDocument } from '../formats/bookIndexToProcessedDocument';
 import { bookCacheCoverPath } from '../store/bookCachePaths';
 import type { ReaderSessionHooks } from '../reader/readingProgressTracker';
-import type { BookmarkEntry } from '../bookmarks/parseBookmarkEntries';
 import type { ReaderBookmarkHandles } from '../features/feature4/attachReaderBookmarks';
+import {
+	buildBookmarkContextLines,
+	matchBookmarkedLineIndices,
+	type BookmarkContextLine
+} from '../bookmarks/bookmarkContextLines';
 import type { ReaderWordLookupHandles } from '../features/word-lookup/attachReaderWordLookup';
 import type { DictionaryLookupOutcome } from '../dictionary/dictionaryTypes';
 import { mountDictionaryOverlay, type DictionaryOverlayHandle } from './dictionaryOverlay';
@@ -163,7 +167,7 @@ export class SpeedReaderAiModal extends Modal {
 	private readonly mobileReader = isMobileReader();
 	private contentPane!: ContentPaneHandle;
 	private bookmarksPane!: BookmarksPaneHandle;
-	private bookmarkEntries: BookmarkEntry[] = [];
+	private bookmarkContextLines: BookmarkContextLine[] = [];
 	private settingsPane!: SettingsPaneHandle;
 	private shortcutsPane!: ShortcutsPaneHandle;
 	private advancedPane!: AdvancedPaneHandle;
@@ -354,15 +358,22 @@ export class SpeedReaderAiModal extends Modal {
 		this.sectionSelect.addEventListener('change', () => this.onHeadingSelectChange());
 
 		this.contentPane = mountContentPane(this.paneStackEl);
-		this.bookmarksPane = mountBookmarksPane(this.paneStackEl);
-		this.bookmarksPane.onSeek((entryIndex) => {
-			this.seekBookmarkEntry(entryIndex);
+		this.bookmarksPane = mountBookmarksPane(this.paneStackEl, { isMobile: this.mobileReader });
+		this.bookmarksPane.onSeekLine((lineIndex) => {
+			this.seekBookmarkLine(lineIndex);
 		});
-		this.bookmarksPane.onBatchBookmark((selections) => {
-			void this.batchBookmarkSelections(selections);
+		this.bookmarksPane.onCreateFromSelection((lineIndices) => {
+			void this.createBookmarkFromSelection(lineIndices);
+		});
+		this.bookmarksPane.onRemoveBookmark((lineIndex) => {
+			void this.removeBookmarkForLine(lineIndex);
 		});
 		this.bookmarksPane.onOpenInObsidian(() => {
 			void this.bookmarkHandlers?.openBookmarkMarkdownInObsidian();
+		});
+		this.bookmarksPane.onPlayPause(() => {
+			this.engine.togglePlayPause();
+			this.refocusContent();
 		});
 		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
@@ -424,7 +435,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.mobileActionBar.onBookmark(() => {
 				void this.createMobileBookmark();
 			});
-			this.mobileActionBar.onBookmarkLongPress(() => {
+			this.mobileActionBar.onBookmarkExplorer(() => {
 				void this.bookmarkHandlers?.openBookmarksTab();
 			});
 			this.mobileActionBar.onDefine(() => {
@@ -479,7 +490,13 @@ export class SpeedReaderAiModal extends Modal {
 			this.tabDock = mountReaderTabDock(
 				this.shellEl,
 				this.activeTab,
-				(tab) => this.setActiveTab(tab),
+				(tab) => {
+					if (tab === 'bookmarks') {
+						this.showBookmarkPicker();
+						return;
+					}
+					this.setActiveTab(tab);
+				},
 				{ preferencesOnly: this.readerOpen.kind === 'preferences' }
 			);
 		}
@@ -607,39 +624,103 @@ export class SpeedReaderAiModal extends Modal {
 		this.onReaderClose?.();
 	}
 
-	showBookmarksTab(entries: BookmarkEntry[]): void {
-		this.bookmarkEntries = entries;
-		this.bookmarksPane?.setEntries(entries);
+	showBookmarkPicker(): void {
+		if (this.readerOpen.kind === 'legacy' || this.readerOpen.kind === 'preferences') {
+			return;
+		}
+
+		this.engine.pause();
+		const snapshot = buildBookmarkContextLines(this.engine);
+		this.bookmarkContextLines = snapshot.lines;
+		this.bookmarksPane?.setContextLines(snapshot.lines, snapshot.currentLineIndex, true);
 		this.setActiveTab('bookmarks');
+		void this.refreshBookmarksPaneData();
 	}
 
-	async showBookmarksTabFromService(): Promise<void> {
-		await this.bookmarkHandlers?.openBookmarksTab();
+	showBookmarkPickerFromService(): void {
+		this.bookmarkHandlers?.openBookmarksTab();
 	}
 
-	private seekBookmarkEntry(entryIndex: number): void {
-		const entry = this.bookmarkEntries[entryIndex];
-		if (!entry) {
-			return;
-		}
-		const ok = this.bookmarkHandlers?.seekToBookmarkEntry(entry) ?? false;
-		if (!ok) {
-			new Notice('Could not seek to this bookmark position.');
-			return;
-		}
-		this.setActiveTab('home');
-		this.refocusContent();
+	private seekBookmarkLine(lineIndex: number): void {
+		this.engine.seekToSentenceUnitIndex(lineIndex);
+		this.engine.pause();
+		const snapshot = buildBookmarkContextLines(this.engine);
+		this.bookmarkContextLines = snapshot.lines;
+		this.bookmarksPane?.setContextLines(snapshot.lines, snapshot.currentLineIndex, false);
+		void this.refreshBookmarksPaneData();
 	}
 
-	private async batchBookmarkSelections(
-		selections: Array<{ entryIndex: number; lineIndex: number }>
-	): Promise<void> {
-		if (selections.length === 0) {
+	private async createBookmarkFromSelection(lineIndices: number[]): Promise<void> {
+		if (lineIndices.length === 0) {
 			return;
 		}
-		const entryIndices = selections.map((selection) => selection.entryIndex);
-		await this.bookmarkHandlers?.batchBookmarkAtEntries(entryIndices);
+		await this.bookmarkHandlers?.createFromSelection(lineIndices, this.bookmarkContextLines);
 		this.bookmarksPane?.clearSelection();
+		this.showBookmarkPicker();
+	}
+
+	private async removeBookmarkForLine(lineIndex: number): Promise<void> {
+		const removed = await this.bookmarkHandlers?.removeBookmarkForLine(
+			lineIndex,
+			this.bookmarkContextLines
+		);
+		if (!removed) {
+			return;
+		}
+		this.bookmarksPane?.clearSelection();
+		await this.refreshBookmarksPaneData();
+		const snapshot = buildBookmarkContextLines(this.engine);
+		this.bookmarkContextLines = snapshot.lines;
+		this.bookmarksPane?.setContextLines(snapshot.lines, snapshot.currentLineIndex, false);
+	}
+
+	private buildBookmarksPaneTitle(): string {
+		if (this.readerOpen.kind === 'book') {
+			return this.readerOpen.bookIndex.title || this.readerOpen.sourcePath.split('/').pop() || 'Book';
+		}
+		if (this.readerOpen.kind === 'structured') {
+			return this.readerOpen.sourcePath.split('/').pop()?.replace(/\.md$/i, '') || 'Note';
+		}
+		return 'Reading';
+	}
+
+	private buildBookmarksPaneSubtitle(state: ReaderState | null): string {
+		const direction = this.settings.reader.textOrientation.rtl ? 'RTL' : 'LTR';
+		if (!state) {
+			return direction;
+		}
+		const modeLabel = getPlaybackModeLabel(state.playbackMode);
+		const timePart =
+			this.settings.reader.display.showRemainingTime && !state.finished
+				? ` · ${formatRemainingTime(state.timeRemainingMs)}`
+				: '';
+		return `English · ${Math.round(state.currentWpm)} WPM · ${modeLabel} · ${direction}${timePart}`;
+	}
+
+	private refreshBookmarksPaneContext(state: ReaderState | null): void {
+		this.bookmarksPane?.updateContext({
+			title: this.buildBookmarksPaneTitle(),
+			subtitle: this.buildBookmarksPaneSubtitle(state),
+			isPlaying: Boolean(state?.isPlaying && !state.finished)
+		});
+	}
+
+	private async refreshBookmarksPaneData(): Promise<void> {
+		if (this.activeTab !== 'bookmarks' || !this.bookmarkHandlers) {
+			return;
+		}
+
+		this.refreshBookmarksPaneContext(this.state);
+
+		if (this.readerOpen.kind !== 'book' && this.readerOpen.kind !== 'structured') {
+			this.bookmarksPane?.setBookmarkedLineIndices(new Set());
+			return;
+		}
+
+		const entries = await this.bookmarkHandlers.loadBookmarkEntries();
+		const kind = this.readerOpen.kind === 'book' ? 'book' : 'note';
+		const matched = matchBookmarkedLineIndices(entries, this.bookmarkContextLines, kind);
+		this.bookmarksPane?.setBookmarkedLineIndices(matched);
 	}
 
 	setInitialTab(tab: ReaderTabId): void {
@@ -663,6 +744,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-bookmarks')
 			?.toggleClass('is-hidden', tab !== 'bookmarks');
+		this.paneStackEl?.toggleClass('is-bookmarks-active', tab === 'bookmarks');
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-settings')
 			?.toggleClass('is-hidden', tab !== 'settings');
@@ -685,6 +767,9 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		if (tab === 'advanced') {
 			this.advancedPane?.refresh(this.settings);
+		}
+		if (tab === 'bookmarks') {
+			void this.refreshBookmarksPaneData();
 		}
 		if (isHome) {
 			this.refocusContent();
@@ -1635,6 +1720,9 @@ export class SpeedReaderAiModal extends Modal {
 		this.sectionNav?.updateFromState(state);
 		this.chapterNav?.updateFromState(state);
 		this.syncMobileChrome(state);
+		if (this.activeTab === 'bookmarks') {
+			this.refreshBookmarksPaneContext(state);
+		}
 	}
 
 	private syncMobileChrome(state: ReaderState | null) {

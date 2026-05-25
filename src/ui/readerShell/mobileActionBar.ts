@@ -2,12 +2,10 @@ export interface MobileActionBarHandle {
 	destroy(): void;
 	setVisible(visible: boolean): void;
 	onBookmark(cb: () => void): void;
-	onBookmarkLongPress(cb: () => void): void;
+	onBookmarkExplorer(cb: () => void): void;
 	onDefine(cb: () => void): void;
 	onMenu(cb: () => void): void;
 }
-
-const LONG_PRESS_MS = 500;
 
 export function mountMobileActionBar(container: HTMLElement): MobileActionBarHandle {
 	const bar = container.createDiv({ cls: 'speed-reader-ai-mobile-action-bar' });
@@ -15,7 +13,12 @@ export function mountMobileActionBar(container: HTMLElement): MobileActionBarHan
 	const bookmarkBtn = bar.createEl('button', {
 		cls: 'speed-reader-ai-mobile-action-btn',
 		text: '🔖',
-		attr: { type: 'button', 'aria-label': 'Bookmark' }
+		attr: { type: 'button', 'aria-label': 'Bookmark current line' }
+	});
+	const bookmarkExplorerBtn = bar.createEl('button', {
+		cls: 'speed-reader-ai-mobile-action-btn speed-reader-ai-mobile-bookmark-explorer-btn',
+		text: '📑',
+		attr: { type: 'button', 'aria-label': 'Bookmark lines' }
 	});
 	const defineBtn = bar.createEl('button', {
 		cls: 'speed-reader-ai-mobile-action-btn',
@@ -29,54 +32,17 @@ export function mountMobileActionBar(container: HTMLElement): MobileActionBarHan
 	});
 
 	let bookmarkHandler: (() => void) | null = null;
-	let bookmarkLongPressHandler: (() => void) | null = null;
+	let bookmarkExplorerHandler: (() => void) | null = null;
 	let defineHandler: (() => void) | null = null;
 	let menuHandler: (() => void) | null = null;
 
-	let bookmarkPressTimer: ReturnType<typeof setTimeout> | null = null;
-	let bookmarkLongPressFired = false;
-
-	const clearBookmarkPressTimer = () => {
-		if (bookmarkPressTimer !== null) {
-			clearTimeout(bookmarkPressTimer);
-			bookmarkPressTimer = null;
-		}
-	};
-
-	bookmarkBtn.addEventListener('pointerdown', (event) => {
-		if (event.pointerType === 'mouse' && event.button !== 0) {
-			return;
-		}
-		bookmarkLongPressFired = false;
-		clearBookmarkPressTimer();
-		bookmarkPressTimer = setTimeout(() => {
-			bookmarkPressTimer = null;
-			bookmarkLongPressFired = true;
-			bookmarkLongPressHandler?.();
-		}, LONG_PRESS_MS);
-	});
-
-	const cancelBookmarkPress = () => {
-		clearBookmarkPressTimer();
-	};
-
-	bookmarkBtn.addEventListener('pointerup', cancelBookmarkPress);
-	bookmarkBtn.addEventListener('pointercancel', cancelBookmarkPress);
-	bookmarkBtn.addEventListener('pointerleave', cancelBookmarkPress);
-
-	bookmarkBtn.addEventListener('click', () => {
-		if (bookmarkLongPressFired) {
-			bookmarkLongPressFired = false;
-			return;
-		}
-		bookmarkHandler?.();
-	});
+	bookmarkBtn.addEventListener('click', () => bookmarkHandler?.());
+	bookmarkExplorerBtn.addEventListener('click', () => bookmarkExplorerHandler?.());
 	defineBtn.addEventListener('click', () => defineHandler?.());
 	menuBtn.addEventListener('click', () => menuHandler?.());
 
 	return {
 		destroy() {
-			clearBookmarkPressTimer();
 			bar.remove();
 		},
 		setVisible(visible) {
@@ -85,8 +51,8 @@ export function mountMobileActionBar(container: HTMLElement): MobileActionBarHan
 		onBookmark(cb) {
 			bookmarkHandler = cb;
 		},
-		onBookmarkLongPress(cb) {
-			bookmarkLongPressHandler = cb;
+		onBookmarkExplorer(cb) {
+			bookmarkExplorerHandler = cb;
 		},
 		onDefine(cb) {
 			defineHandler = cb;

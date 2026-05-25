@@ -118,7 +118,7 @@ export class ReaderGateImpl implements ReaderGate {
 		if (!modal || modal.getReaderOpen().kind === 'legacy') {
 			return;
 		}
-		await modal.showBookmarksTabFromService();
+		await modal.showBookmarkPickerFromService();
 	}
 
 	private bookmarkContextFromModal(modal: SpeedReaderAiModal) {

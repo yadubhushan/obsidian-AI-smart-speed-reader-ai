@@ -11,7 +11,7 @@ const SHORTCUT_ROWS: [string, string][] = [
 	['L', 'Cycle playback mode (RSVP → Progressive RSVP → Line by line → Line repeat)'],
 	['F', 'Toggle focus mode'],
 	['B', 'Create bookmark'],
-	['Shift + B', 'Open saved bookmarks'],
+	['Shift + B', 'Open bookmark line picker'],
 	['D', 'Look up current word'],
 	['Escape', 'Close reader']
 ];

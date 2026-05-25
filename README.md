@@ -21,7 +21,7 @@ Use it when you want to:
 ## Features
 
 - **Word-by-word reading** — Read in a focused RSVP view instead of scanning full paragraphs.
-- **Tabbed reader** — Home (RSVP), Content (full source scroll), Settings, Shortcuts, and Advanced panes inside the reader modal.
+- **Tabbed reader** — Home (RSVP), Content (full source scroll), Bookmarks (line picker), Settings, Shortcuts, and Advanced panes inside the reader modal.
 - **In-modal settings** — Configure pacing, display, themes, bookmarks, and dictionary from Settings / Advanced tabs (or **Open speed reader preferences** without opening a document).
 - **Reader themes** — Dark, light, or auto color scheme with high-contrast WCAG palettes for the reading surface.
 - **Optimal recognition point highlighting** — Highlights the key letter in each word to help your eyes recognize words faster.
@@ -93,12 +93,13 @@ On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout an
 | Tap context word | Dictionary for that word |
 | Swipe up / down (playing) | Increase / decrease WPM (brief toast) |
 | Swipe down top bar | Expand chapter + progress; second swipe closes reader |
-| 🔖 (transport dock) | Bookmark (paragraph + highlighted sentence) |
+| 🔖 (transport dock) | Bookmark current line (paragraph + highlighted sentence) |
+| 📑 (transport dock) | Open bookmark line picker (scroll, select lines, bookmark) |
 | ☰ (transport dock) | Menu: Chapters · Reading · Settings · Advanced |
 
-While **playing**, chrome collapses to the RSVP word and progress strip. While **paused**, the transport dock shows **▶** plus 🔖 📖 ☰ (skip buttons hidden; use gestures to skip). Pause context shows the **current line only**; font size is configurable via **Context line font size** in Settings. First mobile session shows a 4-step coach-mark overlay for gesture discovery.
+While **playing**, chrome collapses to the RSVP word and progress strip. While **paused**, the transport dock shows **▶** plus 🔖 📑 📖 ☰ (skip buttons hidden; use gestures to skip). Pause context shows the **current line only**; font size is configurable via **Context line font size** in Settings. First mobile session shows a 4-step coach-mark overlay for gesture discovery.
 
-**Bookmarks on mobile:** passage saves the full paragraph; the current sentence is marked with `==***like this***==` in the blockquote.
+**Bookmarks on mobile:** 🔖 saves the current line instantly. 📑 opens the line picker: scroll past/current/future sentences, **tap a line to select** (or use the checkbox), **→ to jump** to that line, then **Bookmark selected**. Each bookmark block covers one paragraph with all selected sentences highlighted (`==***like this***==`). View saved bookmarks in Obsidian via **Open in Obsidian**.
 
 ## Build from source
 

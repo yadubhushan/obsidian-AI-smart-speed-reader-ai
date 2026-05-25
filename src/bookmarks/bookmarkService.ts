@@ -16,9 +16,17 @@ import {
 	formatBookBookmarkUri,
 	formatBookmarkBlock,
 	formatNoteBookmarkUri,
-	formatPassageWithHighlight
+	formatPassageWithHighlight,
+	formatPassageWithHighlights,
+	serializeBookmarkEntry
 } from './bookmarkBlock';
-import { appendNoteBookmark } from './noteBookmarkAppend';
+import {
+	groupSelectionsByParagraph,
+	lineMatchesBookmarkEntry,
+	removeLineFromBookmarkEntry,
+	type BookmarkContextLine
+} from './bookmarkContextLines';
+import { appendNoteBookmark, findBookmarkSectionLineIndex } from './noteBookmarkAppend';
 import { resolveBookBookmarkPath } from './bookmarkPaths';
 import {
 	parseBookmarkEntries,
@@ -63,6 +71,201 @@ export class BookmarkService {
 			await this.createNoteBookmark(ctx);
 			return;
 		}
+	}
+
+	async createBookmarksFromSelection(
+		ctx: BookmarkReaderContext,
+		selectedLineIndices: number[],
+		lines: BookmarkContextLine[]
+	): Promise<void> {
+		if (ctx.readerOpen.kind === 'legacy') {
+			new Notice('Bookmarks are not available for this reader mode.');
+			return;
+		}
+
+		if (selectedLineIndices.length === 0 || lines.length === 0) {
+			return;
+		}
+
+		const groups = groupSelectionsByParagraph(lines, selectedLineIndices);
+		if (groups.size === 0) {
+			return;
+		}
+
+		const engine = ctx.engine;
+		let savedCount = 0;
+
+		for (const [, groupLines] of [...groups.entries()].sort(
+			(left, right) => left[0] - right[0]
+		)) {
+			const firstLine = groupLines[0];
+			if (!firstLine) {
+				continue;
+			}
+
+			const paragraphText = engine.getParagraphTextForParagraphIndex(firstLine.paragraphIndex);
+			const passage = formatPassageWithHighlights(
+				paragraphText,
+				groupLines.map((line) => line.text)
+			);
+
+			if (ctx.readerOpen.kind === 'book') {
+				await this.appendBookBookmark(ctx, passage, firstLine.startSeekIndex);
+			} else if (ctx.readerOpen.kind === 'structured') {
+				await this.appendNoteBookmark(ctx, passage, firstLine.startSeekIndex);
+			}
+			savedCount += 1;
+		}
+
+		if (savedCount === 1) {
+			new Notice('Bookmark saved.');
+		} else if (savedCount > 1) {
+			new Notice(`${savedCount} bookmarks saved.`);
+		}
+	}
+
+	async removeBookmarkForLine(
+		ctx: BookmarkReaderContext,
+		lineIndex: number,
+		lines: BookmarkContextLine[]
+	): Promise<boolean> {
+		if (ctx.readerOpen.kind === 'legacy') {
+			new Notice('Bookmarks are not available for this reader mode.');
+			return false;
+		}
+
+		const line = lines.find((entry) => entry.lineIndex === lineIndex);
+		if (!line) {
+			return false;
+		}
+
+		if (ctx.readerOpen.kind === 'book') {
+			return this.removeBookBookmarkForLine(ctx, line);
+		}
+
+		if (ctx.readerOpen.kind === 'structured') {
+			return this.removeNoteBookmarkForLine(ctx, line);
+		}
+
+		return false;
+	}
+
+	private rebuildBookBookmarkMarkdown(entries: BookmarkEntry[]): string {
+		return entries.map((entry) => serializeBookmarkEntry(entry)).join('\n').trimEnd();
+	}
+
+	private replaceNoteBookmarkSectionEntries(
+		content: string,
+		heading: string,
+		entries: BookmarkEntry[]
+	): string {
+		const normalized = content.replace(/\r\n/g, '\n');
+		const sectionIndex = findBookmarkSectionLineIndex(normalized, heading);
+		if (sectionIndex < 0) {
+			return normalized;
+		}
+
+		const lines = normalized.split('\n');
+		const before = lines.slice(0, sectionIndex + 1).join('\n');
+		const rest = lines.slice(sectionIndex + 1).join('\n');
+		const nextH1 = rest.search(/^#\s+/m);
+		const afterSection = nextH1 >= 0 ? rest.slice(nextH1) : '';
+		const sectionBody = entries.map((entry) => serializeBookmarkEntry(entry)).join('\n').trimEnd();
+		const middle = sectionBody.length > 0 ? `\n\n${sectionBody}\n` : '\n';
+		const suffix = afterSection.length > 0 ? `\n${afterSection}` : '';
+		return `${before}${middle}${suffix}`.replace(/\n{3,}/g, '\n\n');
+	}
+
+	private applyLineRemovalToEntries(
+		entries: BookmarkEntry[],
+		line: BookmarkContextLine,
+		kind: 'book' | 'note'
+	): { entries: BookmarkEntry[]; changed: boolean } {
+		const nextEntries: BookmarkEntry[] = [];
+		let changed = false;
+
+		for (const entry of entries) {
+			if (!lineMatchesBookmarkEntry(line, entry, kind)) {
+				nextEntries.push(entry);
+				continue;
+			}
+
+			changed = true;
+			const updated = removeLineFromBookmarkEntry(entry, line, kind);
+			if (updated) {
+				nextEntries.push(updated);
+			}
+		}
+
+		return { entries: nextEntries, changed };
+	}
+
+	private async removeBookBookmarkForLine(
+		ctx: BookmarkReaderContext,
+		line: BookmarkContextLine
+	): Promise<boolean> {
+		if (ctx.readerOpen.kind !== 'book') {
+			return false;
+		}
+
+		const settings = this.deps.getSettings();
+		const vaultPath = resolveBookBookmarkPath(settings, ctx.readerOpen.sourcePath);
+		const adapter = this.deps.app.vault.adapter;
+		let markdown = '';
+		try {
+			markdown = await adapter.read(vaultPath);
+		} catch {
+			return false;
+		}
+
+		const entries = parseBookmarkEntries(markdown);
+		const { entries: nextEntries, changed } = this.applyLineRemovalToEntries(entries, line, 'book');
+		if (!changed) {
+			return false;
+		}
+
+		await adapter.write(vaultPath, this.rebuildBookBookmarkMarkdown(nextEntries));
+		new Notice('Bookmark removed.');
+		return true;
+	}
+
+	private async removeNoteBookmarkForLine(
+		ctx: BookmarkReaderContext,
+		line: BookmarkContextLine
+	): Promise<boolean> {
+		if (ctx.readerOpen.kind !== 'structured') {
+			return false;
+		}
+
+		const settings = this.deps.getSettings();
+		const heading = settings.bookmarks.noteBookmarkSectionHeading;
+		const file = this.deps.app.vault.getFileByPath(ctx.readerOpen.sourcePath);
+		if (!file) {
+			new Notice('Source note not found.');
+			return false;
+		}
+
+		const content = await this.deps.app.vault.read(file);
+		const entries = parseNoteBookmarkSection(content, heading);
+		const { entries: nextEntries, changed } = this.applyLineRemovalToEntries(entries, line, 'note');
+		if (!changed) {
+			return false;
+		}
+
+		const next = this.replaceNoteBookmarkSectionEntries(content, heading, nextEntries);
+		await this.deps.app.vault.modify(file, next);
+
+		const checksum = await noteContentChecksum(next, heading);
+		if (ctx.session) {
+			const kind = await ctx.session.reloadFromVaultText(next, checksum, ctx.engine, {
+				sectionIndex: ctx.readerState?.currentSectionIndex,
+				tokenIndex: ctx.readerState?.currentTokenIndex
+			});
+			ctx.onNoteReloaded?.(kind);
+		}
+
+		new Notice('Bookmark removed.');
+		return true;
 	}
 
 	async loadBookmarkEntries(ctx: BookmarkReaderContext): Promise<BookmarkEntry[]> {
@@ -184,6 +387,22 @@ export class BookmarkService {
 			return;
 		}
 
+		const position = this.resolveBookPosition(readerOpen.bookIndex, engine, ctx.readerState);
+		await this.appendBookBookmark(ctx, this.buildPassage(engine), position.wordIndex);
+		const vaultPath = resolveBookBookmarkPath(this.deps.getSettings(), readerOpen.sourcePath);
+		new Notice(`Bookmark saved to ${vaultPath}`);
+	}
+
+	private async appendBookBookmark(
+		ctx: BookmarkReaderContext,
+		passage: string,
+		seekIndex: number
+	): Promise<void> {
+		const { readerOpen, engine } = ctx;
+		if (readerOpen.kind !== 'book') {
+			return;
+		}
+
 		const settings = this.deps.getSettings();
 		const vaultPath = resolveBookBookmarkPath(settings, readerOpen.sourcePath);
 		const adapter = this.deps.app.vault.adapter;
@@ -192,14 +411,19 @@ export class BookmarkService {
 			await adapter.mkdir(parentDir).catch(() => undefined);
 		}
 
-		const position = this.resolveBookPosition(readerOpen.bookIndex, engine, ctx.readerState);
+		const position = this.resolveBookPositionFromSeekIndex(
+			readerOpen.bookIndex,
+			engine,
+			ctx.readerState,
+			seekIndex
+		);
 		const sectionTitle =
-			engine.getSectionList().find((s) => s.id === position.chapterId)?.title ??
+			engine.getSectionList().find((section) => section.id === position.chapterId)?.title ??
 			ctx.readerState?.sectionTitle;
 		const block = formatBookmarkBlock({
 			timestamp: new Date(),
 			sectionTitle,
-			passage: this.buildPassage(engine),
+			passage,
 			positionLine: `chapter ${position.chapterId} word ${position.wordIndex}`,
 			uriLine: formatBookBookmarkUri(
 				readerOpen.sourcePath,
@@ -217,10 +441,24 @@ export class BookmarkService {
 
 		const next = existing.length > 0 ? `${existing.replace(/\r\n/g, '\n')}\n\n${block}` : `${block}`;
 		await adapter.write(vaultPath, next);
-		new Notice(`Bookmark saved to ${vaultPath}`);
 	}
 
 	private async createNoteBookmark(ctx: BookmarkReaderContext): Promise<void> {
+		const { readerOpen, engine } = ctx;
+		if (readerOpen.kind !== 'structured') {
+			return;
+		}
+
+		const tokenIndex = ctx.readerState?.currentTokenIndex ?? ctx.readerState?.currentIndex ?? 0;
+		await this.appendNoteBookmark(ctx, this.buildPassage(engine), tokenIndex);
+		new Notice('Bookmark added to note.');
+	}
+
+	private async appendNoteBookmark(
+		ctx: BookmarkReaderContext,
+		passage: string,
+		seekIndex: number
+	): Promise<void> {
 		const { readerOpen, engine, session } = ctx;
 		if (readerOpen.kind !== 'structured') {
 			return;
@@ -233,12 +471,12 @@ export class BookmarkService {
 			return;
 		}
 
-		const position = this.resolveNotePosition(engine, ctx.readerState);
+		const position = this.resolveNotePositionFromSeekIndex(engine, ctx.readerState, seekIndex);
 		const sectionTitle = ctx.readerState?.sectionTitle;
 		const block = formatBookmarkBlock({
 			timestamp: new Date(),
 			sectionTitle,
-			passage: this.buildPassage(engine),
+			passage,
 			positionLine: `section ${position.sectionId} word ${position.wordIndex}`,
 			uriLine: formatNoteBookmarkUri(
 				readerOpen.sourcePath,
@@ -266,8 +504,6 @@ export class BookmarkService {
 			});
 			ctx.onNoteReloaded?.(kind);
 		}
-
-		new Notice('Bookmark added to note.');
 	}
 
 	private resolveBookPosition(
@@ -292,6 +528,33 @@ export class BookmarkService {
 		}
 
 		return { sectionId: sectionId ?? 'section-01', wordIndex: tokenIndex };
+	}
+
+	private resolveBookPositionFromSeekIndex(
+		index: BookCacheIndex,
+		engine: RSVPEngine,
+		state: ReaderState | null,
+		seekIndex: number
+	): BookPosition {
+		const sections = engine.getSectionList();
+		const sectionId = sections[state?.currentSectionIndex ?? 0]?.id;
+		return bookPositionFromEngine(index, sectionId, seekIndex);
+	}
+
+	private resolveNotePositionFromSeekIndex(
+		engine: RSVPEngine,
+		state: ReaderState | null,
+		seekIndex: number
+	): NotePosition {
+		const processed = engine.getLoadedProcessedDocument();
+		const sections = engine.getSectionList();
+		const sectionId = sections[state?.currentSectionIndex ?? 0]?.id;
+
+		if (processed) {
+			return notePositionFromEngine(processed, sectionId, seekIndex);
+		}
+
+		return { sectionId: sectionId ?? 'section-01', wordIndex: seekIndex };
 	}
 }
 

@@ -162,6 +162,21 @@ describe('RSVPEngine', () => {
 		expect(passage.paragraphText).toContain('Second');
 	});
 
+	it('getBookmarkContextSnapshot returns sentence lines with current index', () => {
+		engine.loadText('One two three. Four five six.');
+		engine.seekToIndex(4);
+		engine.pause();
+		const snapshot = engine.getBookmarkContextSnapshot();
+		expect(snapshot.lines.length).toBeGreaterThanOrEqual(2);
+		expect(snapshot.lines[snapshot.currentLineIndex]?.text).toContain('Four');
+	});
+
+	it('seekToSentenceUnitIndex moves reading position', () => {
+		engine.loadText('One two three. Four five six.');
+		engine.seekToSentenceUnitIndex(1);
+		expect(engine.getCurrentSentenceUnitIndex()).toBe(1);
+	});
+
 	it('getPauseSentenceContext returns full sentence tokens when paused', () => {
 		engine.loadText('One two three. Four five six.');
 		engine.seekToIndex(4);

@@ -49,8 +49,13 @@ import {
 	prevLineUnitIndex,
 	SentenceUnit
 } from './lineRepeatPlayback';
+import {
+	buildBookmarkContextLinesFromData,
+	type BookmarkContextSnapshot
+} from '../bookmarks/bookmarkContextLines';
 import type { BookmarkPassage, PauseSentenceContext } from './paragraphContracts';
 export type { BookmarkPassage, PauseSentenceContext } from './paragraphContracts';
+export type { BookmarkContextSnapshot } from '../bookmarks/bookmarkContextLines';
 import {
 	buildParagraphUnits,
 	findParagraphForWordIndex,
@@ -550,6 +555,39 @@ export class RSVPEngine {
 			paragraphText: paragraphText || highlightedSentence,
 			highlightedSentence
 		};
+	}
+
+	getBookmarkContextSnapshot(): BookmarkContextSnapshot {
+		return buildBookmarkContextLinesFromData(
+			this.getNavWords(),
+			this.sentenceUnits,
+			this.getCurrentSeekIndex()
+		);
+	}
+
+	getCurrentSentenceUnitIndex(): number {
+		return findSentenceUnitForSeekIndex(this.sentenceUnits, this.getCurrentSeekIndex());
+	}
+
+	seekToSentenceUnitIndex(index: number): void {
+		const unit = this.sentenceUnits[index];
+		if (unit) {
+			this.seekToSentenceUnit(unit);
+		}
+	}
+
+	getSentenceUnitCount(): number {
+		return this.sentenceUnits.length;
+	}
+
+	getParagraphTextForParagraphIndex(paragraphIndex: number): string {
+		const navWords = this.getNavWords();
+		const paragraphUnits = buildParagraphUnits(navWords, this.sentenceUnits);
+		const unit = paragraphUnits[paragraphIndex];
+		if (!unit) {
+			return '';
+		}
+		return paragraphTextFromUnit(navWords, unit);
 	}
 
 	getPauseSentenceContext(): PauseSentenceContext | null {

@@ -37,6 +37,8 @@ describe('readerThemes', () => {
 		expect(tokens.text).toBe('#FFFFFF');
 		expect(tokens.orp).toBe('#FF8C00');
 		expect(tokens.muted).toBe('#9E9E9E');
+		expect(tokens.cardBg).toBe('#141414');
+		expect(tokens.cardText).toBe('#E8E8E8');
 	});
 
 	it('light tokens match WCAG plan values', () => {
@@ -57,6 +59,14 @@ describe('readerThemes', () => {
 		applyReaderThemeToElement(el, 'dark');
 		expect(el.style.getPropertyValue('--sr-bg')).toBe('#000000');
 		expect(el.style.getPropertyValue('--sr-orp')).toBe('#FF8C00');
+		expect(el.style.getPropertyValue('--sr-card-bg')).toBe('#141414');
+		expect(el.style.getPropertyValue('--sr-accent')).toBe('#d966ff');
+		expect(el.style.getPropertyValue('--sr-accent-bright')).toBe('#e580ff');
 		expect(el.classList.contains('speed-reader-theme-dark')).toBe(true);
+
+		applyReaderThemeToElement(el, 'light');
+		expect(el.style.getPropertyValue('--sr-accent')).toBe('#a100ff');
+		expect(el.style.getPropertyValue('--sr-reading-bg')).toBe('#f8faf9');
+		expect(el.classList.contains('speed-reader-theme-light')).toBe(true);
 	});
 });

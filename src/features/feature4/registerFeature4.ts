@@ -25,14 +25,14 @@ export function registerFeature4(plugin: SpeedReaderAiPlugin, services: PluginSe
 
 	plugin.addCommand({
 		id: 'speed-reader-open-bookmark',
-		name: 'Open saved bookmarks (Shift+B)',
+		name: 'Open bookmark line picker (Shift+B)',
 		checkCallback: (checking) => {
 			const modal = services.readerGate.getActiveModal();
 			if (!modal || modal.getReaderOpen().kind === 'legacy') {
 				return false;
 			}
 			if (!checking) {
-				void modal.showBookmarksTabFromService();
+				modal.showBookmarkPickerFromService();
 			}
 			return true;
 		}

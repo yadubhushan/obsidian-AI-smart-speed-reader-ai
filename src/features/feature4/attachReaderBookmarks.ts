@@ -1,15 +1,19 @@
-import type { BookmarkEntry } from '../../bookmarks/parseBookmarkEntries';
+import type { BookmarkContextLine } from '../../bookmarks/bookmarkContextLines';
 import type { BookmarkReaderContext, BookmarkService } from '../../bookmarks/bookmarkService';
+import type { BookmarkEntry } from '../../bookmarks/parseBookmarkEntries';
 import type { SpeedReaderAiModal } from '../../speedReaderAiModal';
 import type { PlaybackLoadKind } from '../../ui/structuredReaderSession';
 
 export interface ReaderBookmarkHandles {
 	createBookmark: () => void | Promise<void>;
 	openBookmarksTab: () => void | Promise<void>;
-	seekToBookmarkEntry: (entry: BookmarkEntry) => boolean;
-	batchBookmarkAtEntries: (entryIndices: number[]) => Promise<void>;
+	createFromSelection: (
+		lineIndices: number[],
+		lines: BookmarkContextLine[]
+	) => Promise<void>;
+	loadBookmarkEntries: () => Promise<BookmarkEntry[]>;
+	removeBookmarkForLine: (lineIndex: number, lines: BookmarkContextLine[]) => Promise<boolean>;
 	openBookmarkMarkdownInObsidian: () => void | Promise<void>;
-	reloadBookmarkEntries: () => Promise<BookmarkEntry[]>;
 }
 
 export interface AttachReaderBookmarksDeps {
@@ -44,30 +48,20 @@ export function attachReaderBookmarks(deps: AttachReaderBookmarksDeps): void {
 
 	const handles: ReaderBookmarkHandles = {
 		createBookmark: () => bookmarkService.createBookmark(buildBookmarkContext(modal)),
-		openBookmarksTab: async () => {
-			const entries = await bookmarkService.loadBookmarkEntries(buildBookmarkContext(modal));
-			modal.showBookmarksTab(entries);
+		openBookmarksTab: () => {
+			modal.showBookmarkPicker();
 		},
-		seekToBookmarkEntry: (entry) =>
-			bookmarkService.seekToBookmarkEntry(buildBookmarkContext(modal), entry),
-		batchBookmarkAtEntries: async (entryIndices) => {
-			const ctx = buildBookmarkContext(modal);
-			const entries = await bookmarkService.loadBookmarkEntries(ctx);
-			const unique = [...new Set(entryIndices)];
-			for (const entryIndex of unique) {
-				const entry = entries[entryIndex];
-				if (!entry) {
-					continue;
-				}
-				bookmarkService.seekToBookmarkEntry(ctx, entry);
-				await bookmarkService.createBookmark(ctx);
-			}
-			const refreshed = await bookmarkService.loadBookmarkEntries(buildBookmarkContext(modal));
-			modal.showBookmarksTab(refreshed);
-		},
+		createFromSelection: (lineIndices, lines) =>
+			bookmarkService.createBookmarksFromSelection(
+				buildBookmarkContext(modal),
+				lineIndices,
+				lines
+			),
+		loadBookmarkEntries: () => bookmarkService.loadBookmarkEntries(buildBookmarkContext(modal)),
+		removeBookmarkForLine: (lineIndex, lines) =>
+			bookmarkService.removeBookmarkForLine(buildBookmarkContext(modal), lineIndex, lines),
 		openBookmarkMarkdownInObsidian: () =>
-			bookmarkService.openBookmarkMarkdownInObsidian(buildBookmarkContext(modal)),
-		reloadBookmarkEntries: () => bookmarkService.loadBookmarkEntries(buildBookmarkContext(modal))
+			bookmarkService.openBookmarkMarkdownInObsidian(buildBookmarkContext(modal))
 	};
 
 	modal.setBookmarkHandlers(handles);

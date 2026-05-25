@@ -315,133 +315,420 @@
 .speed-reader-ai-pane-bookmarks {
 	padding: 0;
 	overflow: hidden;
+	position: relative;
+	background: var(--sr-reading-bg, var(--sr-bg, var(--background-primary)));
+	color: var(--sr-text, var(--text-normal));
 }
 
-.speed-reader-ai-bookmarks-toolbar {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem;
-	padding: 0.75rem 1rem;
-	border-bottom: 1px solid var(--sr-border, var(--background-modifier-border));
+.speed-reader-ai-bookmarks-header-card {
 	flex-shrink: 0;
+	margin: 1.25rem 1.5rem 0;
+	padding: 1.5rem 1.75rem;
+	border: 1px solid var(--sr-reading-line, var(--sr-border, var(--background-modifier-border)));
+	border-radius: 2rem;
+	background: var(--sr-reading-surface, var(--sr-card-bg, var(--background-primary-alt)));
+	box-shadow: var(--sr-reading-shadow-soft, 0 20px 60px rgba(15, 23, 42, 0.07));
 }
 
-.speed-reader-ai-bookmarks-action-btn {
-	padding: 0.45rem 0.85rem;
-	min-height: 2.25rem;
-	border-radius: var(--radius-s);
-	border: 1px solid var(--sr-border, var(--background-modifier-border));
-	background: var(--sr-tab-active-bg, var(--interactive-accent));
-	color: var(--sr-tab-active-text, var(--text-on-accent));
+.speed-reader-ai-bookmarks-header-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.speed-reader-ai-bookmarks-header-text {
+	min-width: 0;
+	flex: 1;
+}
+
+.speed-reader-ai-bookmarks-header-title {
+	font-size: 1.35rem;
+	font-weight: var(--font-bold);
+	line-height: 1.25;
+	color: var(--sr-text, var(--text-normal));
+}
+
+.speed-reader-ai-bookmarks-header-subtitle {
+	margin-top: 0.45rem;
 	font-size: var(--font-ui-small);
+	line-height: 1.45;
+	color: var(--sr-muted, var(--text-muted));
+}
+
+.speed-reader-ai-bookmarks-header-play {
+	flex-shrink: 0;
+	padding: 0.65rem 1.1rem;
+	border-radius: 0.95rem;
+	border: 1px solid var(--sr-accent-dark, #7b00c8);
+	background: linear-gradient(
+		180deg,
+		var(--sr-accent-bright, #b100ff),
+		var(--sr-accent-deep, #9100e8)
+	);
+	color: var(--sr-accent-on, #ffffff);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-bold);
 	cursor: pointer;
+	box-shadow: var(--sr-accent-glow, 0 8px 20px rgba(145, 0, 232, 0.24));
+	transition:
+		filter 0.15s ease,
+		transform 0.12s ease;
 }
 
-.speed-reader-ai-bookmarks-action-btn:disabled {
-	opacity: 0.45;
-	cursor: not-allowed;
+.speed-reader-ai-bookmarks-header-play:hover {
+	filter: brightness(1.08);
 }
 
-.speed-reader-ai-bookmarks-action-secondary {
-	background: var(--sr-input-bg, var(--background-primary));
-	color: var(--sr-input-text, var(--text-normal));
+.speed-reader-ai-bookmarks-open-link {
+	margin-top: 0.85rem;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--sr-accent, #a100ff);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-medium);
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+	opacity: 0.88;
+}
+
+.speed-reader-ai-bookmarks-open-link:hover {
+	opacity: 1;
+	color: var(--sr-accent-bright, var(--sr-accent, #a100ff));
 }
 
 .speed-reader-ai-bookmarks-scroll {
 	flex: 1;
 	min-height: 0;
 	overflow: auto;
-	padding: 0.75rem 1rem 1rem;
+	padding: 1rem 1.5rem calc(6.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.speed-reader-ai-bookmarks-scroll-inner {
+	max-width: 61.25rem;
+	width: 100%;
+	margin: 0 auto;
 }
 
 .speed-reader-ai-bookmarks-empty {
 	color: var(--sr-muted, var(--text-muted));
 	font-size: var(--font-ui-small);
-	padding: 1rem 0.25rem;
+	padding: 1.5rem 0.25rem;
+	text-align: center;
 }
 
 .speed-reader-ai-bookmarks-list {
 	display: flex;
 	flex-direction: column;
-	gap: 0.75rem;
+	gap: 0.875rem;
 }
 
-.speed-reader-ai-bookmark-entry-card {
-	border: 1px solid var(--sr-border, var(--background-modifier-border));
-	border-radius: var(--radius-m);
-	background: var(--sr-input-bg, var(--background-primary));
-	padding: 0.75rem;
+.speed-reader-ai-bookmark-line-row {
+	display: grid;
+	grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 0.875rem;
 }
 
-.speed-reader-ai-bookmark-entry-heading {
-	font-size: var(--font-ui-small);
-	font-weight: var(--font-medium);
-	color: var(--sr-muted, var(--text-muted));
-	margin-bottom: 0.5rem;
+.speed-reader-ai-bookmark-line-row.is-paragraph-start {
+	margin-top: 0.5rem;
 }
 
-.speed-reader-ai-bookmark-line-cards {
-	display: flex;
-	flex-direction: column;
-	gap: 0.35rem;
+.speed-reader-ai-bookmark-line-text-card {
+	padding: 1.1rem 1.25rem;
+	border: 1px solid var(--sr-reading-line, var(--sr-border, var(--background-modifier-border)));
+	border-radius: 1.375rem;
+	background: var(--sr-reading-surface, var(--sr-card-bg, var(--background-primary-alt)));
+	box-shadow: var(--sr-reading-shadow-card, 0 8px 28px rgba(15, 23, 42, 0.045));
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background-color 0.15s ease,
+		box-shadow 0.15s ease;
 }
 
-.speed-reader-ai-bookmark-line-card {
-	display: flex;
-	align-items: flex-start;
-	gap: 0.5rem;
-	border: 1px solid transparent;
-	border-radius: var(--radius-s);
-	padding: 0.35rem;
+.speed-reader-ai-bookmark-line-text-card:hover {
+	border-color: color-mix(in srgb, var(--sr-accent, #a100ff) 28%, var(--sr-reading-line, var(--sr-border)));
 }
 
-.speed-reader-ai-bookmark-line-card.is-selected {
-	border-color: var(--sr-tab-active-bg, var(--interactive-accent));
-	background: var(--background-modifier-hover);
+.speed-reader-ai-bookmark-line-row.is-past .speed-reader-ai-bookmark-line-text {
+	opacity: 0.62;
+}
+
+.speed-reader-ai-bookmark-line-row.is-current .speed-reader-ai-bookmark-line-text-card {
+	border-color: var(--sr-accent, #a100ff);
+	background: var(--sr-accent-soft, #f4e8ff);
+	box-shadow: var(--sr-reading-shadow-accent, 0 14px 38px rgba(161, 0, 255, 0.12));
+}
+
+.speed-reader-ai-bookmark-line-row.is-current .speed-reader-ai-bookmark-line-badges {
+	color: var(--sr-accent, #a100ff);
+}
+
+.speed-reader-ai-bookmark-line-row.is-bookmarked .speed-reader-ai-bookmark-line-text-card {
+	border-color: var(--sr-saved, #16a34a);
+	border-left: 5px solid var(--sr-saved, #16a34a);
+	padding-left: calc(1.25rem - 4px);
+	background: var(--sr-saved-soft, #ecfdf3);
+	box-shadow: var(--sr-saved-shadow, 0 14px 38px rgba(22, 163, 74, 0.16));
+}
+
+.speed-reader-ai-bookmark-line-row.is-current.is-bookmarked .speed-reader-ai-bookmark-line-text-card {
+	border-color: var(--sr-saved, #16a34a);
+	border-left-color: var(--sr-saved, #16a34a);
+	background: var(--sr-saved-soft, #ecfdf3);
+	box-shadow: var(--sr-saved-shadow, 0 14px 38px rgba(22, 163, 74, 0.16));
+}
+
+.speed-reader-ai-bookmark-line-row.is-selected .speed-reader-ai-bookmark-line-text-card {
+	border-color: color-mix(in srgb, var(--sr-accent, #a100ff) 55%, var(--sr-reading-line, var(--sr-border)));
+}
+
+.speed-reader-ai-bookmark-line-row.is-current.is-selected .speed-reader-ai-bookmark-line-text-card {
+	border-left-color: var(--sr-accent, #a100ff);
+}
+
+.speed-reader-ai-bookmark-line-select {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	min-width: 2rem;
+	min-height: 2rem;
+	margin-top: 1rem;
+	cursor: pointer;
 }
 
 .speed-reader-ai-bookmark-line-checkbox {
-	margin-top: 0.35rem;
-	min-width: 1.1rem;
-	min-height: 1.1rem;
-	flex-shrink: 0;
-}
-
-.speed-reader-ai-bookmark-line-text-btn {
-	flex: 1;
-	text-align: left;
-	border: none;
-	background: transparent;
-	color: var(--sr-input-text, var(--text-normal));
-	font-family: var(--font-text);
-	font-size: var(--font-text-size);
-	line-height: 1.5;
-	padding: 0.25rem 0.35rem;
-	border-radius: var(--radius-s);
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	opacity: 0;
 	cursor: pointer;
-	min-height: 2.25rem;
 }
 
-.speed-reader-ai-bookmark-line-text-btn:hover {
-	background: var(--background-modifier-hover);
+.speed-reader-ai-bookmark-line-checkmark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border: 2px solid var(--sr-reading-line, var(--sr-border, var(--background-modifier-border)));
+	border-radius: 0.45rem;
+	background: transparent;
+	transition:
+		border-color 0.15s ease,
+		background-color 0.15s ease;
 }
 
-.speed-reader-ai-bookmark-line-highlight {
-	font-weight: 600;
-	font-style: italic;
-	color: var(--sr-orp, var(--interactive-accent));
+.speed-reader-ai-bookmark-line-row.is-bookmarked .speed-reader-ai-bookmark-line-badges {
+	color: var(--sr-saved, #16a34a);
 }
 
-.speed-reader-ai-bookmark-entry-meta {
-	margin-top: 0.5rem;
+.speed-reader-ai-bookmark-line-row.is-bookmarked .speed-reader-ai-bookmark-line-bookmark-btn {
+	border-color: color-mix(in srgb, var(--sr-saved, #16a34a) 55%, var(--sr-reading-line, var(--sr-border)));
+	background: color-mix(in srgb, var(--sr-saved-soft, #ecfdf3) 80%, var(--sr-reading-surface, #ffffff));
+}
+
+.speed-reader-ai-bookmark-line-checkmark::after {
+	content: '';
+	width: 0.4rem;
+	height: 0.72rem;
+	border-right: 2.5px solid var(--sr-accent-on, #ffffff);
+	border-bottom: 2.5px solid var(--sr-accent-on, #ffffff);
+	transform: rotate(45deg) scale(0);
+	transform-origin: center;
+	margin-top: -0.1rem;
+	transition: transform 0.12s ease;
+}
+
+.speed-reader-ai-bookmark-line-checkbox:checked + .speed-reader-ai-bookmark-line-checkmark {
+	border-color: var(--sr-accent, #a100ff);
+	background: var(--sr-accent, #a100ff);
+}
+
+.speed-reader-ai-bookmark-line-checkbox:checked + .speed-reader-ai-bookmark-line-checkmark::after {
+	transform: rotate(45deg) scale(1);
+}
+
+.speed-reader-ai-bookmark-line-checkbox:focus-visible + .speed-reader-ai-bookmark-line-checkmark {
+	outline: 2px solid var(--sr-accent, #a100ff);
+	outline-offset: 2px;
+}
+
+.speed-reader-ai-bookmark-line-text {
+	margin: 0;
+	text-align: left;
+	font-family: var(--font-text);
+	font-size: 1.125rem;
+	line-height: 1.7;
+	letter-spacing: -0.01em;
+	color: var(--sr-text, var(--text-normal));
+}
+
+.speed-reader-ai-bookmark-line-badges {
+	margin-top: 0.55rem;
 	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-medium);
 	color: var(--sr-muted, var(--text-muted));
 }
 
-.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-checkbox,
-.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-text-btn,
-.speed-reader-ai-mobile .speed-reader-ai-bookmarks-action-btn {
+.speed-reader-ai-bookmark-line-badges.is-hidden {
+	display: none;
+}
+
+.speed-reader-ai-bookmark-line-bookmark-btn {
+	all: unset;
+	box-sizing: border-box;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	min-width: 2.75rem;
 	min-height: 2.75rem;
+	margin-top: 0.85rem;
+	border-radius: 999px;
+	border: 1px solid var(--sr-reading-line, var(--sr-border, var(--background-modifier-border)));
+	background: color-mix(in srgb, var(--sr-accent-soft, #f4e8ff) 55%, var(--sr-reading-surface, #ffffff));
+	font-size: 1.1rem;
+	line-height: 1;
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background 0.15s ease,
+		box-shadow 0.15s ease,
+		transform 0.12s ease;
+}
+
+.speed-reader-ai-bookmark-line-bookmark-btn:hover:not(:disabled) {
+	border-color: var(--sr-accent, #a100ff);
+	background: color-mix(in srgb, var(--sr-accent-soft, #f4e8ff) 75%, var(--sr-reading-surface, #ffffff));
+}
+
+.speed-reader-ai-bookmark-line-bookmark-btn.is-active {
+	border-color: var(--sr-accent-dark, #7b00c8);
+	background: linear-gradient(
+		180deg,
+		var(--sr-accent-bright, #b100ff),
+		var(--sr-accent-deep, #9100e8)
+	);
+	box-shadow: var(--sr-accent-glow, 0 8px 20px rgba(145, 0, 232, 0.24));
+}
+
+.speed-reader-ai-bookmark-line-bookmark-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.speed-reader-ai-bookmarks-floating-bar {
+	position: absolute;
+	left: 50%;
+	bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	width: min(calc(100% - 2rem), 42rem);
+	padding: 0.85rem 1rem;
+	border: 1px solid var(--sr-reading-line, var(--sr-border, var(--background-modifier-border)));
+	border-radius: 1.25rem;
+	background: color-mix(in srgb, var(--sr-reading-surface, #ffffff) 94%, transparent);
+	box-shadow: var(--sr-reading-shadow-soft, 0 18px 50px rgba(15, 23, 42, 0.12));
+	backdrop-filter: blur(12px);
+	transform: translateX(-50%);
+}
+
+.speed-reader-ai-bookmarks-floating-bar.is-hidden {
+	display: none;
+}
+
+.speed-reader-ai-bookmarks-floating-meta {
+	min-width: 0;
+}
+
+.speed-reader-ai-bookmarks-selection-count {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	color: var(--sr-text, var(--text-normal));
+}
+
+.speed-reader-ai-bookmarks-floating-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-bookmarks-clear-btn {
+	padding: 0.55rem 0.9rem;
+	min-height: 2.5rem;
+	border-radius: 0.95rem;
+	border: 1px solid var(--sr-reading-line, var(--sr-border, var(--background-modifier-border)));
+	background: transparent;
+	color: var(--sr-muted, var(--text-muted));
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	cursor: pointer;
+}
+
+.speed-reader-ai-bookmarks-clear-btn:hover {
+	color: var(--sr-accent, #a100ff);
+	border-color: var(--sr-accent, #a100ff);
+}
+
+.speed-reader-ai-bookmarks-save-btn {
+	padding: 0.55rem 1rem;
+	min-height: 2.5rem;
+	border-radius: 0.95rem;
+	border: 1px solid var(--sr-accent-dark, #7b00c8);
+	background: linear-gradient(
+		180deg,
+		var(--sr-accent-bright, #b100ff),
+		var(--sr-accent-deep, #9100e8)
+	);
+	color: var(--sr-accent-on, #ffffff);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-bold);
+	cursor: pointer;
+	box-shadow: var(--sr-accent-glow, 0 8px 20px rgba(145, 0, 232, 0.24));
+}
+
+.speed-reader-ai-bookmarks-save-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.speed-reader-ai-bookmarks-save-btn:hover:not(:disabled) {
+	filter: brightness(1.03);
+}
+
+.speed-reader-ai-mobile-bookmark-explorer-btn {
+	font-size: 1rem;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-select,
+.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-bookmark-btn,
+.speed-reader-ai-mobile .speed-reader-ai-bookmarks-save-btn,
+.speed-reader-ai-mobile .speed-reader-ai-bookmarks-clear-btn,
+.speed-reader-ai-mobile .speed-reader-ai-bookmarks-header-play {
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-select {
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-checkmark {
+	width: 1.65rem;
+	height: 1.65rem;
 }
 
 .speed-reader-ai-content-title {
@@ -1087,6 +1374,10 @@
 
 .speed-reader-ai-mobile .speed-reader-ai-pane-stack {
 	padding-top: var(--speed-reader-ai-mobile-compact-bar-height);
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane-stack.is-bookmarks-active {
+	padding-top: 0;
 }
 
 .speed-reader-ai-mobile-paused .speed-reader-ai-pane-stack {
