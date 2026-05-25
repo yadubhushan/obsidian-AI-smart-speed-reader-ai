@@ -1,5 +1,5 @@
 import type { BookmarkContextLine } from '../../../bookmarks/bookmarkContextLines';
-import { isSwipeBack } from '../mobileGestures';
+import { mountMobileSwipeBack } from '../mobileSwipeBack';
 
 export interface BookmarksPaneContext {
 	title: string;
@@ -100,65 +100,9 @@ function isInteractiveBookmarksTarget(target: EventTarget | null): boolean {
 	}
 	return Boolean(
 		target.closest(
-			'button, input, label, .speed-reader-ai-bookmarks-floating-bar, .speed-reader-ai-bookmarks-open-link, .speed-reader-ai-bookmarks-header-play'
+			'button, input, label, .speed-reader-ai-bookmarks-floating-bar, .speed-reader-ai-bookmarks-open-link, .speed-reader-ai-bookmarks-header-play, .speed-reader-ai-mobile-stack-back'
 		)
 	);
-}
-
-function mountBookmarksSwipeBack(
-	scrollEl: HTMLElement,
-	onSwipeBack: () => void
-): () => void {
-	let pointerId: number | null = null;
-	let startX = 0;
-	let startY = 0;
-	let startTime = 0;
-
-	const resetPointer = () => {
-		pointerId = null;
-	};
-
-	const onPointerDown = (event: PointerEvent) => {
-		if (event.pointerType === 'mouse' && event.button !== 0) {
-			return;
-		}
-		if (isInteractiveBookmarksTarget(event.target)) {
-			return;
-		}
-		pointerId = event.pointerId;
-		startX = event.clientX;
-		startY = event.clientY;
-		startTime = Date.now();
-	};
-
-	const onPointerUp = (event: PointerEvent) => {
-		if (pointerId === null || event.pointerId !== pointerId) {
-			return;
-		}
-		const dx = event.clientX - startX;
-		const dy = event.clientY - startY;
-		const elapsed = Date.now() - startTime;
-		resetPointer();
-		if (isSwipeBack(dx, dy, elapsed)) {
-			onSwipeBack();
-		}
-	};
-
-	const onPointerCancel = (event: PointerEvent) => {
-		if (event.pointerId === pointerId) {
-			resetPointer();
-		}
-	};
-
-	scrollEl.addEventListener('pointerdown', onPointerDown);
-	scrollEl.addEventListener('pointerup', onPointerUp);
-	scrollEl.addEventListener('pointercancel', onPointerCancel);
-
-	return () => {
-		scrollEl.removeEventListener('pointerdown', onPointerDown);
-		scrollEl.removeEventListener('pointerup', onPointerUp);
-		scrollEl.removeEventListener('pointercancel', onPointerCancel);
-	};
 }
 
 export function mountBookmarksPane(
@@ -172,6 +116,14 @@ export function mountBookmarksPane(
 
 	const headerCard = pane.createDiv({ cls: 'speed-reader-ai-bookmarks-header-card' });
 	const headerTop = headerCard.createDiv({ cls: 'speed-reader-ai-bookmarks-header-top' });
+	let backBtn: HTMLButtonElement | null = null;
+	if (isMobile) {
+		backBtn = headerTop.createEl('button', {
+			cls: 'speed-reader-ai-mobile-stack-back',
+			text: '‹',
+			attr: { type: 'button', 'aria-label': 'Back to reading' }
+		});
+	}
 	const headerText = headerTop.createDiv({ cls: 'speed-reader-ai-bookmarks-header-text' });
 	const titleEl = headerText.createDiv({
 		cls: 'speed-reader-ai-bookmarks-header-title',
@@ -231,10 +183,15 @@ export function mountBookmarksPane(
 	const cleanups: Array<() => void> = [];
 
 	if (isMobile) {
+		backBtn?.addEventListener('click', () => swipeBackHandler?.());
 		cleanups.push(
-			mountBookmarksSwipeBack(scroll, () => {
-				swipeBackHandler?.();
-			})
+			mountMobileSwipeBack(
+				scroll,
+				() => {
+					swipeBackHandler?.();
+				},
+				{ shouldIgnoreTarget: isInteractiveBookmarksTarget }
+			)
 		);
 	}
 

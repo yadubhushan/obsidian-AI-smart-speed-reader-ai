@@ -1,9 +1,12 @@
 import { PLAYBACK_MODE_ORDER, getPlaybackModeLabel } from '../../../engine/playbackMode';
 import { DEFAULT_SETTINGS, READER_FONT_OPTIONS, type PlaybackMode, type SpeedReaderAiSettings } from '../../../types';
+import { MOBILE_ROUTE_LABELS } from '../mobileNavigation';
+import { mountMobileStackChrome, type MobileStackChromeHandle } from '../mobileStackChrome';
 
 export interface SettingsPaneHandle {
 	destroy(): void;
 	refresh(settings: SpeedReaderAiSettings): void;
+	onSwipeBack(cb: () => void): void;
 }
 
 export function mountSettingsPane(
@@ -14,15 +17,27 @@ export function mountSettingsPane(
 		onDefaults: () => SpeedReaderAiSettings;
 		onResetFontSize: () => void;
 		showMobileGesturesGuide?: boolean;
+		isMobile?: boolean;
 	}
 ): SettingsPaneHandle {
+	const isMobile = handlers.isMobile ?? false;
 	const pane = container.createDiv({ cls: 'speed-reader-ai-pane speed-reader-ai-pane-settings is-hidden' });
+	let stackChrome: MobileStackChromeHandle | null = null;
+	let bodyHost: HTMLElement = pane;
+	if (isMobile) {
+		stackChrome = mountMobileStackChrome(pane, {
+			title: MOBILE_ROUTE_LABELS.settings,
+			scrollEl: pane,
+			ignoreSwipeSelectors: '.speed-reader-ai-settings-actions'
+		});
+		bodyHost = pane.createDiv({ cls: 'speed-reader-ai-mobile-stack-body' });
+	}
 	let draft = structuredClone(settings);
 
 	const render = () => {
-		pane.empty();
+		bodyHost.empty();
 		if (handlers.showMobileGesturesGuide) {
-			const guide = pane.createDiv({ cls: 'speed-reader-ai-settings-gestures-guide' });
+			const guide = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-gestures-guide' });
 			guide.createEl('h4', { text: 'Mobile gestures' });
 			const list = guide.createEl('ul');
 			const items = [
@@ -37,7 +52,7 @@ export function mountSettingsPane(
 				list.createEl('li', { text });
 			}
 		}
-		const grid = pane.createDiv({ cls: 'speed-reader-ai-settings-grid' });
+		const grid = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-grid' });
 		const left = grid.createDiv({ cls: 'speed-reader-ai-settings-col' });
 		const right = grid.createDiv({ cls: 'speed-reader-ai-settings-col' });
 
@@ -132,7 +147,7 @@ export function mountSettingsPane(
 		progressCheck.checked = draft.reader.display.showProgress;
 		progressRow.createSpan({ text: 'Show progress bar' });
 
-		const actions = pane.createDiv({ cls: 'speed-reader-ai-settings-actions' });
+		const actions = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-actions' });
 		const saveBtn = actions.createEl('button', { cls: 'speed-reader-ai-settings-action-btn', text: 'Save' });
 		const defaultsBtn = actions.createEl('button', {
 			cls: 'speed-reader-ai-settings-action-btn',
@@ -192,11 +207,15 @@ export function mountSettingsPane(
 
 	return {
 		destroy() {
+			stackChrome?.destroy();
 			pane.remove();
 		},
 		refresh(next) {
 			draft = structuredClone(next);
 			render();
+		},
+		onSwipeBack(cb) {
+			stackChrome?.onBack(cb);
 		}
 	};
 }

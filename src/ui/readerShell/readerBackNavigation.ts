@@ -3,7 +3,6 @@ import type { ReaderTabId } from './readerTabDock';
 export type ReaderBackAction =
 	| 'dismiss-dictionary'
 	| 'dismiss-coach-marks'
-	| 'close-peek-sheet'
 	| 'close-bottom-sheet'
 	| 'go-home'
 	| 'exit-focus-mode'
@@ -14,7 +13,6 @@ export interface ReaderBackSnapshot {
 	preferencesOnly: boolean;
 	dictionaryVisible: boolean;
 	coachMarksOpen: boolean;
-	peekSheetOpen: boolean;
 	bottomSheetOpen: boolean;
 	focusMode: boolean;
 }
@@ -25,9 +23,6 @@ export function resolveReaderBackAction(snapshot: ReaderBackSnapshot): ReaderBac
 	}
 	if (snapshot.coachMarksOpen) {
 		return 'dismiss-coach-marks';
-	}
-	if (snapshot.peekSheetOpen) {
-		return 'close-peek-sheet';
 	}
 	if (snapshot.bottomSheetOpen) {
 		return 'close-bottom-sheet';

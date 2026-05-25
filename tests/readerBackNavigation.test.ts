@@ -10,7 +10,6 @@ function snapshot(overrides: Partial<ReaderBackSnapshot> = {}): ReaderBackSnapsh
 		preferencesOnly: false,
 		dictionaryVisible: false,
 		coachMarksOpen: false,
-		peekSheetOpen: false,
 		bottomSheetOpen: false,
 		focusMode: false,
 		...overrides
@@ -30,20 +29,12 @@ describe('resolveReaderBackAction', () => {
 		).toBe('dismiss-dictionary');
 	});
 
-	it('dismisses coach marks before peek sheet', () => {
+	it('dismisses coach marks before bottom sheet', () => {
 		expect(
 			resolveReaderBackAction(
-				snapshot({ coachMarksOpen: true, peekSheetOpen: true })
+				snapshot({ coachMarksOpen: true, bottomSheetOpen: true })
 			)
 		).toBe('dismiss-coach-marks');
-	});
-
-	it('closes peek sheet before bottom sheet', () => {
-		expect(
-			resolveReaderBackAction(
-				snapshot({ peekSheetOpen: true, bottomSheetOpen: true })
-			)
-		).toBe('close-peek-sheet');
 	});
 
 	it('closes bottom sheet when open on home', () => {

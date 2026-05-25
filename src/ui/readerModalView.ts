@@ -80,7 +80,13 @@ import {
 	mountMobileDictionarySheet,
 	type MobileDictionarySheetHandle
 } from './readerShell/mobileDictionarySheet';
-import { mountMobilePeekSheet, type MobilePeekSheetHandle } from './readerShell/mobilePeekSheet';
+import {
+	mobileRouteToReaderTab,
+	readerTabToMobileRoute,
+	syncMobileRouteShell,
+	isMobileStackRoute,
+	type MobileRoute
+} from './readerShell/mobileNavigation';
 import {
 	resolveReaderBackAction,
 	type ReaderBackAction
@@ -125,7 +131,6 @@ export class SpeedReaderAiModal extends Modal {
 	private wordLookupHandlers: ReaderWordLookupHandles | null = null;
 	private dictionaryOverlay: DictionaryOverlayHandle | null = null;
 	private mobileDictionarySheet: MobileDictionarySheetHandle | null = null;
-	private mobilePeekSheet: MobilePeekSheetHandle | null = null;
 	private previousIsPlaying: boolean | null = null;
 
 	private session: StructuredReaderSession | null = null;
@@ -156,7 +161,6 @@ export class SpeedReaderAiModal extends Modal {
 	private mobileCoachMarks: MobileCoachMarksHandle | null = null;
 	private mobileProgressStripEl: HTMLElement | null = null;
 	private mobileMenuOpen = false;
-	private mobilePeekOpen = false;
 	private mobileDictionaryOpen = false;
 	private wasPlayingBeforeDictionary = false;
 	private mobileCoachOpen = false;
@@ -166,6 +170,7 @@ export class SpeedReaderAiModal extends Modal {
 	private skipFlashEl: HTMLElement | null = null;
 	private skipFlashTimer: number | null = null;
 	private readonly mobileReader = isMobileReader();
+	private mobileRoute: MobileRoute = 'reading';
 	private contentPane!: ContentPaneHandle;
 	private bookmarksPane!: BookmarksPaneHandle;
 	private bookmarkContextLines: BookmarkContextLine[] = [];
@@ -296,7 +301,7 @@ export class SpeedReaderAiModal extends Modal {
 				if (this.state?.isPlaying) {
 					return;
 				}
-				this.openMobileMenu('chapters');
+				this.openMobileMenu();
 			});
 		}
 
@@ -358,7 +363,7 @@ export class SpeedReaderAiModal extends Modal {
 		});
 		this.sectionSelect.addEventListener('change', () => this.onHeadingSelectChange());
 
-		this.contentPane = mountContentPane(this.paneStackEl);
+		this.contentPane = mountContentPane(this.paneStackEl, { isMobile: this.mobileReader });
 		this.bookmarksPane = mountBookmarksPane(this.paneStackEl, { isMobile: this.mobileReader });
 		this.bookmarksPane.onSeekLine((lineIndex) => {
 			this.seekBookmarkLine(lineIndex);
@@ -377,8 +382,10 @@ export class SpeedReaderAiModal extends Modal {
 			this.refocusContent();
 		});
 		this.bookmarksPane.onSwipeBack(() => {
-			this.setActiveTab('home');
-			this.refocusContent();
+			this.goToReadingRoot();
+		});
+		this.contentPane.onSwipeBack(() => {
+			this.goToReadingRoot();
 		});
 		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
@@ -396,14 +403,25 @@ export class SpeedReaderAiModal extends Modal {
 				this.engine.setSettings(this.settings);
 				this.returnToReadingAfterPaneAction();
 			},
-			showMobileGesturesGuide: this.mobileReader
+			showMobileGesturesGuide: this.mobileReader,
+			isMobile: this.mobileReader
 		});
-		this.shortcutsPane = mountShortcutsPane(this.paneStackEl);
+		this.settingsPane.onSwipeBack(() => {
+			this.goToReadingRoot();
+		});
+		this.shortcutsPane = mountShortcutsPane(this.paneStackEl, { isMobile: this.mobileReader });
+		this.shortcutsPane.onSwipeBack(() => {
+			this.goToReadingRoot();
+		});
 		this.advancedPane = mountAdvancedPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
 				this.persistSettings(next);
 				this.returnToReadingAfterPaneAction();
-			}
+			},
+			isMobile: this.mobileReader
+		});
+		this.advancedPane.onSwipeBack(() => {
+			this.goToReadingRoot();
 		});
 
 		this.controlBar = mountReaderControlBar(
@@ -449,22 +467,6 @@ export class SpeedReaderAiModal extends Modal {
 			this.mobileActionBar.onMenu(() => {
 				this.openMobileMenu();
 			});
-
-			this.mobilePeekSheet = mountMobilePeekSheet(this.shellEl, {
-				getSettings: () => this.settings,
-				getState: () => this.state,
-				onWpmChange: (wpm) => this.setReaderWpm(wpm),
-				onFontChange: (fontSize) => this.setReaderFontSize(fontSize),
-				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
-			});
-			this.mobilePeekSheet.onOpenChange((open) => {
-				this.mobilePeekOpen = open;
-				if (open) {
-					this.mobileBottomSheet?.close();
-					this.dismissDictionaryUi(false);
-				}
-				this.render();
-			});
 		}
 
 		if (this.mobileReader) {
@@ -473,20 +475,13 @@ export class SpeedReaderAiModal extends Modal {
 				this.engine,
 				{
 					preferencesOnly: this.readerOpen.kind === 'preferences',
-					onSelectTab: (tab) => this.setActiveTab(tab),
-					onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId),
-					canNavigateSections: () => this.canNavigateSections(),
-					getSettings: () => this.settings,
-					getState: () => this.state,
-					onWpmChange: (wpm) => this.setReaderWpm(wpm),
-					onFontChange: (fontSize) => this.setReaderFontSize(fontSize),
-					onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
+					onPushRoute: (route) => this.pushMobileRoute(route),
+					onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId)
 				}
 			);
 			this.mobileBottomSheet.onOpenChange((open) => {
 				this.mobileMenuOpen = open;
 				if (open) {
-					this.mobilePeekSheet?.close();
 					this.dismissDictionaryUi(false);
 				}
 				this.render();
@@ -594,8 +589,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.dictionaryOverlay = null;
 		this.mobileDictionarySheet?.destroy();
 		this.mobileDictionarySheet = null;
-		this.mobilePeekSheet?.destroy();
-		this.mobilePeekSheet = null;
 		this.clearInterSectionTimer();
 		this.hidePrepareOverlay();
 		this.modePicker?.destroy();
@@ -734,12 +727,28 @@ export class SpeedReaderAiModal extends Modal {
 		this.setActiveTab(tab);
 	}
 
+	private goToReadingRoot(): void {
+		this.setActiveTab('home');
+		this.refocusContent();
+	}
+
+	private pushMobileRoute(route: MobileRoute): void {
+		if (route === 'reading') {
+			this.goToReadingRoot();
+			return;
+		}
+		this.setActiveTab(mobileRouteToReaderTab(route));
+	}
+
 	private setActiveTab(tab: ReaderTabId) {
 		this.activeTab = tab;
 		this.tabDock?.setActiveTab(tab);
-		this.mobileBottomSheet?.setActiveTab(tab);
-		if (this.mobileReader && tab !== 'home') {
-			this.mobileBottomSheet?.close();
+		if (this.mobileReader) {
+			this.mobileRoute = readerTabToMobileRoute(tab);
+			syncMobileRouteShell(this.shellEl, this.mobileRoute);
+			if (tab !== 'home') {
+				this.mobileBottomSheet?.close();
+			}
 		}
 		const isHome = tab === 'home';
 		this.homePaneEl?.toggleClass('is-hidden', !isHome);
@@ -749,7 +758,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-bookmarks')
 			?.toggleClass('is-hidden', tab !== 'bookmarks');
-		this.paneStackEl?.toggleClass('is-bookmarks-active', tab === 'bookmarks');
+		this.paneStackEl?.toggleClass('is-stack-active', isMobileStackRoute(this.mobileRoute));
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-settings')
 			?.toggleClass('is-hidden', tab !== 'settings');
@@ -767,7 +776,6 @@ export class SpeedReaderAiModal extends Modal {
 		);
 		this.shellEl?.toggleClass('is-preferences-only', this.readerOpen.kind === 'preferences');
 		if (this.mobileReader) {
-			this.shellEl?.toggleClass('speed-reader-ai-mobile-bookmarks', tab === 'bookmarks');
 			this.syncMobileChrome(this.state);
 		}
 
@@ -870,7 +878,6 @@ export class SpeedReaderAiModal extends Modal {
 
 	showDictionaryLoading(word: string): void {
 		if (this.mobileReader) {
-			this.mobilePeekSheet?.close();
 			this.mobileBottomSheet?.close();
 			this.mobileDictionarySheet?.showLoading(word);
 			return;
@@ -886,29 +893,18 @@ export class SpeedReaderAiModal extends Modal {
 		this.dictionaryOverlay?.showOutcome(outcome);
 	}
 
-	private openMobileMenu(initialTab: 'chapters' | 'reading' = 'chapters'): void {
-		this.mobilePeekSheet?.close();
+	private openMobileMenu(): void {
 		this.dismissDictionaryUi(false);
-		this.mobileBottomSheet?.open({ initialMenuTab: initialTab });
-	}
-
-	private openMobilePeek(): void {
-		if (this.state?.isPlaying) {
-			return;
-		}
-		this.mobileBottomSheet?.close();
-		this.dismissDictionaryUi(false);
-		this.mobilePeekSheet?.open();
+		this.mobileBottomSheet?.open();
 	}
 
 	private closeMobileOverlays(): void {
-		this.mobilePeekSheet?.close();
 		this.mobileBottomSheet?.close();
 		this.dismissDictionaryUi(false);
 	}
 
 	private isMobileOverlayOpen(): boolean {
-		return this.mobileMenuOpen || this.mobilePeekOpen || this.mobileDictionaryOpen;
+		return this.mobileMenuOpen || this.mobileDictionaryOpen;
 	}
 
 	enginePauseForLookup(): void {
@@ -1246,9 +1242,6 @@ export class SpeedReaderAiModal extends Modal {
 		if (this.isDictionaryOverlayVisible()) {
 			return true;
 		}
-		if (this.mobilePeekOpen) {
-			return true;
-		}
 		if (this.mobileMenuOpen) {
 			return true;
 		}
@@ -1261,7 +1254,6 @@ export class SpeedReaderAiModal extends Modal {
 			preferencesOnly: this.readerOpen.kind === 'preferences',
 			dictionaryVisible: this.isDictionaryOverlayVisible(),
 			coachMarksOpen: this.mobileCoachOpen,
-			peekSheetOpen: this.mobilePeekOpen,
 			bottomSheetOpen: this.mobileMenuOpen,
 			focusMode: this.focusMode
 		};
@@ -1275,15 +1267,11 @@ export class SpeedReaderAiModal extends Modal {
 			case 'dismiss-coach-marks':
 				this.mobileCoachMarks?.dismiss();
 				break;
-			case 'close-peek-sheet':
-				this.mobilePeekSheet?.close();
-				break;
 			case 'close-bottom-sheet':
 				this.mobileBottomSheet?.close();
 				break;
 			case 'go-home':
-				this.setActiveTab('home');
-				this.refocusContent();
+				this.goToReadingRoot();
 				break;
 			case 'exit-focus-mode':
 				this.setFocusMode(false);
@@ -1638,8 +1626,6 @@ export class SpeedReaderAiModal extends Modal {
 			reader: { ...this.settings.reader, wpm: newWpm }
 		};
 		this.engine.setSettings(this.settings);
-		this.mobilePeekSheet?.refresh();
-		this.mobileBottomSheet?.refreshReadingControls();
 	}
 
 	private setPlaybackMode(mode: PlaybackMode) {
@@ -1659,8 +1645,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.applyFontSize();
 		this.applyContextLineFontSize();
 		this.engine.setSettings(this.settings);
-		this.mobilePeekSheet?.refresh();
-		this.mobileBottomSheet?.refreshReadingControls();
 	}
 
 	private applyFontSize() {
@@ -1738,8 +1722,8 @@ export class SpeedReaderAiModal extends Modal {
 		if (!this.mobileReader || !this.shellEl) {
 			return;
 		}
-		const isHome = this.activeTab === 'home';
-		const playing = Boolean(state?.isPlaying && !state.finished && isHome);
+		const isReadingRoot = this.mobileRoute === 'reading';
+		const playing = Boolean(state?.isPlaying && !state.finished && isReadingRoot);
 		if (playing) {
 			this.closeMobileOverlays();
 		}
@@ -1749,18 +1733,18 @@ export class SpeedReaderAiModal extends Modal {
 			this.isMobileOverlayOpen(),
 			this.containerEl
 		);
-		syncMobilePausedState(this.shellEl, !playing && isHome);
+		syncMobilePausedState(this.shellEl, !playing && isReadingRoot);
 		syncMobileProgressStrip(
 			this.mobileProgressStripEl,
-			playing || !isHome ? null : state,
+			playing || !isReadingRoot ? null : state,
 			this.settings.reader.display.showProgress
 		);
 		if (this.mobileCompactBar && state) {
 			this.mobileCompactBar.update(state, this.settings);
 			this.mobileCompactBar.setChapterNavVisible(this.canNavigateSections());
-			this.mobileCompactBar.setVisible(!playing && isHome);
+			this.mobileCompactBar.setVisible(!playing && isReadingRoot);
 		}
-		this.mobileActionBar?.setVisible(!playing && isHome);
+		this.mobileActionBar?.setVisible(!playing && isReadingRoot);
 	}
 
 	private mountMobileGesturesIfNeeded() {
@@ -1812,12 +1796,11 @@ export class SpeedReaderAiModal extends Modal {
 					}
 					return (
 						this.mobileMenuOpen ||
-						this.mobilePeekOpen ||
 						this.mobileCoachOpen ||
 						this.isDictionaryOverlayVisible()
 					);
 				},
-				isHomeActive: () => this.activeTab === 'home',
+				isHomeActive: () => this.mobileRoute === 'reading',
 				isPlaying: () =>
 					Boolean(this.state?.isPlaying && !this.state.finished)
 			}

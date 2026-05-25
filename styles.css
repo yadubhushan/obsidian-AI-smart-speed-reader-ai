@@ -1376,26 +1376,115 @@
 	padding-top: var(--speed-reader-ai-mobile-compact-bar-height);
 }
 
-.speed-reader-ai-mobile .speed-reader-ai-pane-stack.is-bookmarks-active {
+.speed-reader-ai-mobile .speed-reader-ai-pane-stack.is-stack-active {
 	padding-top: 0;
 }
 
-.speed-reader-ai-mobile-bookmarks .speed-reader-ai-mobile-compact-bar,
-.speed-reader-ai-mobile-bookmarks .speed-reader-ai-mobile-action-bar {
+.speed-reader-ai-mobile[data-mobile-route]:not([data-mobile-route='reading']) .speed-reader-ai-mobile-compact-bar,
+.speed-reader-ai-mobile[data-mobile-route]:not([data-mobile-route='reading']) .speed-reader-ai-mobile-action-bar {
 	display: none;
 }
 
-.speed-reader-ai-mobile-bookmarks .speed-reader-ai-bookmarks-header-play,
-.speed-reader-ai-mobile-bookmarks .speed-reader-ai-bookmarks-header-subtitle {
-	display: none;
-}
-
-.speed-reader-ai-mobile-bookmarks .speed-reader-ai-pane-stack {
+.speed-reader-ai-mobile[data-mobile-route]:not([data-mobile-route='reading']) .speed-reader-ai-pane-stack {
 	padding-top: 0;
 }
 
-.speed-reader-ai-mobile-bookmarks .speed-reader-ai-bookmarks-scroll {
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-header-play,
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-header-subtitle {
+	display: none;
+}
+
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-scroll {
 	padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.speed-reader-ai-mobile-stack-header {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+	padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1rem 0.75rem;
+	border-bottom: 1px solid var(--sr-border, var(--background-modifier-border));
+	background: var(--background-primary);
+}
+
+.speed-reader-ai-mobile-stack-back {
+	appearance: none;
+	border: none;
+	background: transparent;
+	color: var(--interactive-accent);
+	cursor: pointer;
+	font-size: 1.75rem;
+	line-height: 1;
+	min-width: 44px;
+	min-height: 44px;
+	padding: 0;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-mobile-stack-title {
+	flex: 1;
+	min-width: 0;
+	font-size: 1.1rem;
+	font-weight: var(--font-bold);
+	color: var(--sr-text, var(--text-normal));
+}
+
+.speed-reader-ai-mobile-stack-body {
+	flex: 1;
+	min-height: 0;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane-content,
+.speed-reader-ai-mobile .speed-reader-ai-pane-settings,
+.speed-reader-ai-mobile .speed-reader-ai-pane-advanced,
+.speed-reader-ai-mobile .speed-reader-ai-pane-shortcuts {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	overflow: hidden;
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane-content .speed-reader-ai-content-panel,
+.speed-reader-ai-mobile .speed-reader-ai-mobile-stack-body {
+	overflow: auto;
+	padding: 1rem 1.25rem;
+	padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-pane-content .speed-reader-ai-content-panel {
+	flex: 1;
+	min-height: 0;
+}
+
+.speed-reader-ai-mobile-sheet-more {
+	padding: 0 1rem 1rem;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-mobile-sheet-section-title {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 0.5rem;
+}
+
+.speed-reader-ai-mobile-sheet-more-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.speed-reader-ai-mobile-sheet-more-btn {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	min-height: 44px;
+	padding: 0.5rem 0.75rem;
+	text-align: left;
 }
 
 .speed-reader-ai-mobile-paused .speed-reader-ai-pane-stack {
