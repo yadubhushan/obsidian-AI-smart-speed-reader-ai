@@ -102,13 +102,40 @@ function stripMarkdown(text: string): string {
 	return result;
 }
 
+export function splitGluedWordToken(raw: string): string[] {
+	const result: string[] = [];
+	let remaining = raw;
+	const gluedBoundary =
+		/^(.+?[.!?])(['"\u2019\u201d\u201c]*(?:['\u2018"]?[A-Z]|['\u2018"\u201c']).*)$/;
+
+	while (remaining.length > 0) {
+		const match = remaining.match(gluedBoundary);
+		if (!match?.[1] || !match[2]) {
+			result.push(remaining);
+			break;
+		}
+		result.push(match[1]);
+		remaining = match[2];
+	}
+
+	return result.filter((part) => part.length > 0);
+}
+
 function tokenize(text: string): { raw: string; start: number }[] {
 	const tokens: { raw: string; start: number }[] = [];
 	const pattern = /\S+/g;
 	let match = pattern.exec(text);
 
 	while (match !== null) {
-		tokens.push({ raw: match[0], start: match.index });
+		const rawToken = match[0];
+		const tokenStart = match.index;
+		let offset = 0;
+
+		for (const part of splitGluedWordToken(rawToken)) {
+			tokens.push({ raw: part, start: tokenStart + offset });
+			offset += part.length;
+		}
+
 		match = pattern.exec(text);
 	}
 

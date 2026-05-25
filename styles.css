@@ -956,21 +956,21 @@
 	color: var(--sr-muted, var(--text-muted));
 }
 
-.speed-reader-ai-word-unit.is-line-start .speed-reader-ai-left,
-.speed-reader-ai-word-unit.is-line-start .speed-reader-ai-orp,
-.speed-reader-ai-word-unit.is-line-start .speed-reader-ai-right {
+.speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-start .speed-reader-ai-left,
+.speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-start .speed-reader-ai-orp,
+.speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-start .speed-reader-ai-right {
 	color: var(--text-success);
 	font-weight: 600;
 }
 
-.speed-reader-ai-word-unit.is-line-end:not(.is-line-start) .speed-reader-ai-left,
-.speed-reader-ai-word-unit.is-line-end:not(.is-line-start) .speed-reader-ai-orp,
-.speed-reader-ai-word-unit.is-line-end:not(.is-line-start) .speed-reader-ai-right {
+.speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-end:not(.is-line-start) .speed-reader-ai-left,
+.speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-end:not(.is-line-start) .speed-reader-ai-orp,
+.speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-end:not(.is-line-start) .speed-reader-ai-right {
 	color: var(--text-error);
 	font-weight: 600;
 }
 
-/* Line-by-line mode: full sentence, no ORP focal point */
+/* Line-by-line mode: flat text, last word accent, no focal guide */
 .speed-reader-ai-word-container.is-line-by-line::before,
 .speed-reader-ai-word-container.is-line-by-line::after {
 	display: none;
@@ -981,11 +981,19 @@
 	text-align: center;
 	max-width: min(42rem, 92vw);
 	line-height: 1.35;
+	gap: 0.8rem;
+}
+
+@media (min-width: 601px) {
+	.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-word {
+		gap: 1.35rem;
+	}
 }
 
 .speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-left,
 .speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-orp,
-.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-right {
+.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-right,
+.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-line-text {
 	min-width: 0;
 	text-align: inherit;
 	color: var(--sr-text, var(--text-normal));
@@ -994,6 +1002,14 @@
 
 .speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-orp {
 	color: var(--sr-text, var(--text-normal));
+	font-weight: inherit;
+}
+
+.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-word-unit.is-line-end .speed-reader-ai-left,
+.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-word-unit.is-line-end .speed-reader-ai-orp,
+.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-word-unit.is-line-end .speed-reader-ai-right,
+.speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-word-unit.is-line-end .speed-reader-ai-line-text {
+	color: var(--sr-line-accent, #F4A896);
 	font-weight: 500;
 }
 

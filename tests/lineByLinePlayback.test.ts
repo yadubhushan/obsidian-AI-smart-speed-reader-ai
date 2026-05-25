@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
 	applyLineByLineRewindBuffer,
+	effectiveLineChunkMax,
 	getLegacyLineChunk,
 	getManifestLineChunk,
+	partitionSentenceIntoEqualChunks,
+	partitionSentenceIntoChunks,
 	sumLegacyLineDelayMs,
 	sumManifestLineDelayMs,
+	LINE_BY_LINE_MIN_CHUNK_SIZE,
 	LINE_BY_LINE_REWIND_BUFFER_MULTIPLIER
 } from '../src/engine/lineByLinePlayback';
 import { buildSentenceUnits } from '../src/engine/lineRepeatPlayback';
@@ -32,6 +36,11 @@ function legacyNavWords(text: string) {
 }
 
 describe('lineByLinePlayback', () => {
+	it('uses max(chunkSize, 10) as the effective line chunk max', () => {
+		expect(effectiveLineChunkMax(1)).toBe(LINE_BY_LINE_MIN_CHUNK_SIZE);
+		expect(effectiveLineChunkMax(15)).toBe(15);
+	});
+
 	it('returns the full sentence as a legacy line chunk', () => {
 		const { words, navWords } = legacyNavWords('One two. Three four.');
 		const units = buildSentenceUnits(navWords);
@@ -39,7 +48,8 @@ describe('lineByLinePlayback', () => {
 		expect(getLegacyLineChunk(words, units, 1)).toEqual({
 			words: words.slice(0, 2),
 			endIndex: 2,
-			lineStartIndex: 0
+			lineStartIndex: 0,
+			lineEndSeekIndex: 1
 		});
 	});
 
@@ -55,7 +65,8 @@ describe('lineByLinePlayback', () => {
 		expect(getManifestLineChunk(stream, units, 1)).toEqual({
 			tokens: stream.slice(0, 2),
 			endIndex: 2,
-			lineStartIndex: 0
+			lineStartIndex: 0,
+			lineEndSeekIndex: 1
 		});
 	});
 
@@ -99,5 +110,46 @@ describe('lineByLinePlayback', () => {
 		const micropause = new MicropauseService(settings);
 
 		expect(sumManifestLineDelayMs(stream, settings, micropause)).toBe(200);
+	});
+
+	it('splits a 15-word sentence into equal 8+7 chunks', () => {
+		const wordSeekIndices = Array.from({ length: 15 }, (_, i) => i);
+		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0, 8]);
+	});
+
+	it('splits a 20-word sentence into equal 10+10 chunks', () => {
+		const wordSeekIndices = Array.from({ length: 20 }, (_, i) => i);
+		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0, 10]);
+	});
+
+	it('splits a 30-word sentence into equal 10+10+10 chunks', () => {
+		const wordSeekIndices = Array.from({ length: 30 }, (_, i) => i);
+		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0, 10, 20]);
+	});
+
+	it('keeps short sentences in a single chunk', () => {
+		const wordSeekIndices = Array.from({ length: 8 }, (_, i) => i);
+		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0]);
+	});
+
+	it('maps legacy partition helper to equal chunks', () => {
+		const texts = Array.from({ length: 20 }, (_, i) => `word${i + 1}`);
+		const puncts = texts.map(() => '');
+
+		expect(partitionSentenceIntoChunks(texts, puncts, 0, 19)).toEqual([0, 10]);
+	});
+
+	it('returns the correct sub-chunk for a mid-sentence seek index', () => {
+		const wordsText = Array.from({ length: 20 }, (_, i) => `word${i + 1}`).join(' ') + '.';
+		const { words, navWords } = legacyNavWords(wordsText);
+		const units = buildSentenceUnits(navWords);
+
+		expect(getLegacyLineChunk(words, units, 16)).toEqual({
+			words: words.slice(10, 20),
+			endIndex: 20,
+			lineStartIndex: 10,
+			lineEndSeekIndex: 19
+		});
+		expect(getLegacyLineChunk(words, units, 16).words.length).toBe(10);
 	});
 });

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { stripMarkdown, parseDocument, splitWordForOrpDisplay } from '../src/services/textParser';
+import {
+	stripMarkdown,
+	parseDocument,
+	splitWordForOrpDisplay,
+	splitGluedWordToken
+} from '../src/services/textParser';
 
 describe('splitWordForOrpDisplay', () => {
 	it('preserves the space in progressive bundles like But we', () => {
@@ -202,6 +207,20 @@ describe('parseDocument', () => {
 		const doc = parseDocument('Hello world.');
 		expect(doc.words[1]!.word).toBe('world');
 		expect(doc.words[1]!.punctuation).toBe('.');
+	});
+
+	it('splits glued dialogue tokens at sentence boundaries', () => {
+		expect(splitGluedWordToken("charming.''That")).toEqual(['charming.', "''That"]);
+		const doc = parseDocument("They are perfectly charming.''That entirely depends.");
+		expect(doc.words.map((word) => word.raw)).toEqual([
+			'They',
+			'are',
+			'perfectly',
+			'charming.',
+			"''That",
+			'entirely',
+			'depends.'
+		]);
 	});
 
 	it('preserves comma punctuation', () => {

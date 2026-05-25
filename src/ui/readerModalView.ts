@@ -2139,7 +2139,13 @@ export class SpeedReaderAiModal extends Modal {
 		const seekIndices = state.chunkSeekIndices ?? state.chunk.map((_, i) => state.currentIndex + i);
 		for (let i = 0; i < state.chunk.length; i++) {
 			const word = state.chunk[i]!;
-			this.renderWordUnit(wordWrapper, word, state, seekIndices[i] ?? state.currentIndex + i);
+			this.renderWordUnit(
+				wordWrapper,
+				word,
+				state,
+				seekIndices[i] ?? state.currentIndex + i,
+				state.playbackMode === 'lineByLine' && i === state.chunk.length - 1
+			);
 		}
 	}
 
@@ -2147,7 +2153,8 @@ export class SpeedReaderAiModal extends Modal {
 		parent: HTMLElement,
 		word: WordData,
 		state: ReaderState,
-		seekIndex: number
+		seekIndex: number,
+		isLineByLineLastWord = false
 	) {
 		const unit = parent.createSpan({ cls: 'speed-reader-ai-word-unit' });
 		if (
@@ -2158,12 +2165,22 @@ export class SpeedReaderAiModal extends Modal {
 			unit.addClass('is-line-start');
 		}
 		if (
-			isLinePlaybackMode(state.playbackMode) &&
-			state.lineEndSeekIndex !== undefined &&
-			seekIndex === state.lineEndSeekIndex
+			(state.playbackMode === 'lineByLine' && isLineByLineLastWord) ||
+			(isLinePlaybackMode(state.playbackMode) &&
+				state.lineEndSeekIndex !== undefined &&
+				seekIndex === state.lineEndSeekIndex)
 		) {
 			unit.addClass('is-line-end');
 		}
+
+		if (state.playbackMode === 'lineByLine') {
+			unit.createSpan({
+				cls: 'speed-reader-ai-line-text',
+				text: `${word.word}${word.punctuation}`
+			});
+			return;
+		}
+
 		const { before, orp, after } = splitWordForOrpDisplay(word.word, word.orpIndex);
 
 		unit.createSpan({ cls: 'speed-reader-ai-left', text: before });

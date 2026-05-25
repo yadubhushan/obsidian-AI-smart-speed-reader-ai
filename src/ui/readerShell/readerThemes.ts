@@ -22,6 +22,7 @@ export interface ReaderThemeTokens {
 	readingBg: string;
 	readingSurface: string;
 	readingLine: string;
+	lineAccent: string;
 	accent: string;
 	accentSoft: string;
 	accentDark: string;
@@ -57,6 +58,7 @@ const DARK_TOKENS: ReaderThemeTokens = {
 	readingBg: '#0d0f14',
 	readingSurface: '#181c24',
 	readingLine: '#2f3844',
+	lineAccent: '#F4A896',
 	accent: '#d966ff',
 	accentSoft: '#2a1838',
 	accentDark: '#9b2dff',
@@ -92,6 +94,7 @@ const LIGHT_TOKENS: ReaderThemeTokens = {
 	readingBg: '#f8faf9',
 	readingSurface: '#ffffff',
 	readingLine: '#dfe8e8',
+	lineAccent: '#D4645A',
 	accent: '#a100ff',
 	accentSoft: '#f4e8ff',
 	accentDark: '#7b00c8',
@@ -147,6 +150,7 @@ export function applyReaderThemeToElement(
 	el.style.setProperty('--sr-reading-bg', tokens.readingBg);
 	el.style.setProperty('--sr-reading-surface', tokens.readingSurface);
 	el.style.setProperty('--sr-reading-line', tokens.readingLine);
+	el.style.setProperty('--sr-line-accent', tokens.lineAccent);
 	el.style.setProperty('--sr-accent', tokens.accent);
 	el.style.setProperty('--sr-accent-soft', tokens.accentSoft);
 	el.style.setProperty('--sr-accent-dark', tokens.accentDark);

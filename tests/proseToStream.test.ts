@@ -38,4 +38,9 @@ describe('proseToStream', () => {
 		const stream = bodyToStream('One paragraph only.');
 		expect(stream.every((t) => t.kind === 'word')).toBe(true);
 	});
+
+	it('proseToWordTokens splits glued dialogue tokens', () => {
+		const tokens = proseToWordTokens("charming.''That");
+		expect(tokens.map((token) => token.text)).toEqual(['charming.', "''That"]);
+	});
 });
