@@ -96,8 +96,8 @@ describe('migrateFlatSettings', () => {
 		).toBe('rsvp');
 	});
 
-	it('defaults progressiveRsvpMaxWordLength to 3 and clamps out-of-range values', () => {
-		expect(validateSettings(null, defaultCatalog).reader.progressiveRsvpMaxWordLength).toBe(3);
+	it('defaults progressiveRsvpMaxWordLength to 4 and clamps out-of-range values', () => {
+		expect(validateSettings(null, defaultCatalog).reader.progressiveRsvpMaxWordLength).toBe(4);
 		expect(
 			validateSettings(
 				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 5 } },

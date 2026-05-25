@@ -8,6 +8,27 @@ export function calculateORP(word: string): number {
 	return 3;
 }
 
+export function resolveDisplayOrpIndex(text: string, preferredIndex?: number): number {
+	if (text.length === 0) {
+		return 0;
+	}
+	const index = preferredIndex ?? calculateORP(text);
+	if (text[index] && !/\s/.test(text[index]!)) {
+		return index;
+	}
+	for (let i = index + 1; i < text.length; i++) {
+		if (!/\s/.test(text[i]!)) {
+			return i;
+		}
+	}
+	for (let i = index - 1; i >= 0; i--) {
+		if (!/\s/.test(text[i]!)) {
+			return i;
+		}
+	}
+	return 0;
+}
+
 function stripTrailingPunctuation(word: string): { clean: string; punctuation: string } {
 	const match = word.match(/^(.+?)([.,!?;:)}\]"']+)$/);
 	if (match && match[1] && match[2]) {

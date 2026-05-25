@@ -2,8 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseDocument } from '../src/services/textParser';
-import { calculateORP } from '../src/services/textParser';
+import { parseDocument, resolveDisplayOrpIndex } from '../src/services/textParser';
 import {
 	collectProgressiveLegacyBundleTexts,
 	getProgressiveLegacyChunk,
@@ -53,7 +52,35 @@ describe('progressiveRsvp', () => {
 
 		expect(display).toHaveLength(1);
 		expect(display[0]?.word).toBe('I am');
-		expect(display[0]?.orpIndex).toBe(calculateORP('I am'));
+		expect(display[0]?.orpIndex).toBe(resolveDisplayOrpIndex('I am'));
+		expect(display[0]?.word[display[0]!.orpIndex]).toBe('a');
+	});
+
+	it('keeps spaces visible by avoiding ORP on whitespace in bundled phrases', () => {
+		const { words } = parseDocument('of its tail');
+		const ofIndex = words.findIndex((word) => word.word === 'of');
+		const { words: bundle } = getProgressiveLegacyChunk(words, ofIndex, 3);
+		const display = progressiveWordsToDisplayChunk(bundle);
+
+		expect(display).toHaveLength(1);
+		expect(display[0]?.word).toBe('of its');
+		expect(display[0]?.word[display[0]!.orpIndex]).not.toMatch(/\s/);
+		expect(display[0]?.orpIndex).toBe(3);
+		expect(display[0]?.word[display[0]!.orpIndex]).toBe('i');
+	});
+
+	it('uses combined ORP for progressive manifest display token', () => {
+		const token = progressivePrimaryDisplayToken([
+			{ kind: 'word', text: 'to' },
+			{ kind: 'word', text: 'the' }
+		]);
+
+		expect(token).toEqual({
+			kind: 'word',
+			text: 'to the',
+			orpIndex: resolveDisplayOrpIndex('to the')
+		});
+		expect(token.kind === 'word' && token.text[token.orpIndex]).toBe('t');
 	});
 
 	it('bundles manifest word tokens the same way', () => {
@@ -91,19 +118,6 @@ describe('progressiveRsvp', () => {
 		const pause = getProgressiveWordTokensChunk(stream, 1, 3);
 		expect(pause.tokens[0]?.kind).toBe('pause');
 		expect(pause.endIndex).toBe(2);
-	});
-
-	it('uses combined ORP for progressive manifest display token', () => {
-		const token = progressivePrimaryDisplayToken([
-			{ kind: 'word', text: 'to' },
-			{ kind: 'word', text: 'the' }
-		]);
-
-		expect(token).toEqual({
-			kind: 'word',
-			text: 'to the',
-			orpIndex: calculateORP('to the')
-		});
 	});
 });
 

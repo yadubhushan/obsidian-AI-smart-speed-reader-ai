@@ -187,7 +187,7 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 			showProgress: true
 		},
 		defaultPlaybackMode: 'rsvp',
-		progressiveRsvpMaxWordLength: 3,
+		progressiveRsvpMaxWordLength: 4,
 		lineRepeatGapMs: 600,
 		enableMicropause: true,
 		micropauseIntensity: 1.5,

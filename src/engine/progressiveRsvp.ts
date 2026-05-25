@@ -1,6 +1,6 @@
 import type { WordData } from '../types';
 import type { StreamToken } from '../types/processedDocument';
-import { calculateORP } from '../services/textParser';
+import { resolveDisplayOrpIndex } from '../services/textParser';
 import { primaryDisplayToken, tokensToDisplayChunk } from './manifestPlayback';
 
 export function wordLetterCount(text: string): number {
@@ -95,7 +95,7 @@ export function progressiveWordsToDisplayChunk(words: WordData[]): WordData[] {
 			raw: words.map((word) => word.raw).join(' '),
 			word: combined,
 			punctuation: last.punctuation,
-			orpIndex: calculateORP(combined),
+			orpIndex: resolveDisplayOrpIndex(combined),
 			start: words[0]!.start,
 			end: last.end
 		}
@@ -114,7 +114,7 @@ export function progressiveTokensToDisplayChunk(tokens: StreamToken[]): WordData
 			raw: combined,
 			word: combined,
 			punctuation: '',
-			orpIndex: calculateORP(combined),
+			orpIndex: resolveDisplayOrpIndex(combined),
 			start: 0,
 			end: combined.length
 		}
@@ -133,7 +133,7 @@ export function progressivePrimaryDisplayToken(
 	return {
 		kind: 'word',
 		text: combined,
-		orpIndex: calculateORP(combined)
+		orpIndex: resolveDisplayOrpIndex(combined)
 	};
 }
 

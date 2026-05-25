@@ -16,6 +16,7 @@ import { mountPrepareControls, type PrepareControlsHandle } from './prepareContr
 import { mountChapterNavControls, type ChapterNavControlsHandle } from './chapterNavControls';
 import { mountSectionNavControls, type SectionNavControlsHandle } from './sectionNavControls';
 import { applyNoteResumePosition } from '../reader/readingProgress';
+import { resolveDisplayOrpIndex } from '../services/textParser';
 import type { SpeedReaderOpen } from './speedReaderOpen';
 import { StructuredReaderSession, type PlaybackLoadKind } from './structuredReaderSession';
 import { bookIndexToProcessedDocument } from '../formats/bookIndexToProcessedDocument';
@@ -2041,9 +2042,10 @@ export class SpeedReaderAiModal extends Modal {
 		) {
 			unit.addClass('is-line-end');
 		}
-		const before = word.word.slice(0, word.orpIndex);
-		const orp = word.word.charAt(word.orpIndex);
-		const after = word.word.slice(word.orpIndex + 1);
+		const orpIndex = resolveDisplayOrpIndex(word.word, word.orpIndex);
+		const before = word.word.slice(0, orpIndex);
+		const orp = word.word.charAt(orpIndex);
+		const after = word.word.slice(orpIndex + 1);
 
 		unit.createSpan({ cls: 'speed-reader-ai-left', text: before });
 		unit.createSpan({ cls: 'speed-reader-ai-orp', text: orp });
