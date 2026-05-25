@@ -432,16 +432,23 @@ describe('RSVPEngine manifest playback', () => {
 
 	describe('line by line mode', () => {
 		it('advances to next sentence at end instead of looping', () => {
+			engine.setSettings({
+				...settings,
+				reader: { ...settings.reader, enableMicropause: false, wpm: 300 }
+			});
 			engine.setPlaybackMode('lineByLine');
 			engine.loadText('One two. Three four.');
 			engine.play();
 
-			const baseDelay = 60000 / settings.reader.wpm;
-			vi.advanceTimersByTime(baseDelay * 2 + 50);
-			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(1);
+			expect(stateChanges[stateChanges.length - 1]!.chunk.length).toBe(2);
+			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(0);
 
-			vi.advanceTimersByTime(baseDelay + 50);
+			const baseDelay = 60000 / 300;
+			vi.advanceTimersByTime(baseDelay * 2 + 50);
 			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(2);
+
+			vi.advanceTimersByTime(baseDelay * 2 + 50);
+			expect(stateChanges[stateChanges.length - 1]!.finished).toBe(true);
 			expect(stateChanges[stateChanges.length - 1]!.playbackMode).toBe('lineByLine');
 		});
 

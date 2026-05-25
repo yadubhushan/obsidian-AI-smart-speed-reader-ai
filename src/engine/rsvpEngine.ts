@@ -40,6 +40,13 @@ import {
 	progressiveWordsToDisplayChunk
 } from './progressiveRsvp';
 import {
+	applyLineByLineRewindBuffer,
+	getLegacyLineChunk,
+	getManifestLineChunk,
+	sumLegacyLineDelayMs,
+	sumManifestLineDelayMs
+} from './lineByLinePlayback';
+import {
 	buildSentenceUnits,
 	computeLineByLineAdvance,
 	computeLineRepeatAdvance,
@@ -120,6 +127,7 @@ export class RSVPEngine {
 	private playbackMode: PlaybackMode;
 	private sentenceUnits: SentenceUnit[] = [];
 	private activeParagraphStarts: number[] | null = null;
+	private lineByLineRewindBufferActive = false;
 
 	constructor(
 		settings: SpeedReaderAiSettings,
@@ -271,6 +279,7 @@ export class RSVPEngine {
 		const seekIndex = this.getCurrentSeekIndex();
 		const unitIndex = findSentenceUnitForSeekIndex(units, seekIndex);
 		const prevIndex = prevLineUnitIndex(units, unitIndex);
+		this.lineByLineRewindBufferActive = this.playbackMode === 'lineByLine';
 		this.seekToSentenceUnit(units[prevIndex]!);
 	}
 
@@ -998,10 +1007,19 @@ export class RSVPEngine {
 			return;
 		}
 
+		const { endIndex, lineStartIndex } = getLegacyLineChunk(
+			this.words,
+			this.sentenceUnits,
+			this.currentIndex
+		);
+		if (this.currentIndex !== lineStartIndex) {
+			this.currentIndex = lineStartIndex;
+		}
+
 		this.emitState(false);
 
-		const delay = this.getCurrentDelay();
-		const nextIndex = this.currentIndex + this.settings.reader.chunkSize;
+		const delay = this.getLineByLineDelay();
+		const nextIndex = endIndex;
 
 		this.timeoutId = window.setTimeout(() => {
 			this.timeoutId = null;
@@ -1047,14 +1065,18 @@ export class RSVPEngine {
 			return;
 		}
 
+		const { tokens, endIndex, lineStartIndex } = getManifestLineChunk(
+			stream,
+			this.sentenceUnits,
+			this.currentTokenIndex
+		);
+		if (this.currentTokenIndex !== lineStartIndex) {
+			this.currentTokenIndex = lineStartIndex;
+		}
+
 		this.emitState(false);
 
-		const { tokens, endIndex } = getWordTokensChunk(
-			stream,
-			this.currentTokenIndex,
-			this.settings.reader.chunkSize
-		);
-		const delay = getDelayForTokens(tokens, this.settings, this.micropauseService);
+		const delay = this.getLineByLineDelayForTokens(tokens);
 
 		this.timeoutId = window.setTimeout(() => {
 			this.timeoutId = null;
@@ -1148,6 +1170,10 @@ export class RSVPEngine {
 			return 0;
 		}
 
+		if (this.playbackMode === 'lineByLine') {
+			return this.getLineByLineDelay();
+		}
+
 		const baseDelay = 60000 / this.settings.reader.wpm;
 		let multiplier = 1;
 
@@ -1164,6 +1190,39 @@ export class RSVPEngine {
 		}
 
 		return baseDelay * multiplier;
+	}
+
+	private getLineByLineDelay(): number {
+		if (this.playbackSource === 'manifest') {
+			const stream = this.getActiveStream();
+			const { tokens } = getManifestLineChunk(
+				stream,
+				this.sentenceUnits,
+				this.currentTokenIndex
+			);
+			return this.applyLineByLineRewindBufferIfNeeded(
+				sumManifestLineDelayMs(tokens, this.settings, this.micropauseService)
+			);
+		}
+
+		const { words } = getLegacyLineChunk(this.words, this.sentenceUnits, this.currentIndex);
+		return this.applyLineByLineRewindBufferIfNeeded(
+			sumLegacyLineDelayMs(words, this.settings, this.micropauseService)
+		);
+	}
+
+	private getLineByLineDelayForTokens(tokens: StreamToken[]): number {
+		return this.applyLineByLineRewindBufferIfNeeded(
+			sumManifestLineDelayMs(tokens, this.settings, this.micropauseService)
+		);
+	}
+
+	private applyLineByLineRewindBufferIfNeeded(delayMs: number): number {
+		const buffered = applyLineByLineRewindBuffer(delayMs, this.lineByLineRewindBufferActive);
+		if (this.lineByLineRewindBufferActive) {
+			this.lineByLineRewindBufferActive = false;
+		}
+		return buffered;
 	}
 
 	private crossesParagraphBoundary(chunk: WordData[]): boolean {
@@ -1218,6 +1277,10 @@ export class RSVPEngine {
 	}
 
 	private calculateRemainingMs(): number {
+		if (this.playbackMode === 'lineByLine') {
+			return this.calculateLineByLineRemainingMs();
+		}
+
 		if (this.playbackSource === 'manifest') {
 			const stream = this.getActiveStream();
 			let total = 0;
@@ -1256,7 +1319,37 @@ export class RSVPEngine {
 		return total;
 	}
 
+	private calculateLineByLineRemainingMs(): number {
+		if (this.sentenceUnits.length === 0) {
+			return 0;
+		}
+
+		const seekIndex = this.getCurrentSeekIndex();
+		const unitIndex = findSentenceUnitForSeekIndex(this.sentenceUnits, seekIndex);
+		let total = 0;
+
+		if (this.playbackSource === 'manifest') {
+			const stream = this.getActiveStream();
+			for (let i = unitIndex; i < this.sentenceUnits.length; i++) {
+				const { tokens } = getManifestLineChunk(stream, this.sentenceUnits, this.sentenceUnits[i]!.startSeekIndex);
+				total += sumManifestLineDelayMs(tokens, this.settings, this.micropauseService);
+			}
+			return total;
+		}
+
+		for (let i = unitIndex; i < this.sentenceUnits.length; i++) {
+			const { words } = getLegacyLineChunk(this.words, this.sentenceUnits, this.sentenceUnits[i]!.startSeekIndex);
+			total += sumLegacyLineDelayMs(words, this.settings, this.micropauseService);
+		}
+
+		return total;
+	}
+
 	private getChunkSeekIndices(): number[] {
+		if (this.playbackMode === 'lineByLine') {
+			return this.getLineByLineChunkSeekIndices();
+		}
+
 		if (this.playbackSource === 'manifest') {
 			const stream = this.getActiveStream();
 			const { tokens, endIndex } = this.resolveManifestChunk(this.currentTokenIndex);
@@ -1287,6 +1380,44 @@ export class RSVPEngine {
 		return indices.length > 0 ? indices : [Math.min(this.currentIndex, Math.max(this.words.length - 1, 0))];
 	}
 
+	private getLineByLineChunkSeekIndices(): number[] {
+		const seekIndex = this.getCurrentSeekIndex();
+
+		if (this.playbackSource === 'manifest') {
+			const stream = this.getActiveStream();
+			const { endIndex, lineStartIndex } = getManifestLineChunk(
+				stream,
+				this.sentenceUnits,
+				seekIndex
+			);
+			const indices: number[] = [];
+			for (let i = lineStartIndex; i < endIndex; i++) {
+				const token = stream[i];
+				if (token?.kind === 'word') {
+					indices.push(i);
+				} else if (indices.length === 0 && token) {
+					indices.push(i);
+				}
+			}
+			return indices.length > 0
+				? indices
+				: [Math.min(seekIndex, Math.max(stream.length - 1, 0))];
+		}
+
+		const { endIndex, lineStartIndex } = getLegacyLineChunk(
+			this.words,
+			this.sentenceUnits,
+			seekIndex
+		);
+		const indices: number[] = [];
+		for (let i = lineStartIndex; i < endIndex; i++) {
+			indices.push(i);
+		}
+		return indices.length > 0
+			? indices
+			: [Math.min(seekIndex, Math.max(this.words.length - 1, 0))];
+	}
+
 	private getEffectiveChunkSize(): number {
 		if (this.playbackMode === 'rsvp') {
 			return 1;
@@ -1301,6 +1432,11 @@ export class RSVPEngine {
 				startIndex,
 				this.settings.reader.progressiveRsvpMaxWordLength
 			);
+		}
+
+		if (this.playbackMode === 'lineByLine') {
+			const { words, endIndex } = getLegacyLineChunk(this.words, this.sentenceUnits, startIndex);
+			return { words, endIndex };
 		}
 
 		const endIndex = Math.min(startIndex + this.getEffectiveChunkSize(), this.words.length);
@@ -1318,6 +1454,11 @@ export class RSVPEngine {
 				startIndex,
 				this.settings.reader.progressiveRsvpMaxWordLength
 			);
+		}
+
+		if (this.playbackMode === 'lineByLine') {
+			const { tokens, endIndex } = getManifestLineChunk(stream, this.sentenceUnits, startIndex);
+			return { tokens, endIndex };
 		}
 
 		return getWordTokensChunk(stream, startIndex, this.getEffectiveChunkSize());

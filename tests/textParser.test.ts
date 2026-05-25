@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { stripMarkdown, parseDocument } from '../src/services/textParser';
+import { stripMarkdown, parseDocument, splitWordForOrpDisplay } from '../src/services/textParser';
+
+describe('splitWordForOrpDisplay', () => {
+	it('preserves the space in progressive bundles like But we', () => {
+		const parts = splitWordForOrpDisplay('But we');
+		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('But we');
+		expect(parts.orp).toBe('t ');
+		expect(parts.after).toBe('we');
+	});
+
+	it('preserves the space in I am', () => {
+		const parts = splitWordForOrpDisplay('I am');
+		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('I am');
+	});
+
+	it('preserves the space in of its', () => {
+		const parts = splitWordForOrpDisplay('of its');
+		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('of its');
+	});
+});
 
 describe('stripMarkdown', () => {
 	it('strips YAML frontmatter', () => {

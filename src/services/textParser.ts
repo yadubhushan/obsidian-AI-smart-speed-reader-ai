@@ -29,6 +29,30 @@ export function resolveDisplayOrpIndex(text: string, preferredIndex?: number): n
 	return 0;
 }
 
+export function splitWordForOrpDisplay(
+	text: string,
+	preferredOrpIndex?: number
+): { before: string; orp: string; after: string } {
+	if (text.length === 0) {
+		return { before: '', orp: '', after: '' };
+	}
+
+	const orpIndex = resolveDisplayOrpIndex(text, preferredOrpIndex);
+	let before = text.slice(0, orpIndex);
+	let orp = text.charAt(orpIndex);
+	let after = text.slice(orpIndex + 1);
+
+	// Keep inter-word spaces attached to the ORP span so they are not collapsed
+	// when `after` would otherwise start with whitespace in inline-flex layout.
+	const leadingSpaces = after.match(/^[ \t]+/);
+	if (leadingSpaces) {
+		orp += leadingSpaces[0];
+		after = after.slice(leadingSpaces[0].length);
+	}
+
+	return { before, orp, after };
+}
+
 function stripTrailingPunctuation(word: string): { clean: string; punctuation: string } {
 	const match = word.match(/^(.+?)([.,!?;:)}\]"']+)$/);
 	if (match && match[1] && match[2]) {

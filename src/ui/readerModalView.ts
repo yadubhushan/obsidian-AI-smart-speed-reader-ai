@@ -16,7 +16,7 @@ import { mountPrepareControls, type PrepareControlsHandle } from './prepareContr
 import { mountChapterNavControls, type ChapterNavControlsHandle } from './chapterNavControls';
 import { mountSectionNavControls, type SectionNavControlsHandle } from './sectionNavControls';
 import { applyNoteResumePosition } from '../reader/readingProgress';
-import { resolveDisplayOrpIndex } from '../services/textParser';
+import { splitWordForOrpDisplay } from '../services/textParser';
 import type { SpeedReaderOpen } from './speedReaderOpen';
 import { StructuredReaderSession, type PlaybackLoadKind } from './structuredReaderSession';
 import { bookIndexToProcessedDocument } from '../formats/bookIndexToProcessedDocument';
@@ -1827,6 +1827,7 @@ export class SpeedReaderAiModal extends Modal {
 			window.setTimeout(() => this.forceClose(), 400);
 		}
 
+		this.wordContainer?.toggleClass('is-line-by-line', state.playbackMode === 'lineByLine');
 		this.renderWord(state);
 		this.header?.update(state);
 		this.controlBar?.update(state);
@@ -2163,10 +2164,7 @@ export class SpeedReaderAiModal extends Modal {
 		) {
 			unit.addClass('is-line-end');
 		}
-		const orpIndex = resolveDisplayOrpIndex(word.word, word.orpIndex);
-		const before = word.word.slice(0, orpIndex);
-		const orp = word.word.charAt(orpIndex);
-		const after = word.word.slice(orpIndex + 1);
+		const { before, orp, after } = splitWordForOrpDisplay(word.word, word.orpIndex);
 
 		unit.createSpan({ cls: 'speed-reader-ai-left', text: before });
 		unit.createSpan({ cls: 'speed-reader-ai-orp', text: orp });

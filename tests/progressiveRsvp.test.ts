@@ -69,6 +69,16 @@ describe('progressiveRsvp', () => {
 		expect(display[0]?.word[display[0]!.orpIndex]).toBe('i');
 	});
 
+	it('bundles But we for progressive display with an internal space', () => {
+		const { words } = parseDocument('But we never');
+		const butIndex = words.findIndex((word) => word.word === 'But');
+		const { words: bundle } = getProgressiveLegacyChunk(words, butIndex, 3);
+		const display = progressiveWordsToDisplayChunk(bundle);
+
+		expect(display).toHaveLength(1);
+		expect(display[0]?.word).toBe('But we');
+	});
+
 	it('uses combined ORP for progressive manifest display token', () => {
 		const token = progressivePrimaryDisplayToken([
 			{ kind: 'word', text: 'to' },
