@@ -4,14 +4,14 @@ export interface ShortcutsPaneHandle {
 
 const SHORTCUT_ROWS: [string, string][] = [
 	['Space', 'Play / pause'],
-	['← / →', 'Rewind / forward (or prev/next line in line repeat)'],
+	['← / →', 'Rewind / forward (or prev/next line in line modes)'],
 	['Shift + ← / →', 'Previous / next section or chapter'],
 	['↑ / ↓', 'Increase / decrease WPM'],
 	['[ / ]', 'Decrease / increase font size'],
-	['L', 'Toggle RSVP / line repeat'],
+	['L', 'Cycle playback mode (RSVP → Progressive RSVP → Line by line → Line repeat)'],
 	['F', 'Toggle focus mode'],
 	['B', 'Create bookmark'],
-	['Shift + B', 'Open bookmark target'],
+	['Shift + B', 'Open saved bookmarks'],
 	['D', 'Look up current word'],
 	['Escape', 'Close reader']
 ];

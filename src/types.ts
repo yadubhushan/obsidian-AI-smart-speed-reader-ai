@@ -36,7 +36,7 @@ export type {
 } from './types/processedDocument';
 
 
-export type PlaybackMode = 'rsvp' | 'lineRepeat';
+export type PlaybackMode = 'rsvp' | 'progressiveRsvp' | 'lineByLine' | 'lineRepeat';
 
 export type ReaderColorScheme = 'dark' | 'light' | 'auto';
 export type LlmBackend = 'auto' | 'cursor-cli' | 'ai-providers' | 'openai-compatible';
@@ -72,6 +72,8 @@ export interface ReaderSettings {
 	textOrientation: ReaderTextOrientationSettings;
 	display: ReaderDisplaySettings;
 	defaultPlaybackMode: PlaybackMode;
+	/** Words with letter count ≤ threshold may bundle in Progressive RSVP mode. */
+	progressiveRsvpMaxWordLength: number;
 	lineRepeatGapMs: number;
 	enableMicropause: boolean;
 	micropauseIntensity: number;
@@ -185,6 +187,7 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 			showProgress: true
 		},
 		defaultPlaybackMode: 'rsvp',
+		progressiveRsvpMaxWordLength: 3,
 		lineRepeatGapMs: 600,
 		enableMicropause: true,
 		micropauseIntensity: 1.5,

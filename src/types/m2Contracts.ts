@@ -1,6 +1,6 @@
 export type SourceKind = 'book' | 'note';
 export type ReadingStatus = 'unread' | 'in_progress' | 'finished';
-export type PlaybackMode = 'rsvp' | 'lineRepeat';
+export type PlaybackMode = 'rsvp' | 'progressiveRsvp' | 'lineByLine' | 'lineRepeat';
 
 export interface BookPosition {
 	chapterId: string;

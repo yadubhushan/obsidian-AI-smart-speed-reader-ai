@@ -2,7 +2,7 @@ import {
 	mountMobileReadingControls,
 	type MobileReadingControlsHandle
 } from './mobileReadingControls';
-import type { ReaderState, SpeedReaderAiSettings } from '../../types';
+import type { PlaybackMode, ReaderState, SpeedReaderAiSettings } from '../../types';
 
 export interface MobilePeekSheetHandle {
 	open(): void;
@@ -18,7 +18,7 @@ export interface MobilePeekSheetOptions {
 	getState: () => ReaderState | null;
 	onWpmChange: (wpm: number) => void;
 	onFontChange: (fontSize: number) => void;
-	onToggleMode: () => void;
+	onPlaybackModeChange: (mode: PlaybackMode) => void;
 	onDismiss?: () => void;
 }
 
@@ -77,7 +77,7 @@ export function mountMobilePeekSheet(
 		getState: options.getState,
 		onWpmChange: options.onWpmChange,
 		onFontChange: options.onFontChange,
-		onToggleMode: options.onToggleMode
+		onPlaybackModeChange: options.onPlaybackModeChange
 	});
 
 	const onBackdropClick = () => {

@@ -62,4 +62,59 @@ describe('migrateFlatSettings', () => {
 		expect(result.reader.wpm).toBe(5000);
 		expect(result.reader.chunkSize).toBe(1);
 	});
+
+	it('preserves valid defaultPlaybackMode values and migrates unknown to rsvp', () => {
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'rsvp' } },
+				defaultCatalog
+			).reader.defaultPlaybackMode
+		).toBe('rsvp');
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'lineRepeat' } },
+				defaultCatalog
+			).reader.defaultPlaybackMode
+		).toBe('lineRepeat');
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'progressiveRsvp' } },
+				defaultCatalog
+			).reader.defaultPlaybackMode
+		).toBe('progressiveRsvp');
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'lineByLine' } },
+				defaultCatalog
+			).reader.defaultPlaybackMode
+		).toBe('lineByLine');
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'invalid' as never } },
+				defaultCatalog
+			).reader.defaultPlaybackMode
+		).toBe('rsvp');
+	});
+
+	it('defaults progressiveRsvpMaxWordLength to 3 and clamps out-of-range values', () => {
+		expect(validateSettings(null, defaultCatalog).reader.progressiveRsvpMaxWordLength).toBe(3);
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 5 } },
+				defaultCatalog
+			).reader.progressiveRsvpMaxWordLength
+		).toBe(5);
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 0 } },
+				defaultCatalog
+			).reader.progressiveRsvpMaxWordLength
+		).toBe(1);
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 99 } },
+				defaultCatalog
+			).reader.progressiveRsvpMaxWordLength
+		).toBe(20);
+	});
 });

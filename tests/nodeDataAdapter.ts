@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import type { DataAdapter } from 'obsidian';
 
@@ -70,6 +70,10 @@ export function createNodeDataAdapter(rootDir: string): DataAdapter {
 		},
 		async remove(path: string): Promise<void> {
 			await rm(resolvePath(path), { force: true });
+		},
+		async rename(from: string, to: string): Promise<void> {
+			await mkdir(join(resolvePath(to), '..'), { recursive: true });
+			await rename(resolvePath(from), resolvePath(to));
 		},
 		async rmdir(path: string, recursive?: boolean): Promise<void> {
 			await rm(resolvePath(path), { recursive: recursive ?? true, force: true });

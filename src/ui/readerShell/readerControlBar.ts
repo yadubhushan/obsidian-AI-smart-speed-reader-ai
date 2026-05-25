@@ -1,6 +1,6 @@
-import type { RSVPEngine } from '../../engine/rsvpEngine';
-import type { ReaderState, SpeedReaderAiSettings } from '../../types';
+import type { PlaybackMode, ReaderState, SpeedReaderAiSettings } from '../../types';
 import { mountPrepareControls, type PrepareControlsHandle } from '../prepareControls';
+import { mountPlaybackModeSelect, type PlaybackModeSelectHandle } from './playbackModePicker';
 
 export interface ReaderControlBarHandle {
 	destroy(): void;
@@ -13,7 +13,7 @@ export interface ReaderControlBarHandle {
 export interface ReaderControlBarHandlers {
 	onWpmDelta: (delta: number) => void;
 	onFontDelta: (delta: number) => void;
-	onToggleMode: () => void;
+	onPlaybackModeChange: (mode: PlaybackMode) => void;
 	onReadWithoutAi: () => void;
 	onPrepare: () => void | Promise<void>;
 	onClearCache: () => void | Promise<void>;
@@ -45,10 +45,12 @@ export function mountReaderControlBar(
 	const wpmVal = wpmGroup.createSpan({ cls: 'speed-reader-ai-control-value' });
 	const wpmInc = wpmGroup.createEl('button', { cls: 'speed-reader-ai-control-btn', text: '+' });
 
-	const modeBtn = row.createEl('button', {
-		cls: 'speed-reader-ai-control-mode-btn',
-		text: 'RSVP',
-		attr: { type: 'button' }
+	const modeGroup = row.createDiv({ cls: 'speed-reader-ai-control-group' });
+	modeGroup.createSpan({ cls: 'speed-reader-ai-control-label', text: 'Mode' });
+	const modePicker = mountPlaybackModeSelect(modeGroup, {
+		className: 'speed-reader-ai-control-mode-select',
+		ariaLabel: 'Playback mode',
+		onChange: handlers.onPlaybackModeChange
 	});
 
 	const navGroup = row.createDiv({ cls: 'speed-reader-ai-control-nav-group' });
@@ -71,21 +73,19 @@ export function mountReaderControlBar(
 	fontInc.addEventListener('click', () => handlers.onFontDelta(3));
 	wpmDec.addEventListener('click', () => handlers.onWpmDelta(-25));
 	wpmInc.addEventListener('click', () => handlers.onWpmDelta(25));
-	modeBtn.addEventListener('click', () => handlers.onToggleMode());
 	prevBtn.addEventListener('click', () => handlers.onPrevSection?.());
 	nextBtn.addEventListener('click', () => handlers.onNextSection?.());
 
 	return {
 		destroy() {
+			modePicker.destroy();
 			prepareControls?.destroy();
 			bar.remove();
 		},
 		update(state) {
 			fontVal.setText(String(settings.reader.fontSize));
 			wpmVal.setText(String(state ? Math.round(state.currentWpm) : settings.reader.wpm));
-			const isLineRepeat = state?.playbackMode === 'lineRepeat';
-			modeBtn.setText(isLineRepeat ? 'Line repeat' : 'RSVP');
-			modeBtn.toggleClass('is-line-repeat', isLineRepeat);
+			modePicker.setMode(state?.playbackMode ?? settings.reader.defaultPlaybackMode);
 		},
 		setVisible(visible) {
 			bar.toggleClass('is-hidden', !visible);

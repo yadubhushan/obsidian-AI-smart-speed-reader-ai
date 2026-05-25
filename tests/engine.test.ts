@@ -414,6 +414,44 @@ describe('RSVPEngine manifest playback', () => {
 			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBeGreaterThan(1);
 		});
 	});
+
+	describe('line by line mode', () => {
+		it('advances to next sentence at end instead of looping', () => {
+			engine.setPlaybackMode('lineByLine');
+			engine.loadText('One two. Three four.');
+			engine.play();
+
+			const baseDelay = 60000 / settings.reader.wpm;
+			vi.advanceTimersByTime(baseDelay * 2 + 50);
+			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(1);
+
+			vi.advanceTimersByTime(baseDelay + 50);
+			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(2);
+			expect(stateChanges[stateChanges.length - 1]!.playbackMode).toBe('lineByLine');
+		});
+
+		it('nextLine and prevLine work in line by line mode', () => {
+			engine.setPlaybackMode('lineByLine');
+			engine.loadText('First sentence. Second sentence.');
+			engine.nextLine();
+
+			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(2);
+			expect(stateChanges[stateChanges.length - 1]!.currentLineIndex).toBe(1);
+
+			engine.prevLine();
+			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(0);
+			expect(stateChanges[stateChanges.length - 1]!.currentLineIndex).toBe(0);
+		});
+
+		it('uses line-based progress in line by line mode', () => {
+			engine.setPlaybackMode('lineByLine');
+			engine.loadText('One. Two. Three.');
+			engine.play();
+
+			const progress = stateChanges[stateChanges.length - 1]!.progress;
+			expect(progress).toBeCloseTo((1 / 3) * 100, 5);
+		});
+	});
 });
 
 describe('Visibility change auto-pause logic', () => {

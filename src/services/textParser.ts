@@ -70,7 +70,7 @@ function tokenize(text: string): { raw: string; start: number }[] {
 	return tokens;
 }
 
-function stripLeadingPunctuation(word: string): { clean: string; leading: string } {
+export function stripLeadingPunctuation(word: string): { clean: string; leading: string } {
 	const match = word.match(/^([([{'"(]+)(.+)$/);
 	if (match && match[1] && match[2]) {
 		return { clean: match[2], leading: match[1] };

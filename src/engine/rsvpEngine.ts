@@ -22,6 +22,7 @@ import type {
 } from '../types/processedDocument';
 import { MicropauseService } from '../services/micropauseService';
 import { parseDocument } from '../services/textParser';
+import { cyclePlaybackMode, isLinePlaybackMode, normalizePlaybackMode } from './playbackMode';
 import {
 	clamp,
 	findHeadingTokenIndex,
@@ -32,7 +33,15 @@ import {
 	tokensToDisplayChunk
 } from './manifestPlayback';
 import {
+	getProgressiveLegacyChunk,
+	getProgressiveWordTokensChunk,
+	progressivePrimaryDisplayToken,
+	progressiveTokensToDisplayChunk,
+	progressiveWordsToDisplayChunk
+} from './progressiveRsvp';
+import {
 	buildSentenceUnits,
+	computeLineByLineAdvance,
 	computeLineRepeatAdvance,
 	findSentenceUnitForSeekIndex,
 	getLineBoundary,
@@ -213,16 +222,17 @@ export class RSVPEngine {
 	}
 
 	setPlaybackMode(mode: PlaybackMode) {
-		if (this.playbackMode === mode) {
+		const resolved = normalizePlaybackMode(mode);
+		if (this.playbackMode === resolved) {
 			return;
 		}
-		this.playbackMode = mode;
+		this.playbackMode = resolved;
 		this.emitState(false);
 		this.restartLoopIfPlaying();
 	}
 
 	togglePlaybackMode(): PlaybackMode {
-		this.setPlaybackMode(this.playbackMode === 'rsvp' ? 'lineRepeat' : 'rsvp');
+		this.setPlaybackMode(cyclePlaybackMode(this.playbackMode));
 		return this.playbackMode;
 	}
 
@@ -323,6 +333,12 @@ export class RSVPEngine {
 				this.runLineRepeatManifestLoop();
 			} else {
 				this.runLineRepeatLegacyLoop();
+			}
+		} else if (this.playbackMode === 'lineByLine') {
+			if (this.playbackSource === 'manifest') {
+				this.runLineByLineManifestLoop();
+			} else {
+				this.runLineByLineLegacyLoop();
 			}
 		} else if (this.playbackSource === 'manifest') {
 			this.runManifestLoop();
@@ -593,7 +609,7 @@ export class RSVPEngine {
 			return this.getManifestContext(contextWords);
 		}
 
-		const chunkEnd = Math.min(this.currentIndex + this.settings.reader.chunkSize, this.words.length);
+		const { endIndex: chunkEnd } = this.resolveLegacyChunk(this.currentIndex);
 		const beforeStart = Math.max(0, this.currentIndex - contextWords);
 		const afterEnd = Math.min(this.words.length, chunkEnd + contextWords);
 
@@ -620,16 +636,37 @@ export class RSVPEngine {
 	private getCurrentChunkWordIndices(navWords: ReturnType<typeof navWordsFromLegacy>) {
 		if (this.playbackSource === 'manifest') {
 			const stream = this.getActiveStream();
+			if (this.playbackMode === 'progressiveRsvp') {
+				const { endIndex } = getProgressiveWordTokensChunk(
+					stream,
+					this.currentTokenIndex,
+					this.settings.reader.progressiveRsvpMaxWordLength
+				);
+				return wordIndicesForManifestChunk(
+					navWords,
+					this.currentTokenIndex,
+					Math.max(endIndex - this.currentTokenIndex, 1),
+					stream.length
+				);
+			}
 			return wordIndicesForManifestChunk(
 				navWords,
 				this.currentTokenIndex,
-				this.settings.reader.chunkSize,
+				this.getEffectiveChunkSize(),
 				stream.length
 			);
 		}
+		if (this.playbackMode === 'progressiveRsvp') {
+			const { endIndex } = getProgressiveLegacyChunk(
+				this.words,
+				this.currentIndex,
+				this.settings.reader.progressiveRsvpMaxWordLength
+			);
+			return wordIndicesForLegacyChunk(this.currentIndex, endIndex - this.currentIndex, this.words.length);
+		}
 		return wordIndicesForLegacyChunk(
 			this.currentIndex,
-			this.settings.reader.chunkSize,
+			this.getEffectiveChunkSize(),
 			this.words.length
 		);
 	}
@@ -654,10 +691,7 @@ export class RSVPEngine {
 			}
 		}
 
-		const chunkEnd = Math.min(
-			this.currentTokenIndex + this.settings.reader.chunkSize,
-			stream.length
-		);
+		const { endIndex: chunkEnd } = this.resolveManifestChunk(this.currentTokenIndex);
 		for (let i = chunkEnd; i < stream.length && after.length < contextWords; i++) {
 			const token = stream[i];
 			if (token?.kind === 'word' && token.text) {
@@ -730,6 +764,12 @@ export class RSVPEngine {
 				} else {
 					this.runLineRepeatLegacyLoop();
 				}
+			} else if (this.playbackMode === 'lineByLine') {
+				if (this.playbackSource === 'manifest') {
+					this.runLineByLineManifestLoop();
+				} else {
+					this.runLineByLineLegacyLoop();
+				}
 			} else if (this.playbackSource === 'manifest') {
 				this.runManifestLoop();
 			} else {
@@ -753,8 +793,9 @@ export class RSVPEngine {
 		this.emitState(false);
 
 		const delay = this.getCurrentDelay();
+		const { endIndex } = this.resolveLegacyChunk(this.currentIndex);
 		this.timeoutId = window.setTimeout(() => {
-			this.currentIndex += this.settings.reader.chunkSize;
+			this.currentIndex = endIndex;
 			this.timeoutId = null;
 			this.runLoop();
 		}, delay);
@@ -785,11 +826,7 @@ export class RSVPEngine {
 
 		this.emitState(false);
 
-		const { tokens, endIndex } = getWordTokensChunk(
-			stream,
-			this.currentTokenIndex,
-			this.settings.reader.chunkSize
-		);
+		const { tokens, endIndex } = this.resolveManifestChunk(this.currentTokenIndex);
 		const delay = getDelayForTokens(tokens, this.settings, this.micropauseService);
 
 		this.timeoutId = window.setTimeout(() => {
@@ -911,6 +948,98 @@ export class RSVPEngine {
 		}, delay);
 	}
 
+	private runLineByLineLegacyLoop() {
+		if (!this.isPlaying) {
+			return;
+		}
+
+		if (this.currentIndex >= this.words.length) {
+			this.isPlaying = false;
+			this.emitState(true);
+			this.onComplete();
+			return;
+		}
+
+		this.emitState(false);
+
+		const delay = this.getCurrentDelay();
+		const nextIndex = this.currentIndex + this.settings.reader.chunkSize;
+
+		this.timeoutId = window.setTimeout(() => {
+			this.timeoutId = null;
+			const result = computeLineByLineAdvance(
+				this.sentenceUnits,
+				this.currentIndex,
+				nextIndex,
+				false
+			);
+
+			if (result.action === 'complete') {
+				this.isPlaying = false;
+				this.emitState(true);
+				this.onComplete();
+				return;
+			}
+
+			this.currentIndex = result.nextSeekIndex;
+			this.runLineByLineLegacyLoop();
+		}, delay);
+	}
+
+	private runLineByLineManifestLoop() {
+		if (!this.isPlaying) {
+			return;
+		}
+
+		const stream = this.getActiveStream();
+
+		if (this.currentTokenIndex >= stream.length) {
+			if (this.processed && isSectionsProcessed(this.processed)) {
+				if (this.currentSectionIndex < this.processed.sections.length - 1) {
+					this.isPlaying = false;
+					this.emitState(false);
+					this.onSectionComplete?.();
+					return;
+				}
+			}
+
+			this.isPlaying = false;
+			this.emitState(true);
+			this.onComplete();
+			return;
+		}
+
+		this.emitState(false);
+
+		const { tokens, endIndex } = getWordTokensChunk(
+			stream,
+			this.currentTokenIndex,
+			this.settings.reader.chunkSize
+		);
+		const delay = getDelayForTokens(tokens, this.settings, this.micropauseService);
+
+		this.timeoutId = window.setTimeout(() => {
+			this.timeoutId = null;
+			const result = computeLineByLineAdvance(
+				this.sentenceUnits,
+				this.currentTokenIndex,
+				endIndex,
+				true,
+				stream.length
+			);
+
+			if (result.action === 'complete') {
+				this.isPlaying = false;
+				this.emitState(true);
+				this.onComplete();
+				return;
+			}
+
+			this.currentTokenIndex = result.nextSeekIndex;
+			this.runLineByLineManifestLoop();
+		}, delay);
+	}
+
 	private rebuildSentenceUnits() {
 		this.sentenceUnits = buildSentenceUnits(this.getNavWords());
 	}
@@ -963,20 +1092,16 @@ export class RSVPEngine {
 			if (this.currentTokenIndex >= stream.length) {
 				return [];
 			}
-			const { tokens } = getWordTokensChunk(
-				stream,
-				this.currentTokenIndex,
-				this.settings.reader.chunkSize
-			);
-			return tokensToDisplayChunk(tokens);
+			const { tokens } = this.resolveManifestChunk(this.currentTokenIndex);
+			return this.manifestChunkToDisplayChunk(tokens);
 		}
 
 		if (this.currentIndex >= this.words.length) {
 			return [];
 		}
 
-		const end = Math.min(this.currentIndex + this.settings.reader.chunkSize, this.words.length);
-		return this.words.slice(this.currentIndex, end);
+		const { words } = this.resolveLegacyChunk(this.currentIndex);
+		return this.legacyChunkToDisplayChunk(words);
 	}
 
 	private getCurrentDelay(): number {
@@ -1059,7 +1184,7 @@ export class RSVPEngine {
 			const stream = this.getActiveStream();
 			let total = 0;
 			for (let i = this.currentTokenIndex; i < stream.length; ) {
-				const { tokens, endIndex } = getWordTokensChunk(stream, i, this.settings.reader.chunkSize);
+				const { tokens, endIndex } = this.resolveManifestChunk(i);
 				if (tokens.length === 0) {
 					break;
 				}
@@ -1076,14 +1201,18 @@ export class RSVPEngine {
 		const baseDelay = 60000 / this.settings.reader.wpm;
 		let total = 0;
 
-		for (let index = this.currentIndex; index < this.words.length; index += this.settings.reader.chunkSize) {
-			const chunk = this.words.slice(index, Math.min(index + this.settings.reader.chunkSize, this.words.length));
+		for (let index = this.currentIndex; index < this.words.length; ) {
+			const { words: chunk, endIndex } = this.resolveLegacyChunk(index);
+			if (chunk.length === 0) {
+				break;
+			}
 			let multiplier = 1;
 			for (const word of chunk) {
 				multiplier = Math.max(multiplier, this.micropauseService.getWordMultiplier(word));
 			}
 
 			total += baseDelay * multiplier;
+			index = endIndex;
 		}
 
 		return total;
@@ -1092,37 +1221,82 @@ export class RSVPEngine {
 	private getChunkSeekIndices(): number[] {
 		if (this.playbackSource === 'manifest') {
 			const stream = this.getActiveStream();
-			const indices: number[] = [];
-			let collected = 0;
-
-			for (let i = this.currentTokenIndex; i < stream.length && collected < this.settings.reader.chunkSize; i++) {
-				const token = stream[i];
-				if (token?.kind === 'word') {
-					indices.push(i);
-					collected++;
-				} else if (indices.length === 0 && collected === 0) {
-					indices.push(i);
-					collected++;
-					break;
-				}
-			}
-
-			if (indices.length === 0 && stream.length > 0) {
+			const { tokens, endIndex } = this.resolveManifestChunk(this.currentTokenIndex);
+			if (tokens.length === 0 && stream.length > 0) {
 				return [Math.min(this.currentTokenIndex, stream.length - 1)];
 			}
 
-			return indices;
+			const indices: number[] = [];
+			for (let i = this.currentTokenIndex; i < endIndex; i++) {
+				const token = stream[i];
+				if (token?.kind === 'word') {
+					indices.push(i);
+				} else if (indices.length === 0) {
+					indices.push(i);
+				}
+			}
+
+			return indices.length > 0
+				? indices
+				: [Math.min(this.currentTokenIndex, stream.length - 1)];
 		}
 
+		const { endIndex } = this.resolveLegacyChunk(this.currentIndex);
 		const indices: number[] = [];
-		for (
-			let i = this.currentIndex;
-			i < Math.min(this.currentIndex + this.settings.reader.chunkSize, this.words.length);
-			i++
-		) {
+		for (let i = this.currentIndex; i < endIndex; i++) {
 			indices.push(i);
 		}
 		return indices.length > 0 ? indices : [Math.min(this.currentIndex, Math.max(this.words.length - 1, 0))];
+	}
+
+	private getEffectiveChunkSize(): number {
+		if (this.playbackMode === 'rsvp') {
+			return 1;
+		}
+		return this.settings.reader.chunkSize;
+	}
+
+	private resolveLegacyChunk(startIndex: number): { words: WordData[]; endIndex: number } {
+		if (this.playbackMode === 'progressiveRsvp') {
+			return getProgressiveLegacyChunk(
+				this.words,
+				startIndex,
+				this.settings.reader.progressiveRsvpMaxWordLength
+			);
+		}
+
+		const endIndex = Math.min(startIndex + this.getEffectiveChunkSize(), this.words.length);
+		return {
+			words: this.words.slice(startIndex, endIndex),
+			endIndex
+		};
+	}
+
+	private resolveManifestChunk(startIndex: number): { tokens: StreamToken[]; endIndex: number } {
+		const stream = this.getActiveStream();
+		if (this.playbackMode === 'progressiveRsvp') {
+			return getProgressiveWordTokensChunk(
+				stream,
+				startIndex,
+				this.settings.reader.progressiveRsvpMaxWordLength
+			);
+		}
+
+		return getWordTokensChunk(stream, startIndex, this.getEffectiveChunkSize());
+	}
+
+	private legacyChunkToDisplayChunk(words: WordData[]): WordData[] {
+		if (this.playbackMode === 'progressiveRsvp') {
+			return progressiveWordsToDisplayChunk(words);
+		}
+		return words;
+	}
+
+	private manifestChunkToDisplayChunk(tokens: StreamToken[]): WordData[] {
+		if (this.playbackMode === 'progressiveRsvp') {
+			return progressiveTokensToDisplayChunk(tokens);
+		}
+		return tokensToDisplayChunk(tokens);
 	}
 
 	private emitState(finished: boolean) {
@@ -1134,19 +1308,18 @@ export class RSVPEngine {
 		if (this.playbackSource === 'manifest') {
 			const stream = this.getActiveStream();
 			const totalTokens = stream.length;
-			const progress =
-				playbackMode === 'lineRepeat'
-					? this.getLineRepeatProgress()
-					: totalTokens > 0
-						? Math.min((this.currentTokenIndex / totalTokens) * 100, 100)
-						: 0;
+			const progress = isLinePlaybackMode(playbackMode)
+				? this.getLineRepeatProgress()
+				: totalTokens > 0
+					? Math.min((this.currentTokenIndex / totalTokens) * 100, 100)
+					: 0;
 
 			const activeSection = this.getActiveSection();
-			const { tokens } = getWordTokensChunk(
-				stream,
-				this.currentTokenIndex,
-				this.settings.reader.chunkSize
-			);
+			const { tokens } = this.resolveManifestChunk(this.currentTokenIndex);
+			const displayToken =
+				this.playbackMode === 'progressiveRsvp'
+					? progressivePrimaryDisplayToken(tokens)
+					: primaryDisplayToken(tokens);
 
 			this.onStateChange({
 				chunk,
@@ -1168,19 +1341,18 @@ export class RSVPEngine {
 				sectionTitle: activeSection?.title,
 				currentTokenIndex: this.currentTokenIndex,
 				totalTokens,
-				displayToken: primaryDisplayToken(tokens),
+				displayToken,
 				isDeterministic: this.isDeterministic
 			});
 			return;
 		}
 
 		const totalWords = this.words.length;
-		const progress =
-			playbackMode === 'lineRepeat'
-				? this.getLineRepeatProgress()
-				: totalWords > 0
-					? Math.min((this.currentIndex / totalWords) * 100, 100)
-					: 0;
+		const progress = isLinePlaybackMode(playbackMode)
+			? this.getLineRepeatProgress()
+			: totalWords > 0
+				? Math.min((this.currentIndex / totalWords) * 100, 100)
+				: 0;
 
 		this.onStateChange({
 			chunk,

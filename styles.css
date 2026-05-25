@@ -227,7 +227,7 @@
 }
 
 .speed-reader-ai-control-btn,
-.speed-reader-ai-control-mode-btn {
+.speed-reader-ai-control-mode-select {
 	appearance: none;
 	border: 1px solid var(--sr-border, var(--background-modifier-border));
 	border-radius: var(--radius-s);
@@ -239,12 +239,18 @@
 	transition: background 0.15s ease;
 }
 
+.speed-reader-ai-control-mode-select {
+	max-width: 11rem;
+}
+
 .speed-reader-ai-control-btn:hover,
-.speed-reader-ai-control-mode-btn:hover {
+.speed-reader-ai-playback-mode-select:hover,
+.speed-reader-ai-control-mode-select:hover {
 	background: color-mix(in srgb, var(--sr-text, var(--text-normal)) 8%, transparent);
 }
 
-.speed-reader-ai-control-mode-btn.is-line-repeat {
+.speed-reader-ai-playback-mode-select.is-line-mode,
+.speed-reader-ai-control-mode-select.is-line-mode {
 	color: var(--text-success);
 	border-color: color-mix(in srgb, var(--text-success) 35%, transparent);
 }
@@ -303,6 +309,139 @@
 .speed-reader-ai-pane-content {
 	padding: 1rem;
 	overflow: auto;
+}
+
+/* Bookmarks pane */
+.speed-reader-ai-pane-bookmarks {
+	padding: 0;
+	overflow: hidden;
+}
+
+.speed-reader-ai-bookmarks-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid var(--sr-border, var(--background-modifier-border));
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-bookmarks-action-btn {
+	padding: 0.45rem 0.85rem;
+	min-height: 2.25rem;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	background: var(--sr-tab-active-bg, var(--interactive-accent));
+	color: var(--sr-tab-active-text, var(--text-on-accent));
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.speed-reader-ai-bookmarks-action-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.speed-reader-ai-bookmarks-action-secondary {
+	background: var(--sr-input-bg, var(--background-primary));
+	color: var(--sr-input-text, var(--text-normal));
+}
+
+.speed-reader-ai-bookmarks-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 0.75rem 1rem 1rem;
+}
+
+.speed-reader-ai-bookmarks-empty {
+	color: var(--sr-muted, var(--text-muted));
+	font-size: var(--font-ui-small);
+	padding: 1rem 0.25rem;
+}
+
+.speed-reader-ai-bookmarks-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.speed-reader-ai-bookmark-entry-card {
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-m);
+	background: var(--sr-input-bg, var(--background-primary));
+	padding: 0.75rem;
+}
+
+.speed-reader-ai-bookmark-entry-heading {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	color: var(--sr-muted, var(--text-muted));
+	margin-bottom: 0.5rem;
+}
+
+.speed-reader-ai-bookmark-line-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.speed-reader-ai-bookmark-line-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	border: 1px solid transparent;
+	border-radius: var(--radius-s);
+	padding: 0.35rem;
+}
+
+.speed-reader-ai-bookmark-line-card.is-selected {
+	border-color: var(--sr-tab-active-bg, var(--interactive-accent));
+	background: var(--background-modifier-hover);
+}
+
+.speed-reader-ai-bookmark-line-checkbox {
+	margin-top: 0.35rem;
+	min-width: 1.1rem;
+	min-height: 1.1rem;
+	flex-shrink: 0;
+}
+
+.speed-reader-ai-bookmark-line-text-btn {
+	flex: 1;
+	text-align: left;
+	border: none;
+	background: transparent;
+	color: var(--sr-input-text, var(--text-normal));
+	font-family: var(--font-text);
+	font-size: var(--font-text-size);
+	line-height: 1.5;
+	padding: 0.25rem 0.35rem;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	min-height: 2.25rem;
+}
+
+.speed-reader-ai-bookmark-line-text-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+.speed-reader-ai-bookmark-line-highlight {
+	font-weight: 600;
+	font-style: italic;
+	color: var(--sr-orp, var(--interactive-accent));
+}
+
+.speed-reader-ai-bookmark-entry-meta {
+	margin-top: 0.5rem;
+	font-size: var(--font-ui-smaller);
+	color: var(--sr-muted, var(--text-muted));
+}
+
+.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-checkbox,
+.speed-reader-ai-mobile .speed-reader-ai-bookmark-line-text-btn,
+.speed-reader-ai-mobile .speed-reader-ai-bookmarks-action-btn {
+	min-height: 2.75rem;
 }
 
 .speed-reader-ai-content-title {
@@ -1232,7 +1371,27 @@
 	padding: 0.25rem 0.5rem;
 }
 
-.speed-reader-ai-mobile-mode-btn.is-line-repeat {
+.speed-reader-ai-mobile-compact-mode-group {
+	flex: 1;
+	min-width: 0;
+}
+
+.speed-reader-ai-mobile-compact-mode-select {
+	appearance: none;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--sr-text, var(--text-normal));
+	cursor: pointer;
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-medium);
+	min-height: 44px;
+	max-width: 100%;
+	padding: 0.25rem 0.35rem;
+}
+
+.speed-reader-ai-playback-mode-select.is-line-mode,
+.speed-reader-ai-mobile-compact-mode-select.is-line-mode {
 	color: var(--text-success);
 	border-color: color-mix(in srgb, var(--text-success) 35%, transparent);
 }
@@ -1470,7 +1629,7 @@
 	text-align: right;
 }
 
-.speed-reader-ai-mobile-reading-mode-btn {
+.speed-reader-ai-mobile-reading-mode-select {
 	appearance: none;
 	border: 1px solid var(--sr-border, var(--background-modifier-border));
 	border-radius: var(--radius-s);
@@ -1479,10 +1638,11 @@
 	cursor: pointer;
 	font-size: var(--font-ui-small);
 	min-height: 44px;
+	min-width: 10rem;
 	padding: 0.4rem 0.85rem;
 }
 
-.speed-reader-ai-mobile-reading-mode-btn.is-line-repeat {
+.speed-reader-ai-mobile-reading-mode-select.is-line-mode {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	border-color: transparent;

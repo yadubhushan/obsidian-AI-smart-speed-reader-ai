@@ -1,3 +1,4 @@
+import { getPlaybackModeLabel } from '../../engine/playbackMode';
 import type { ReaderState } from '../../types';
 
 export interface ReaderHeaderHandle {
@@ -24,7 +25,6 @@ function formatRemainingTime(milliseconds: number): string {
 export function mountReaderHeader(
 	container: HTMLElement,
 	options: {
-		chunkSize: number;
 		rtl: boolean;
 		showRemainingTime: boolean;
 		showProgress: boolean;
@@ -65,20 +65,20 @@ export function mountReaderHeader(
 			header.remove();
 		},
 		update(state) {
+			const direction = options.rtl ? 'RTL' : 'LTR';
 			if (!state) {
-				badgeText.setText(`WPM: ${options.chunkSize > 1 ? options.chunkSize : 1} · ${options.rtl ? 'RTL' : 'LTR'}`);
+				badgeText.setText(`${direction}`);
 				return;
 			}
 			playBtn.setText(state.isPlaying ? '⏸ Pause' : '▶ Play');
 			progressFill.style.width = `${Math.min(state.progress, 100)}%`;
-			const direction = options.rtl ? 'RTL' : 'LTR';
-			const chunkLabel = `(${options.chunkSize})`;
+			const modeLabel = getPlaybackModeLabel(state.playbackMode);
 			const timePart =
 				options.showRemainingTime && !state.finished
 					? ` · ${formatRemainingTime(state.timeRemainingMs)}`
 					: '';
 			badgeText.setText(
-				`English WPM: ${Math.round(state.currentWpm)} ${chunkLabel} ${direction}${timePart}`
+				`English WPM: ${Math.round(state.currentWpm)} · ${modeLabel} · ${direction}${timePart}`
 			);
 		},
 		setProgressVisible(visible) {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	buildSentenceUnits,
+	computeLineByLineAdvance,
 	computeLineRepeatAdvance,
 	findSentenceUnitForSeekIndex,
 	getLineBoundary,
@@ -115,5 +116,45 @@ describe('lineRepeatPlayback', () => {
 		expect(nextLineUnitIndex(units, 2)).toBe(2);
 		expect(prevLineUnitIndex(units, 1)).toBe(0);
 		expect(prevLineUnitIndex(units, 0)).toBe(0);
+	});
+
+	describe('computeLineByLineAdvance', () => {
+		it('advances within a sentence', () => {
+			const navWords = legacyNavWords('One two. Three.');
+			const units = buildSentenceUnits(navWords);
+
+			expect(computeLineByLineAdvance(units, 0, 1, false)).toEqual({
+				action: 'advance',
+				nextSeekIndex: 1
+			});
+		});
+
+		it('jumps to next sentence start at sentence end without looping', () => {
+			const navWords = legacyNavWords('One two. Three.');
+			const units = buildSentenceUnits(navWords);
+
+			expect(computeLineByLineAdvance(units, 1, 2, false)).toEqual({
+				action: 'advance',
+				nextSeekIndex: 2
+			});
+		});
+
+		it('completes after the final sentence', () => {
+			const navWords = legacyNavWords('One two. Three.');
+			const units = buildSentenceUnits(navWords);
+
+			expect(computeLineByLineAdvance(units, 4, 5, false)).toEqual({
+				action: 'complete'
+			});
+		});
+
+		it('completes at manifest stream end', () => {
+			const navWords = legacyNavWords('Only one.');
+			const units = buildSentenceUnits(navWords);
+
+			expect(computeLineByLineAdvance(units, 1, 2, true, 2)).toEqual({
+				action: 'complete'
+			});
+		});
 	});
 });

@@ -7,7 +7,26 @@ import {
 } from '../src/bookmarks/bookmarkBlock';
 
 describe('bookmarkBlock', () => {
-	it('wraps resume URI in inline code so Obsidian does not autolink it', () => {
+	it('uses callout layout with middle-dot separators', () => {
+		const uri = formatBookBookmarkUri('library/book.epub', 'ch-1', 42);
+		const block = formatBookmarkBlock({
+			timestamp: new Date('2026-05-21T12:00:00Z'),
+			sectionTitle: 'Chapter 2',
+			passage: 'Sample passage.',
+			positionLine: 'chapter ch-1 word 42',
+			uriLine: uri
+		});
+
+		expect(block).toContain('## 2026-05-21 12:00:00 · Chapter 2');
+		expect(block).toContain('> [!quote] Passage');
+		expect(block).toContain('> Sample passage.');
+		expect(block).toContain('> [!note] Resume');
+		expect(block).toContain('> Position: chapter ch-1 · word 42');
+		expect(block).toContain(`> \`${uri}\``);
+		expect(block).not.toContain(' — ');
+	});
+
+	it('wraps resume URI in inline code inside the resume callout', () => {
 		const uri = formatBookBookmarkUri('library/book.epub', 'ch-1', 42);
 		const block = formatBookmarkBlock({
 			timestamp: new Date('2026-05-21T12:00:00Z'),
@@ -16,8 +35,8 @@ describe('bookmarkBlock', () => {
 			uriLine: uri
 		});
 
-		expect(block).toContain(`\`${uri}\``);
-		expect(block).not.toContain(`\n${uri}\n`);
+		expect(block).toContain(`> \`${uri}\``);
+		expect(block).not.toMatch(new RegExp(`\\n${uri.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n`));
 	});
 
 	it('wraps highlighted sentence in Obsidian highlight + bold italic', () => {
@@ -37,7 +56,7 @@ describe('bookmarkBlock', () => {
 		expect(passage).toBe('Different paragraph text. ==***Missing sentence.***==');
 	});
 
-	it('escapes blockquote lines in formatBookmarkBlock', () => {
+	it('escapes multi-line passage inside quote callout', () => {
 		const block = formatBookmarkBlock({
 			timestamp: new Date('2026-05-21T12:00:00Z'),
 			passage: formatPassageWithHighlight({
@@ -48,6 +67,7 @@ describe('bookmarkBlock', () => {
 		});
 		expect(block).toContain('> ==***Line one.***==');
 		expect(block).toContain('> Line two.');
+		expect(block).toContain('> [!quote] Passage');
 	});
 
 	it('builds book and note resume URIs with encoded paths', () => {

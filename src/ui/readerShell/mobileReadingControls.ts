@@ -1,4 +1,5 @@
-import type { ReaderState, SpeedReaderAiSettings } from '../../types';
+import type { PlaybackMode, ReaderState, SpeedReaderAiSettings } from '../../types';
+import { mountPlaybackModeSelect, type PlaybackModeSelectHandle } from './playbackModePicker';
 
 const MIN_WPM = 50;
 const MAX_WPM = 5000;
@@ -15,7 +16,7 @@ export interface MobileReadingControlsOptions {
 	getState: () => ReaderState | null;
 	onWpmChange: (wpm: number) => void;
 	onFontChange: (fontSize: number) => void;
-	onToggleMode: () => void;
+	onPlaybackModeChange: (mode: PlaybackMode) => void;
 }
 
 export function mountMobileReadingControls(
@@ -42,10 +43,10 @@ export function mountMobileReadingControls(
 
 	const modeRow = root.createDiv({ cls: 'speed-reader-ai-mobile-reading-row' });
 	modeRow.createSpan({ cls: 'speed-reader-ai-mobile-reading-label', text: 'Mode' });
-	const modeBtn = modeRow.createEl('button', {
-		cls: 'speed-reader-ai-mobile-reading-mode-btn',
-		text: 'RSVP',
-		attr: { type: 'button' }
+	const modePicker = mountPlaybackModeSelect(modeRow, {
+		className: 'speed-reader-ai-mobile-reading-mode-select',
+		ariaLabel: 'Playback mode',
+		onChange: options.onPlaybackModeChange
 	});
 
 	const refresh = () => {
@@ -56,9 +57,7 @@ export function mountMobileReadingControls(
 		wpmValue.setText(String(wpm));
 		fontSlider.value = String(settings.reader.fontSize);
 		fontValue.setText(`${settings.reader.fontSize}px`);
-		const isLineRepeat = state?.playbackMode === 'lineRepeat';
-		modeBtn.setText(isLineRepeat ? 'Line repeat' : 'RSVP');
-		modeBtn.toggleClass('is-line-repeat', isLineRepeat);
+		modePicker.setMode(state?.playbackMode ?? settings.reader.defaultPlaybackMode);
 	};
 
 	wpmSlider.addEventListener('input', () => {
@@ -77,15 +76,11 @@ export function mountMobileReadingControls(
 		}
 	});
 
-	modeBtn.addEventListener('click', () => {
-		options.onToggleMode();
-		refresh();
-	});
-
 	refresh();
 
 	return {
 		destroy() {
+			modePicker.destroy();
 			root.remove();
 		},
 		refresh

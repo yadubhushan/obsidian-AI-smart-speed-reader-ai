@@ -15,11 +15,21 @@ function formatTimestamp(date: Date): string {
 	return date.toISOString().replace('T', ' ').slice(0, 19);
 }
 
-function escapeBlockquote(text: string): string {
-	return text
-		.split('\n')
-		.map((line) => `> ${line}`)
-		.join('\n');
+function formatPositionForDisplay(positionLine: string): string {
+	return positionLine.replace(/\s+word\s+/, ' · word ');
+}
+
+function formatPassageCallout(passage: string): string {
+	const content = passage.trim() || '(no passage captured)';
+	return ['> [!quote] Passage', ...content.split('\n').map((line) => `> ${line}`)].join('\n');
+}
+
+function formatResumeCallout(positionLine: string, uriLine?: string): string {
+	const lines = ['> [!note] Resume', `> Position: ${formatPositionForDisplay(positionLine)}`];
+	if (uriLine?.trim()) {
+		lines.push(`> \`${uriLine.trim()}\``);
+	}
+	return lines.join('\n');
 }
 
 function wrapHighlightedSentence(sentence: string): string {
@@ -53,19 +63,15 @@ export function formatPassageWithHighlight(input: BookmarkPassageInput): string 
 
 export function formatBookmarkBlock(input: BookmarkBlockInput): string {
 	const headingSuffix = input.sectionTitle?.trim()
-		? ` — ${input.sectionTitle.trim()}`
+		? ` · ${input.sectionTitle.trim()}`
 		: '';
 	const lines = [
 		`## ${formatTimestamp(input.timestamp)}${headingSuffix}`,
 		'',
-		escapeBlockquote(input.passage.trim() || '(no passage captured)'),
+		formatPassageCallout(input.passage),
 		'',
-		`Position: ${input.positionLine}`
+		formatResumeCallout(input.positionLine, input.uriLine)
 	];
-	if (input.uriLine?.trim()) {
-		// Inline code keeps the URI inert: no autolink, no third-party "define selection" on the URL.
-		lines.push('', `\`${input.uriLine.trim()}\``);
-	}
 	return `${lines.join('\n')}\n`;
 }
 

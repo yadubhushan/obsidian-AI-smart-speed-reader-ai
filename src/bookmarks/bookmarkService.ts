@@ -2,7 +2,12 @@ import { Notice, type App } from 'obsidian';
 import { noteContentChecksum } from '../crypto-checksum';
 import type { PlaybackLoadKind } from '../ui/structuredReaderSession';
 import type { RSVPEngine } from '../engine/rsvpEngine';
-import { bookPositionFromEngine, notePositionFromEngine } from '../reader/readingProgress';
+import { bookPositionToEngineIndices } from '../formats/bookIndexToProcessedDocument';
+import {
+	applyNoteResumePosition,
+	bookPositionFromEngine,
+	notePositionFromEngine
+} from '../reader/readingProgress';
 import type { BookCacheIndex, BookPosition, NotePosition } from '../types/m2Contracts';
 import type { ReaderState, SpeedReaderAiSettings } from '../types';
 import type { SpeedReaderOpen } from '../ui/speedReaderOpen';
@@ -15,6 +20,15 @@ import {
 } from './bookmarkBlock';
 import { appendNoteBookmark } from './noteBookmarkAppend';
 import { resolveBookBookmarkPath } from './bookmarkPaths';
+import {
+	parseBookmarkEntries,
+	parseNoteBookmarkSection,
+	type BookmarkEntry
+} from './parseBookmarkEntries';
+import {
+	parseBookmarkPositionLine,
+	parseBookmarkResumeUri
+} from './parseBookmarkResume';
 
 export interface BookmarkReaderContext {
 	readerOpen: SpeedReaderOpen;
@@ -51,7 +65,37 @@ export class BookmarkService {
 		}
 	}
 
-	async openBookmarkTarget(ctx: BookmarkReaderContext): Promise<void> {
+	async loadBookmarkEntries(ctx: BookmarkReaderContext): Promise<BookmarkEntry[]> {
+		if (ctx.readerOpen.kind === 'legacy') {
+			return [];
+		}
+
+		if (ctx.readerOpen.kind === 'book') {
+			const path = resolveBookBookmarkPath(this.deps.getSettings(), ctx.readerOpen.sourcePath);
+			try {
+				const markdown = await this.deps.app.vault.adapter.read(path);
+				return parseBookmarkEntries(markdown);
+			} catch {
+				return [];
+			}
+		}
+
+		if (ctx.readerOpen.kind === 'structured') {
+			const file = this.deps.app.vault.getFileByPath(ctx.readerOpen.sourcePath);
+			if (!file) {
+				return [];
+			}
+			const markdown = await this.deps.app.vault.read(file);
+			return parseNoteBookmarkSection(
+				markdown,
+				this.deps.getSettings().bookmarks.noteBookmarkSectionHeading
+			);
+		}
+
+		return [];
+	}
+
+	async openBookmarkMarkdownInObsidian(ctx: BookmarkReaderContext): Promise<void> {
 		if (ctx.readerOpen.kind === 'legacy') {
 			new Notice('Bookmarks are not available for this reader mode.');
 			return;
@@ -66,6 +110,61 @@ export class BookmarkService {
 		if (ctx.readerOpen.kind === 'structured') {
 			await this.deps.app.workspace.openLinkText(ctx.readerOpen.sourcePath, '', true);
 		}
+	}
+
+	seekToBookmarkEntry(ctx: BookmarkReaderContext, entry: BookmarkEntry): boolean {
+		if (ctx.readerOpen.kind === 'legacy') {
+			return false;
+		}
+
+		const engine = ctx.engine;
+		const sourcePath = ctx.sourcePath;
+
+		if (entry.resumeUri) {
+			const target = parseBookmarkResumeUri(entry.resumeUri);
+			if (target && target.sourcePath === sourcePath) {
+				if (target.kind === 'book' && ctx.readerOpen.kind === 'book') {
+					const { sectionIndex, tokenIndex } = bookPositionToEngineIndices(
+						ctx.readerOpen.bookIndex,
+						target.position
+					);
+					engine.goToSection(sectionIndex);
+					engine.seekToToken(tokenIndex);
+					return true;
+				}
+				if (target.kind === 'note' && ctx.readerOpen.kind === 'structured') {
+					const processed = engine.getLoadedProcessedDocument();
+					if (processed) {
+						applyNoteResumePosition(engine, processed, target.position);
+						return true;
+					}
+				}
+			}
+		}
+
+		if (ctx.readerOpen.kind === 'book') {
+			const position = parseBookmarkPositionLine(entry.positionLine, 'book');
+			if (position && 'chapterId' in position) {
+				const { sectionIndex, tokenIndex } = bookPositionToEngineIndices(
+					ctx.readerOpen.bookIndex,
+					position
+				);
+				engine.goToSection(sectionIndex);
+				engine.seekToToken(tokenIndex);
+				return true;
+			}
+		}
+
+		if (ctx.readerOpen.kind === 'structured') {
+			const position = parseBookmarkPositionLine(entry.positionLine, 'note');
+			const processed = engine.getLoadedProcessedDocument();
+			if (position && 'sectionId' in position && processed) {
+				applyNoteResumePosition(engine, processed, position);
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private buildPassage(engine: RSVPEngine): string {

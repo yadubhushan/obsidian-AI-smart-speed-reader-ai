@@ -4,6 +4,7 @@ import {
 	normalizeWordForLookup
 } from '../../dictionary/dictionaryLookup';
 import { DictionaryLookupService } from '../../dictionary/dictionaryLookupService';
+import { recordStudyLoopDictionaryLookup } from '../../study-loop/studyLoopBridge';
 import type { SpeedReaderAiModal } from '../../speedReaderAiModal';
 import type { SpeedReaderAiSettings } from '../../types';
 
@@ -35,18 +36,23 @@ export function attachReaderWordLookup(deps: AttachReaderWordLookupDeps): void {
 
 		const normalized = normalizeWordForLookup(rawWord);
 		if (!normalized) {
-			new Notice('Cannot look up this token.');
+			new Notice('No dictionary entry for this word.');
 			return;
 		}
 
 		modal.enginePauseForLookup();
 		modal.showDictionaryLoading(normalized);
 
-		const outcome = await lookupService.lookup(rawWord);
+		const outcome = await lookupService.lookup(normalized);
 		if (!modal.isDictionaryOverlayVisible()) {
 			return;
 		}
 		modal.showDictionaryOutcome(outcome);
+
+		const readerOpen = modal.getReaderOpen();
+		if (readerOpen.kind === 'structured' || readerOpen.kind === 'book') {
+			recordStudyLoopDictionaryLookup(readerOpen.sourcePath, normalized);
+		}
 	};
 
 	const handles: ReaderWordLookupHandles = {

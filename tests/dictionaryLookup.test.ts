@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	extractLookupWordFromReaderState,
-	normalizeWordForLookup
+	normalizeWordForLookup,
+	stripPunctuationForLookup
 } from '../src/dictionary/dictionaryLookup';
 import { parseDictionaryApiDevResponse } from '../src/dictionary/providers/dictionaryApiDevProvider';
 import { parseFreeDictionaryApiResponse } from '../src/dictionary/providers/freeDictionaryApiProvider';
@@ -31,6 +32,29 @@ describe('normalizeWordForLookup', () => {
 		expect(normalizeWordForLookup('')).toBeNull();
 		expect(normalizeWordForLookup('---')).toBeNull();
 	});
+
+	it('strips trailing punctuation', () => {
+		expect(normalizeWordForLookup('party.')).toBe('party');
+		expect(normalizeWordForLookup('going,')).toBe('going');
+		expect(normalizeWordForLookup('word!')).toBe('word');
+	});
+
+	it('strips leading and wrapping punctuation', () => {
+		expect(normalizeWordForLookup('(going)')).toBe('going');
+		expect(normalizeWordForLookup('"hello"')).toBe('hello');
+		expect(normalizeWordForLookup("'world'")).toBe('world');
+		expect(normalizeWordForLookup('[word]')).toBe('word');
+	});
+
+	it('strips punctuation before possessive handling', () => {
+		expect(normalizeWordForLookup("party's.")).toBe('party');
+	});
+});
+
+describe('stripPunctuationForLookup', () => {
+	it('preserves hyphenated words while stripping outer punctuation', () => {
+		expect(stripPunctuationForLookup('(well-known).')).toBe('well-known');
+	});
 });
 
 describe('extractLookupWordFromReaderState', () => {
@@ -49,6 +73,15 @@ describe('extractLookupWordFromReaderState', () => {
 			displayToken: { kind: 'section_break', text: '---' }
 		} as ReaderState;
 		expect(extractLookupWordFromReaderState(state)).toBeNull();
+	});
+
+	it('strips punctuation from display token text', () => {
+		const state = {
+			chunk: [],
+			finished: false,
+			displayToken: { kind: 'word', text: 'party.' }
+		} as ReaderState;
+		expect(extractLookupWordFromReaderState(state)).toBe('party');
 	});
 });
 

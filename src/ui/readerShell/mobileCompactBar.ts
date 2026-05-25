@@ -1,4 +1,5 @@
-import type { ReaderState, SpeedReaderAiSettings } from '../../types';
+import type { PlaybackMode, ReaderState, SpeedReaderAiSettings } from '../../types';
+import { mountPlaybackModeSelect } from './playbackModePicker';
 
 export { getSectionPickerOptions } from './mobileSectionPicker';
 
@@ -16,7 +17,7 @@ export interface MobileCompactBarHandle {
 export interface MobileCompactBarHandlers {
 	onWpmDelta: (delta: number) => void;
 	onFontDelta: (delta: number) => void;
-	onToggleMode: () => void;
+	onPlaybackModeChange: (mode: PlaybackMode) => void;
 	onPlayPause: () => void;
 }
 
@@ -73,31 +74,30 @@ export function mountMobileCompactBar(
 		attr: { type: 'button', 'aria-label': 'Increase WPM' }
 	}).addEventListener('click', () => handlers.onWpmDelta(25));
 
-	const modeBtn = row.createEl('button', {
-		cls: 'speed-reader-ai-mobile-touch-btn speed-reader-ai-mobile-mode-btn',
-		text: 'RSVP',
-		attr: { type: 'button' }
+	const modeGroup = row.createDiv({ cls: 'speed-reader-ai-mobile-compact-group speed-reader-ai-mobile-compact-mode-group' });
+	const modePicker = mountPlaybackModeSelect(modeGroup, {
+		className: 'speed-reader-ai-mobile-compact-mode-select',
+		ariaLabel: 'Playback mode',
+		onChange: handlers.onPlaybackModeChange
 	});
 
 	let chapterPillTapHandler: (() => void) | null = null;
 	let closeHandler: (() => void) | null = null;
 
 	playBtn.addEventListener('click', () => handlers.onPlayPause());
-	modeBtn.addEventListener('click', () => handlers.onToggleMode());
 	chapterPill.addEventListener('click', () => chapterPillTapHandler?.());
 	closeBtn.addEventListener('click', () => closeHandler?.());
 
 	return {
 		destroy() {
+			modePicker.destroy();
 			bar.remove();
 		},
 		update(state, settings) {
 			playBtn.setText(state?.isPlaying ? '⏸' : '▶');
 			fontVal.setText(String(settings.reader.fontSize));
 			wpmVal.setText(String(state ? Math.round(state.currentWpm) : settings.reader.wpm));
-			const isLineRepeat = state?.playbackMode === 'lineRepeat';
-			modeBtn.setText(isLineRepeat ? 'Line' : 'RSVP');
-			modeBtn.toggleClass('is-line-repeat', isLineRepeat);
+			modePicker.setMode(state?.playbackMode ?? settings.reader.defaultPlaybackMode);
 
 			if (state?.sectionTitle?.trim()) {
 				const n = (state.currentSectionIndex ?? 0) + 1;

@@ -1,8 +1,9 @@
-export type ReaderTabId = 'home' | 'content' | 'settings' | 'shortcuts' | 'advanced';
+export type ReaderTabId = 'home' | 'content' | 'bookmarks' | 'settings' | 'shortcuts' | 'advanced';
 
 export const READER_TABS: { id: ReaderTabId; label: string }[] = [
 	{ id: 'home', label: 'Home' },
 	{ id: 'content', label: 'Content' },
+	{ id: 'bookmarks', label: 'Bookmarks' },
 	{ id: 'settings', label: 'Settings' },
 	{ id: 'shortcuts', label: 'Shortcuts' },
 	{ id: 'advanced', label: 'Advanced' }

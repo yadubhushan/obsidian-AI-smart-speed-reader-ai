@@ -1,6 +1,6 @@
+import { normalizePlaybackMode } from '../engine/playbackMode';
 import {
 	DEFAULT_SETTINGS,
-	PlaybackMode,
 	READER_FONT_OPTIONS,
 	SpeedReaderAiSettings,
 	type ApiProviderPreset,
@@ -42,10 +42,6 @@ function toString(value: unknown, fallback: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function normalizePlaybackMode(value: unknown): PlaybackMode {
-	return value === 'lineRepeat' ? 'lineRepeat' : 'rsvp';
 }
 
 function normalizeColorScheme(value: unknown): ReaderColorScheme {
@@ -201,6 +197,10 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 				showProgress: toBoolean(raw.showProgress, DEFAULT_SETTINGS.reader.display.showProgress)
 			},
 			defaultPlaybackMode: normalizePlaybackMode(raw.defaultPlaybackMode),
+			progressiveRsvpMaxWordLength: toNumber(
+				raw.progressiveRsvpMaxWordLength,
+				DEFAULT_SETTINGS.reader.progressiveRsvpMaxWordLength
+			),
 			lineRepeatGapMs: toNumber(raw.lineRepeatGapMs, DEFAULT_SETTINGS.reader.lineRepeatGapMs),
 			enableMicropause: toBoolean(raw.enableMicropause, DEFAULT_SETTINGS.reader.enableMicropause),
 			micropauseIntensity: toNumber(
@@ -333,6 +333,16 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 		},
 		defaultPlaybackMode: normalizePlaybackMode(
 			firstDefined(r.defaultPlaybackMode, flat.defaultPlaybackMode)
+		),
+		progressiveRsvpMaxWordLength: clamp(
+			Math.round(
+				toNumber(
+					firstDefined(r.progressiveRsvpMaxWordLength, flat.progressiveRsvpMaxWordLength),
+					DEFAULT_SETTINGS.reader.progressiveRsvpMaxWordLength
+				)
+			),
+			1,
+			20
 		),
 		lineRepeatGapMs: clamp(
 			Math.round(

@@ -18,6 +18,10 @@ export type LineRepeatAdvanceResult =
 	| { action: 'advance'; nextSeekIndex: number }
 	| { action: 'complete' };
 
+export type LineByLineAdvanceResult =
+	| { action: 'advance'; nextSeekIndex: number }
+	| { action: 'complete' };
+
 export function buildSentenceUnits(navWords: NavWord[]): SentenceUnit[] {
 	if (navWords.length === 0) {
 		return [];
@@ -103,6 +107,36 @@ export function computeLineRepeatAdvance(
 			nextSeekIndex: unit.startSeekIndex,
 			extraDelayMs: lineRepeatGapMs
 		};
+	}
+
+	if (isManifest && streamLength !== undefined && nextSeekIndex >= streamLength) {
+		return { action: 'complete' };
+	}
+
+	return { action: 'advance', nextSeekIndex };
+}
+
+export function computeLineByLineAdvance(
+	units: SentenceUnit[],
+	currentSeekIndex: number,
+	nextSeekIndex: number,
+	isManifest: boolean,
+	streamLength?: number
+): LineByLineAdvanceResult {
+	if (units.length === 0) {
+		return { action: 'complete' };
+	}
+
+	const unitIndex = findSentenceUnitForSeekIndex(units, currentSeekIndex);
+	const unit = units[unitIndex]!;
+
+	if (nextSeekIndex > unit.endSeekIndex) {
+		const nextUnit = units[unitIndex + 1];
+		if (!nextUnit) {
+			return { action: 'complete' };
+		}
+
+		return { action: 'advance', nextSeekIndex: nextUnit.startSeekIndex };
 	}
 
 	if (isManifest && streamLength !== undefined && nextSeekIndex >= streamLength) {

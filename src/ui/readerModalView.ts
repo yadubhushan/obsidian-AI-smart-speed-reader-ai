@@ -1,12 +1,13 @@
 import { App, Modal, Notice } from 'obsidian';
 import { RSVPEngine } from '../engine/rsvpEngine';
+import { isLinePlaybackMode } from '../engine/playbackMode';
 import { tokenDisplayLabel } from '../engine/manifestPlayback';
 import { SettingsBackedLlmClient, describeActiveLlmBackend } from '../llm/createLlmClient';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
 import type { LlmModelCatalog } from '../llm/llmModelCatalog';
 import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 import type { ManifestStore } from '../store/ManifestStore';
-import { DEFAULT_SETTINGS, HeadingInfo, ReaderState, SpeedReaderAiSettings, WordData } from '../types';
+import { DEFAULT_SETTINGS, HeadingInfo, PlaybackMode, ReaderState, SpeedReaderAiSettings, WordData } from '../types';
 import type { PreparePromptSet } from '../llm/promptCatalog';
 import type { ProcessingModeId } from '../types/processedDocument';
 import { mountModePicker, type ModePickerHandle } from './modePicker';
@@ -20,6 +21,7 @@ import { StructuredReaderSession, type PlaybackLoadKind } from './structuredRead
 import { bookIndexToProcessedDocument } from '../formats/bookIndexToProcessedDocument';
 import { bookCacheCoverPath } from '../store/bookCachePaths';
 import type { ReaderSessionHooks } from '../reader/readingProgressTracker';
+import type { BookmarkEntry } from '../bookmarks/parseBookmarkEntries';
 import type { ReaderBookmarkHandles } from '../features/feature4/attachReaderBookmarks';
 import type { ReaderWordLookupHandles } from '../features/word-lookup/attachReaderWordLookup';
 import type { DictionaryLookupOutcome } from '../dictionary/dictionaryTypes';
@@ -37,6 +39,7 @@ import { mountContentPane, type ContentPaneHandle } from './readerShell/panes/co
 import { mountSettingsPane, type SettingsPaneHandle } from './readerShell/panes/settingsPane';
 import { mountShortcutsPane, type ShortcutsPaneHandle } from './readerShell/panes/shortcutsPane';
 import { mountAdvancedPane, type AdvancedPaneHandle } from './readerShell/panes/advancedPane';
+import { mountBookmarksPane, type BookmarksPaneHandle } from './readerShell/panes/bookmarksPane';
 import { validateSettings } from '../services/settingsValidator';
 import {
 	applyMobileShellClass,
@@ -159,6 +162,8 @@ export class SpeedReaderAiModal extends Modal {
 	private skipFlashTimer: number | null = null;
 	private readonly mobileReader = isMobileReader();
 	private contentPane!: ContentPaneHandle;
+	private bookmarksPane!: BookmarksPaneHandle;
+	private bookmarkEntries: BookmarkEntry[] = [];
 	private settingsPane!: SettingsPaneHandle;
 	private shortcutsPane!: ShortcutsPaneHandle;
 	private advancedPane!: AdvancedPaneHandle;
@@ -241,7 +246,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.shellEl = contentEl.createDiv({ cls: 'speed-reader-ai-shell' });
 
 		this.header = mountReaderHeader(this.shellEl, {
-			chunkSize: this.settings.reader.chunkSize,
 			rtl: this.settings.reader.textOrientation.rtl,
 			showRemainingTime: this.settings.reader.display.showRemainingTime,
 			showProgress: this.settings.reader.display.showProgress
@@ -280,10 +284,7 @@ export class SpeedReaderAiModal extends Modal {
 				},
 				onWpmDelta: (delta) => this.adjustWpm(delta),
 				onFontDelta: (delta) => this.adjustFontSize(delta),
-				onToggleMode: () => {
-					this.engine.togglePlaybackMode();
-					this.render();
-				}
+				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
 			});
 			this.mobileCompactBar.onClose(() => this.forceClose());
 			this.mobileCompactBar.onChapterPillTap(() => {
@@ -353,6 +354,16 @@ export class SpeedReaderAiModal extends Modal {
 		this.sectionSelect.addEventListener('change', () => this.onHeadingSelectChange());
 
 		this.contentPane = mountContentPane(this.paneStackEl);
+		this.bookmarksPane = mountBookmarksPane(this.paneStackEl);
+		this.bookmarksPane.onSeek((entryIndex) => {
+			this.seekBookmarkEntry(entryIndex);
+		});
+		this.bookmarksPane.onBatchBookmark((selections) => {
+			void this.batchBookmarkSelections(selections);
+		});
+		this.bookmarksPane.onOpenInObsidian(() => {
+			void this.bookmarkHandlers?.openBookmarkMarkdownInObsidian();
+		});
 		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
 			onSave: (next) => {
 				this.persistSettings(next);
@@ -385,10 +396,7 @@ export class SpeedReaderAiModal extends Modal {
 			{
 				onWpmDelta: (delta) => this.adjustWpm(delta),
 				onFontDelta: (delta) => this.adjustFontSize(delta),
-				onToggleMode: () => {
-					this.engine.togglePlaybackMode();
-					this.render();
-				},
+				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
 				onReadWithoutAi: () => this.onReadWithoutAi(),
 				onPrepare: () => this.onPrepareWithAi(),
 				onClearCache: () => this.onClearDocumentCache(),
@@ -416,6 +424,9 @@ export class SpeedReaderAiModal extends Modal {
 			this.mobileActionBar.onBookmark(() => {
 				void this.createMobileBookmark();
 			});
+			this.mobileActionBar.onBookmarkLongPress(() => {
+				void this.bookmarkHandlers?.openBookmarksTab();
+			});
 			this.mobileActionBar.onDefine(() => {
 				void this.wordLookupHandlers?.lookupCurrentWord();
 			});
@@ -428,10 +439,7 @@ export class SpeedReaderAiModal extends Modal {
 				getState: () => this.state,
 				onWpmChange: (wpm) => this.setReaderWpm(wpm),
 				onFontChange: (fontSize) => this.setReaderFontSize(fontSize),
-				onToggleMode: () => {
-					this.engine.togglePlaybackMode();
-					this.render();
-				}
+				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
 			});
 			this.mobilePeekSheet.onOpenChange((open) => {
 				this.mobilePeekOpen = open;
@@ -456,10 +464,7 @@ export class SpeedReaderAiModal extends Modal {
 					getState: () => this.state,
 					onWpmChange: (wpm) => this.setReaderWpm(wpm),
 					onFontChange: (fontSize) => this.setReaderFontSize(fontSize),
-					onToggleMode: () => {
-						this.engine.togglePlaybackMode();
-						this.render();
-					}
+					onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
 				}
 			);
 			this.mobileBottomSheet.onOpenChange((open) => {
@@ -590,6 +595,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.mobileCoachMarks = null;
 		removeMobileShellClass(this.shellEl);
 		this.contentPane?.destroy();
+		this.bookmarksPane?.destroy();
 		this.settingsPane?.destroy();
 		this.shortcutsPane?.destroy();
 		this.advancedPane?.destroy();
@@ -599,6 +605,41 @@ export class SpeedReaderAiModal extends Modal {
 		this.onSettingsChange(this.settings);
 		this.contentEl.empty();
 		this.onReaderClose?.();
+	}
+
+	showBookmarksTab(entries: BookmarkEntry[]): void {
+		this.bookmarkEntries = entries;
+		this.bookmarksPane?.setEntries(entries);
+		this.setActiveTab('bookmarks');
+	}
+
+	async showBookmarksTabFromService(): Promise<void> {
+		await this.bookmarkHandlers?.openBookmarksTab();
+	}
+
+	private seekBookmarkEntry(entryIndex: number): void {
+		const entry = this.bookmarkEntries[entryIndex];
+		if (!entry) {
+			return;
+		}
+		const ok = this.bookmarkHandlers?.seekToBookmarkEntry(entry) ?? false;
+		if (!ok) {
+			new Notice('Could not seek to this bookmark position.');
+			return;
+		}
+		this.setActiveTab('home');
+		this.refocusContent();
+	}
+
+	private async batchBookmarkSelections(
+		selections: Array<{ entryIndex: number; lineIndex: number }>
+	): Promise<void> {
+		if (selections.length === 0) {
+			return;
+		}
+		const entryIndices = selections.map((selection) => selection.entryIndex);
+		await this.bookmarkHandlers?.batchBookmarkAtEntries(entryIndices);
+		this.bookmarksPane?.clearSelection();
 	}
 
 	setInitialTab(tab: ReaderTabId): void {
@@ -619,6 +660,9 @@ export class SpeedReaderAiModal extends Modal {
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-content')
 			?.toggleClass('is-hidden', tab !== 'content');
+		this.paneStackEl
+			?.querySelector('.speed-reader-ai-pane-bookmarks')
+			?.toggleClass('is-hidden', tab !== 'bookmarks');
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-settings')
 			?.toggleClass('is-hidden', tab !== 'settings');
@@ -1305,7 +1349,7 @@ export class SpeedReaderAiModal extends Modal {
 			if (this.isInputBlockedByOverlay()) {
 				return false;
 			}
-			void this.bookmarkHandlers?.openBookmarkTarget();
+			void this.bookmarkHandlers?.openBookmarksTab();
 			return false;
 		});
 
@@ -1333,7 +1377,7 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private handleArrowLeft() {
-		if (this.state?.playbackMode === 'lineRepeat') {
+		if (this.state && isLinePlaybackMode(this.state.playbackMode)) {
 			this.engine.prevLine();
 		} else {
 			this.engine.rewindSmart();
@@ -1342,7 +1386,7 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private handleArrowRight() {
-		if (this.state?.playbackMode === 'lineRepeat') {
+		if (this.state && isLinePlaybackMode(this.state.playbackMode)) {
 			this.engine.nextLine();
 		} else {
 			this.engine.fastForwardSmart();
@@ -1502,6 +1546,11 @@ export class SpeedReaderAiModal extends Modal {
 		this.engine.setSettings(this.settings);
 		this.mobilePeekSheet?.refresh();
 		this.mobileBottomSheet?.refreshReadingControls();
+	}
+
+	private setPlaybackMode(mode: PlaybackMode) {
+		this.engine.setPlaybackMode(mode);
+		this.render();
 	}
 
 	private setReaderFontSize(fontSize: number) {
@@ -1886,14 +1935,14 @@ export class SpeedReaderAiModal extends Modal {
 	) {
 		const unit = parent.createSpan({ cls: 'speed-reader-ai-word-unit' });
 		if (
-			state.playbackMode === 'lineRepeat' &&
+			isLinePlaybackMode(state.playbackMode) &&
 			state.lineStartSeekIndex !== undefined &&
 			seekIndex === state.lineStartSeekIndex
 		) {
 			unit.addClass('is-line-start');
 		}
 		if (
-			state.playbackMode === 'lineRepeat' &&
+			isLinePlaybackMode(state.playbackMode) &&
 			state.lineEndSeekIndex !== undefined &&
 			seekIndex === state.lineEndSeekIndex
 		) {

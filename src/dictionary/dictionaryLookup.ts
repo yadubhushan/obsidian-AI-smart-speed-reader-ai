@@ -1,3 +1,5 @@
+import { parseTrailingPunctuation } from '../engine/readingNavigation';
+import { stripLeadingPunctuation } from '../services/textParser';
 import type { ReaderState } from '../types';
 import type { DictionaryLookupOutcome } from './dictionaryTypes';
 
@@ -15,8 +17,16 @@ export function setCachedDictionaryOutcome(word: string, outcome: DictionaryLook
 	sessionCache.set(word, outcome);
 }
 
+export function stripPunctuationForLookup(raw: string): string {
+	let word = raw.trim();
+	const { clean: withoutLeading } = stripLeadingPunctuation(word);
+	word = withoutLeading;
+	const { word: withoutTrailing } = parseTrailingPunctuation(word);
+	return withoutTrailing;
+}
+
 export function normalizeWordForLookup(raw: string): string | null {
-	let word = raw.trim().toLowerCase();
+	let word = stripPunctuationForLookup(raw).toLowerCase();
 	if (word.endsWith("'s")) {
 		word = word.slice(0, -2);
 	}
@@ -41,7 +51,7 @@ export function extractLookupWordFromReaderState(state: ReaderState | null): str
 		return state.chunk[0]!.word;
 	}
 	if (state.displayToken?.kind === 'word' && state.displayToken.text) {
-		return state.displayToken.text;
+		return stripPunctuationForLookup(state.displayToken.text);
 	}
 	return null;
 }

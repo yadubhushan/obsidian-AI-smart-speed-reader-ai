@@ -1,4 +1,5 @@
-import { DEFAULT_SETTINGS, READER_FONT_OPTIONS, type SpeedReaderAiSettings } from '../../../types';
+import { PLAYBACK_MODE_ORDER, getPlaybackModeLabel } from '../../../engine/playbackMode';
+import { DEFAULT_SETTINGS, READER_FONT_OPTIONS, type PlaybackMode, type SpeedReaderAiSettings } from '../../../types';
 
 export interface SettingsPaneHandle {
 	destroy(): void;
@@ -68,12 +69,19 @@ export function mountSettingsPane(
 		});
 		wpmInput.value = String(draft.reader.wpm);
 
-		left.createEl('label', { text: 'Words per slide (Chunk size)' });
-		const chunkInput = left.createEl('input', {
+		left.createEl('label', { text: 'Default playback mode' });
+		const defaultModeSelect = left.createEl('select', { cls: 'speed-reader-ai-settings-input' });
+		for (const mode of PLAYBACK_MODE_ORDER) {
+			defaultModeSelect.createEl('option', { text: getPlaybackModeLabel(mode), value: mode });
+		}
+		defaultModeSelect.value = draft.reader.defaultPlaybackMode;
+
+		left.createEl('label', { text: 'Progressive RSVP max word length' });
+		const progressiveRsvpInput = left.createEl('input', {
 			cls: 'speed-reader-ai-settings-input',
-			attr: { type: 'number', min: '1', max: '5' }
+			attr: { type: 'number', min: '1', max: '10' }
 		});
-		chunkInput.value = String(draft.reader.chunkSize);
+		progressiveRsvpInput.value = String(draft.reader.progressiveRsvpMaxWordLength);
 
 		left.createEl('label', { text: 'Color Scheme' });
 		const schemeSelect = left.createEl('select', { cls: 'speed-reader-ai-settings-input' });
@@ -144,7 +152,8 @@ export function mountSettingsPane(
 					fontSize: Number(fontSizeInput.value),
 					contextLineFontSize: Number(contextLineFontSizeInput.value),
 					wpm: Number(wpmInput.value),
-					chunkSize: Number(chunkInput.value),
+					defaultPlaybackMode: defaultModeSelect.value as PlaybackMode,
+					progressiveRsvpMaxWordLength: Number(progressiveRsvpInput.value),
 					colorScheme: schemeSelect.value as SpeedReaderAiSettings['reader']['colorScheme'],
 					autoStart: {
 						enabled: autoStartCheck.checked,

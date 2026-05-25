@@ -12,6 +12,7 @@ import {
 import { registerFeature3A } from './features/feature3a/registerFeature3A';
 import { registerFeature3B } from './features/feature3b/registerFeature3B';
 import { registerFeature4, wireReaderBookmarks } from './features/feature4/registerFeature4';
+import { registerStudyLoopBridge } from './study-loop/studyLoopBridge';
 import { registerWordLookup, wireReaderWordLookup } from './features/word-lookup/registerWordLookup';
 import { DEFAULT_SETTINGS, SpeedReaderAiSettings, SpeedReaderAiSettingTab } from './settings';
 import { createPluginServices, type PluginServices } from './services/serviceRegistry';
@@ -100,6 +101,12 @@ export default class SpeedReaderAiPlugin extends Plugin {
 		registerFeature3B(this, this.services);
 		registerFeature4(this, this.services);
 		registerWordLookup(this);
+
+		registerStudyLoopBridge({
+			app: this.app,
+			services: this.services,
+			getSettings: () => this.settings
+		});
 
 		this.addRibbonIcon('book-open', 'Speed read current note', () => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
