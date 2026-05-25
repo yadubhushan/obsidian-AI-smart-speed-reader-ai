@@ -610,7 +610,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.clearSkipFlash();
 		this.mobileCoachMarks?.destroy();
 		this.mobileCoachMarks = null;
-		removeMobileShellClass(this.shellEl);
+		removeMobileShellClass(this.shellEl, this.containerEl);
 		this.contentPane?.destroy();
 		this.bookmarksPane?.destroy();
 		this.settingsPane?.destroy();
@@ -1726,7 +1726,7 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private syncMobileChrome(state: ReaderState | null) {
-		if (!this.mobileReader) {
+		if (!this.mobileReader || !this.shellEl) {
 			return;
 		}
 		const isHome = this.activeTab === 'home';
@@ -1734,11 +1734,16 @@ export class SpeedReaderAiModal extends Modal {
 		if (playing) {
 			this.closeMobileOverlays();
 		}
-		syncMobilePlayingState(this.shellEl, playing, this.isMobileOverlayOpen());
+		syncMobilePlayingState(
+			this.shellEl,
+			playing,
+			this.isMobileOverlayOpen(),
+			this.containerEl
+		);
 		syncMobilePausedState(this.shellEl, !playing && isHome);
 		syncMobileProgressStrip(
 			this.mobileProgressStripEl,
-			isHome ? state : null,
+			playing || !isHome ? null : state,
 			this.settings.reader.display.showProgress
 		);
 		if (this.mobileCompactBar && state) {

@@ -11,20 +11,27 @@ export function applyMobileShellClass(shellEl: HTMLElement): void {
 	shellEl.addClass('speed-reader-ai-mobile');
 }
 
-export function 	removeMobileShellClass(shellEl: HTMLElement): void {
+export function removeMobileShellClass(
+	shellEl: HTMLElement,
+	modalContainerEl?: HTMLElement | null
+): void {
 	shellEl.removeClass('speed-reader-ai-mobile');
 	shellEl.removeClass('speed-reader-ai-mobile-playing');
 	shellEl.removeClass('speed-reader-ai-mobile-paused');
 	shellEl.removeClass('speed-reader-ai-mobile-menu-open');
+	modalContainerEl?.removeClass('speed-reader-ai-mobile-playing');
 }
 
 export function syncMobilePlayingState(
 	shellEl: HTMLElement,
 	isPlaying: boolean,
-	overlayOpen: boolean
+	overlayOpen: boolean,
+	modalContainerEl?: HTMLElement | null
 ): void {
-	shellEl.toggleClass('speed-reader-ai-mobile-playing', isPlaying && !overlayOpen);
+	const immersive = isPlaying && !overlayOpen;
+	shellEl.toggleClass('speed-reader-ai-mobile-playing', immersive);
 	shellEl.toggleClass('speed-reader-ai-mobile-menu-open', overlayOpen);
+	modalContainerEl?.toggleClass('speed-reader-ai-mobile-playing', immersive);
 }
 
 export function syncMobilePausedState(shellEl: HTMLElement, isPausedHome: boolean): void {

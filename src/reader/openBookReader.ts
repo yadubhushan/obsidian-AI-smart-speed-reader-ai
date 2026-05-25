@@ -100,6 +100,7 @@ export async function openBookReader(deps: OpenBookReaderDeps): Promise<SpeedRea
 	modal.setSessionHooks(hooks);
 
 	modal.open();
+	modal.getEngine().setPlaybackMode(playbackMode);
 	wireReaderWordLookup(modal, () => ({
 		dictionary: deps.getSettings().dictionary
 	}));

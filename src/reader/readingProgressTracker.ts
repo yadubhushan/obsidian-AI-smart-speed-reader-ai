@@ -123,10 +123,6 @@ export function createReadingProgressTracker(
 		}
 	};
 
-	if (deps.initialPlaybackMode) {
-		deps.engine.setPlaybackMode(deps.initialPlaybackMode);
-	}
-
 	const hooks: ReaderSessionHooks = {
 		onEngineStateChange(state, previousIsPlaying) {
 			lastState = state;

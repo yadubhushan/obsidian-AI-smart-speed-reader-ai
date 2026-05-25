@@ -81,6 +81,9 @@ export async function openNoteReader(deps: OpenNoteReaderDeps): Promise<SpeedRea
 		() => deps.onClose?.(deps.request.sourcePath)
 	);
 
+	const playbackMode =
+		deps.request.playbackMode ?? existingState?.playbackMode ?? deps.settings.reader.defaultPlaybackMode;
+
 	const hooks = attachNoteReadingSession({
 		modal,
 		engine: modal.getEngine(),
@@ -88,13 +91,13 @@ export async function openNoteReader(deps: OpenNoteReaderDeps): Promise<SpeedRea
 		sourceChecksum: checksum,
 		preferredProcessingMode: existingState?.preferredProcessingMode,
 		existingState: checksumReset ? undefined : existingState,
-		initialPlaybackMode:
-			deps.request.playbackMode ?? existingState?.playbackMode ?? deps.settings.reader.defaultPlaybackMode,
+		initialPlaybackMode: playbackMode,
 		services: deps.services
 	});
 	modal.setSessionHooks(hooks);
 
 	modal.open();
+	modal.getEngine().setPlaybackMode(playbackMode);
 	wireReaderWordLookup(modal, () => ({
 		dictionary: deps.getSettings().dictionary
 	}));
