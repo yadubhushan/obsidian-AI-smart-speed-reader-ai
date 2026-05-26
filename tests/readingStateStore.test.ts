@@ -20,17 +20,21 @@ function createMockApp(rootDir: string): App {
 	} as App;
 }
 
-const sampleState = (sourcePath: string): ReadingState => ({
+const sampleState = (
+	sourcePath: string,
+	lastOpenedAt = '2026-05-21T00:00:00.000Z',
+	wordIndex = 12
+): ReadingState => ({
 	sourcePath,
 	sourceKind: 'book',
 	title: 'Sample',
 	folder: 'books',
 	sourceChecksum: 'abc123',
-	lastOpenedAt: '2026-05-21T00:00:00.000Z',
+	lastOpenedAt,
 	pinned: false,
 	status: 'in_progress',
 	playbackMode: 'rsvp',
-	position: { chapterId: 'chapter-01', wordIndex: 12 },
+	position: { chapterId: 'chapter-01', wordIndex },
 	progressPercent: 4
 });
 
@@ -96,6 +100,20 @@ describe('ReadingStateStore', () => {
 		expect(onChanged).toHaveBeenCalledWith({ sourcePath: 'books/a.epub' });
 	});
 
+	it('emits reading-state-flushed on flush', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const onFlushed = vi.fn();
+		eventBus.on('reading-state-flushed', onFlushed);
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
+		await store.load();
+		await store.upsert(sampleState('books/a.epub'));
+		await store.flush();
+
+		expect(onFlushed).toHaveBeenCalled();
+	});
+
 	it('notifies onChanged subscribers after flush', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();
@@ -137,23 +155,47 @@ describe('ReadingStateStore', () => {
 		expect(onChanged).toHaveBeenCalledWith({ sourcePath: 'books/b.epub' });
 	});
 
-	it('reloadFromDisk skips when local state is dirty', async () => {
+	it('reloadFromDisk merges dirty local state with newer disk entries', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();
 		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
 		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
 		await store.load();
-		await store.upsert(sampleState('books/a.epub'));
+		await store.upsert(sampleState('books/a.epub', '2026-05-21T00:00:00.000Z', 12));
 
 		const synced = {
 			lastGlobalSourcePath: 'books/b.epub',
-			sources: { 'books/b.epub': sampleState('books/b.epub') }
+			sources: {
+				'books/b.epub': sampleState('books/b.epub', '2026-05-22T00:00:00.000Z', 99)
+			}
 		};
 		await app.vault.adapter.write(paths.readingStateFile, JSON.stringify(synced));
 
 		const reloaded = await store.reloadFromDisk();
-		expect(reloaded).toBe(false);
+		expect(reloaded).toBe(true);
 		expect(store.isDirty()).toBe(true);
-		expect(store.get('books/a.epub')?.sourcePath).toBe('books/a.epub');
+		expect(store.get('books/a.epub')?.position.wordIndex).toBe(12);
+		expect(store.get('books/b.epub')?.position.wordIndex).toBe(99);
+	});
+
+	it('reloadFromDisk keeps newer local entry over older disk entry', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(app, eventBus, paths.readingStateFile);
+		await store.load();
+		await store.upsert(sampleState('books/a.epub', '2026-05-23T00:00:00.000Z', 42));
+
+		const synced = {
+			lastGlobalSourcePath: 'books/a.epub',
+			sources: {
+				'books/a.epub': sampleState('books/a.epub', '2026-05-21T00:00:00.000Z', 12)
+			}
+		};
+		await app.vault.adapter.write(paths.readingStateFile, JSON.stringify(synced));
+
+		await store.reloadFromDisk();
+		expect(store.get('books/a.epub')?.position.wordIndex).toBe(42);
+		expect(store.isDirty()).toBe(true);
 	});
 });

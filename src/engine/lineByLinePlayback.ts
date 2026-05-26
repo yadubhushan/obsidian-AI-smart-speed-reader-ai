@@ -9,6 +9,12 @@ import {
 
 export const LINE_BY_LINE_REWIND_BUFFER_MULTIPLIER = 1.5;
 
+/** Show the full sentence in one step when word count is at or below this limit. */
+export const LINE_BY_LINE_FULL_LINE_WORD_LIMIT = 12;
+
+/** Max words per sub-chunk when a sentence exceeds LINE_BY_LINE_FULL_LINE_WORD_LIMIT. */
+export const LINE_BY_LINE_MAX_CHUNK_WORDS = 10;
+
 export interface LineChunkBounds {
 	chunkStarts: number[];
 	chunkIndex: number;
@@ -16,8 +22,11 @@ export interface LineChunkBounds {
 	endIndex: number;
 }
 
-export function effectiveLineChunkMax(chunkSize: number): number {
-	return chunkSize;
+export function partitionLineWordSeekIndices(wordSeekIndices: number[]): number[] {
+	if (wordSeekIndices.length <= LINE_BY_LINE_FULL_LINE_WORD_LIMIT) {
+		return wordSeekIndices.length > 0 ? [wordSeekIndices[0]!] : [];
+	}
+	return partitionSentenceIntoEqualChunks(wordSeekIndices, LINE_BY_LINE_MAX_CHUNK_WORDS);
 }
 
 export function partitionSentenceIntoEqualChunks(
@@ -112,15 +121,10 @@ export function getManifestUnitWordSeekIndices(stream: StreamToken[], unit: Sent
 	return indices;
 }
 
-export function getLineChunkStartsForUnit(
-	unit: SentenceUnit,
-	chunkSize: number,
-	wordSeekIndices: number[]
-): number[] {
-	return partitionSentenceIntoEqualChunks(
-		wordSeekIndices.length > 0 ? wordSeekIndices : getLegacyUnitWordSeekIndices(unit),
-		effectiveLineChunkMax(chunkSize)
-	);
+export function getLineChunkStartsForUnit(unit: SentenceUnit, wordSeekIndices: number[]): number[] {
+	const indices =
+		wordSeekIndices.length > 0 ? wordSeekIndices : getLegacyUnitWordSeekIndices(unit);
+	return partitionLineWordSeekIndices(indices);
 }
 
 function legacyWordSeekIndices(unit: SentenceUnit): number[] {
@@ -131,14 +135,8 @@ function manifestWordSeekIndices(stream: StreamToken[], unit: SentenceUnit): num
 	return getManifestUnitWordSeekIndices(stream, unit);
 }
 
-function chunkStartsForUnit(
-	wordSeekIndices: number[],
-	chunkSize: number
-): number[] {
-	return partitionSentenceIntoEqualChunks(
-		wordSeekIndices,
-		effectiveLineChunkMax(chunkSize)
-	);
+function chunkStartsForUnit(wordSeekIndices: number[]): number[] {
+	return partitionLineWordSeekIndices(wordSeekIndices);
 }
 
 export function legacyUnitTextsAndPunctuation(
@@ -172,8 +170,7 @@ export function manifestUnitTextsAndPunctuation(
 export function getLegacyLineChunk(
 	words: WordData[],
 	units: SentenceUnit[],
-	startIndex: number,
-	chunkSize: number = 1
+	startIndex: number
 ): { words: WordData[]; endIndex: number; lineStartIndex: number; lineEndSeekIndex: number } {
 	if (units.length === 0 || words.length === 0) {
 		return { words: [], endIndex: startIndex, lineStartIndex: startIndex, lineEndSeekIndex: startIndex };
@@ -182,7 +179,7 @@ export function getLegacyLineChunk(
 	const unitIndex = findSentenceUnitForSeekIndex(units, startIndex);
 	const unit = units[unitIndex]!;
 	const wordSeekIndices = legacyWordSeekIndices(unit);
-	const chunkStarts = chunkStartsForUnit(wordSeekIndices, chunkSize);
+	const chunkStarts = chunkStartsForUnit(wordSeekIndices);
 	const { lineStartIndex, endIndex } = resolveLineChunkBounds(
 		chunkStarts,
 		startIndex,
@@ -201,8 +198,7 @@ export function getLegacyLineChunk(
 export function getManifestLineChunk(
 	stream: StreamToken[],
 	units: SentenceUnit[],
-	startIndex: number,
-	chunkSize: number = 1
+	startIndex: number
 ): { tokens: StreamToken[]; endIndex: number; lineStartIndex: number; lineEndSeekIndex: number } {
 	if (units.length === 0 || stream.length === 0) {
 		return { tokens: [], endIndex: startIndex, lineStartIndex: startIndex, lineEndSeekIndex: startIndex };
@@ -211,7 +207,7 @@ export function getManifestLineChunk(
 	const unitIndex = findSentenceUnitForSeekIndex(units, startIndex);
 	const unit = units[unitIndex]!;
 	const wordSeekIndices = manifestWordSeekIndices(stream, unit);
-	const chunkStarts = chunkStartsForUnit(wordSeekIndices, chunkSize);
+	const chunkStarts = chunkStartsForUnit(wordSeekIndices);
 	const { lineStartIndex, endIndex } = resolveLineChunkBounds(
 		chunkStarts,
 		startIndex,

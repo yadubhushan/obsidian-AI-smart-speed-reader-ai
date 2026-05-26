@@ -130,7 +130,7 @@ export async function prepareBookOpenState(deps: {
 	sourceChecksum: string;
 	services: PluginServices;
 }): Promise<{ existingState?: ReadingState; checksumReset: boolean }> {
-	await deps.services.readingStateStore.load();
+	await deps.services.readingStateStore.reloadFromDisk();
 	const existing = deps.services.readingStateStore.get(deps.sourcePath);
 	const checksumReset = Boolean(
 		existing?.sourceChecksum && existing.sourceChecksum !== deps.sourceChecksum

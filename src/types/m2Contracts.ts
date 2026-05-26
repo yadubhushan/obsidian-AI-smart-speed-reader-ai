@@ -119,6 +119,7 @@ export interface EpubVaultIndex {
 
 export type EventBusEventMap = {
 	'reading-state-changed': { sourcePath: string };
+	'reading-state-flushed': Record<string, never>;
 	'reader-opened': { sourcePath: string; sourceKind: SourceKind };
 	'reader-closed': { sourcePath: string };
 	'book-cache-updated': { docKey: string; sourcePath: string };

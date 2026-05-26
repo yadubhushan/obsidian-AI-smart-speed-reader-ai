@@ -47,7 +47,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			ctx.playbackSource === 'manifest'
 				? getManifestUnitWordSeekIndices(ctx.getActiveStream(), unit)
 				: getLegacyUnitWordSeekIndices(unit);
-		const chunkStarts = getLineChunkStartsForUnit(unit, ctx.settings.reader.chunkSize, wordSeekIndices);
+		const chunkStarts = getLineChunkStartsForUnit(unit, wordSeekIndices);
 		const chunkIndex = findChunkIndex(chunkStarts, seekIndex);
 
 		if (chunkIndex + 1 < chunkStarts.length) {
@@ -75,7 +75,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			ctx.playbackSource === 'manifest'
 				? getManifestUnitWordSeekIndices(ctx.getActiveStream(), unit)
 				: getLegacyUnitWordSeekIndices(unit);
-		const chunkStarts = getLineChunkStartsForUnit(unit, ctx.settings.reader.chunkSize, wordSeekIndices);
+		const chunkStarts = getLineChunkStartsForUnit(unit, wordSeekIndices);
 		const chunkIndex = findChunkIndex(chunkStarts, seekIndex);
 
 		this.rewindBufferActive = true;
@@ -90,11 +90,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 					ctx.playbackSource === 'manifest'
 						? getManifestUnitWordSeekIndices(ctx.getActiveStream(), prevUnit)
 						: getLegacyUnitWordSeekIndices(prevUnit);
-				const prevChunkStarts = getLineChunkStartsForUnit(
-					prevUnit,
-					ctx.settings.reader.chunkSize,
-					prevWordSeekIndices
-				);
+				const prevChunkStarts = getLineChunkStartsForUnit(prevUnit, prevWordSeekIndices);
 				this.setSeekIndex(ctx, prevChunkStarts[prevChunkStarts.length - 1]!);
 			} else {
 				this.setSeekIndex(ctx, unit.startSeekIndex);
@@ -123,9 +119,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 		const { endIndex, lineStartIndex } = getLegacyLineChunk(
 			ctx.words,
 			ctx.sentenceUnits,
-			ctx.currentIndex,
-			ctx.settings.reader.chunkSize
-		);
+			ctx.currentIndex		);
 		if (ctx.currentIndex !== lineStartIndex) {
 			ctx.setCurrentIndex(lineStartIndex);
 		}
@@ -180,9 +174,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 		const { tokens, endIndex, lineStartIndex } = getManifestLineChunk(
 			stream,
 			ctx.sentenceUnits,
-			ctx.currentTokenIndex,
-			ctx.settings.reader.chunkSize
-		);
+			ctx.currentTokenIndex		);
 		if (ctx.currentTokenIndex !== lineStartIndex) {
 			ctx.setCurrentTokenIndex(lineStartIndex);
 		}
@@ -221,8 +213,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			const { tokens } = getManifestLineChunk(
 				stream,
 				ctx.sentenceUnits,
-				ctx.currentTokenIndex,
-				ctx.settings.reader.chunkSize
+				ctx.currentTokenIndex
 			);
 			return tokensToDisplayChunk(tokens);
 		}
@@ -231,9 +222,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 		const { words } = getLegacyLineChunk(
 			ctx.words,
 			ctx.sentenceUnits,
-			ctx.currentIndex,
-			ctx.settings.reader.chunkSize
-		);
+			ctx.currentIndex		);
 		return words;
 	}
 
@@ -245,8 +234,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			const { endIndex, lineStartIndex } = getManifestLineChunk(
 				stream,
 				ctx.sentenceUnits,
-				seekIndex,
-				ctx.settings.reader.chunkSize
+				seekIndex
 			);
 			const indices: number[] = [];
 			for (let i = lineStartIndex; i < endIndex; i++) {
@@ -260,9 +248,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 		const { endIndex, lineStartIndex } = getLegacyLineChunk(
 			ctx.words,
 			ctx.sentenceUnits,
-			seekIndex,
-			ctx.settings.reader.chunkSize
-		);
+			seekIndex		);
 		const indices: number[] = [];
 		for (let i = lineStartIndex; i < endIndex; i++) indices.push(i);
 		return indices.length > 0 ? indices : [Math.min(seekIndex, Math.max(ctx.words.length - 1, 0))];
@@ -274,16 +260,14 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			const { tokens } = getManifestLineChunk(
 				ctx.getActiveStream(),
 				ctx.sentenceUnits,
-				ctx.currentTokenIndex,
-				ctx.settings.reader.chunkSize
+				ctx.currentTokenIndex
 			);
 			delay = sumManifestLineDelayMs(tokens, ctx.settings, ctx.micropauseService);
 		} else {
 			const { words } = getLegacyLineChunk(
 				ctx.words,
 				ctx.sentenceUnits,
-				ctx.currentIndex,
-				ctx.settings.reader.chunkSize
+				ctx.currentIndex
 			);
 			delay = sumLegacyLineDelayMs(words, ctx.settings, ctx.micropauseService);
 		}
@@ -305,19 +289,14 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			for (let i = unitIndex; i < ctx.sentenceUnits.length; i++) {
 				const unit = ctx.sentenceUnits[i]!;
 				const wordSeekIndices = getManifestUnitWordSeekIndices(stream, unit);
-				const chunkStarts = getLineChunkStartsForUnit(
-					unit,
-					ctx.settings.reader.chunkSize,
-					wordSeekIndices
-				);
+				const chunkStarts = getLineChunkStartsForUnit(unit, wordSeekIndices);
 
 				for (const start of chunkStarts) {
 					if (i === unitIndex && start < seekIndex) continue;
 					const { tokens } = getManifestLineChunk(
 						stream,
 						ctx.sentenceUnits,
-						start,
-						ctx.settings.reader.chunkSize
+						start
 					);
 					total += sumManifestLineDelayMs(tokens, ctx.settings, ctx.micropauseService);
 				}
@@ -326,19 +305,14 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 			for (let i = unitIndex; i < ctx.sentenceUnits.length; i++) {
 				const unit = ctx.sentenceUnits[i]!;
 				const wordSeekIndices = getLegacyUnitWordSeekIndices(unit);
-				const chunkStarts = getLineChunkStartsForUnit(
-					unit,
-					ctx.settings.reader.chunkSize,
-					wordSeekIndices
-				);
+				const chunkStarts = getLineChunkStartsForUnit(unit, wordSeekIndices);
 
 				for (const start of chunkStarts) {
 					if (i === unitIndex && start < seekIndex) continue;
 					const { words } = getLegacyLineChunk(
 						ctx.words,
 						ctx.sentenceUnits,
-						start,
-						ctx.settings.reader.chunkSize
+						start
 					);
 					total += sumLegacyLineDelayMs(words, ctx.settings, ctx.micropauseService);
 				}

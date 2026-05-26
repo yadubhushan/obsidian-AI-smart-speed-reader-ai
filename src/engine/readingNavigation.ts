@@ -4,8 +4,8 @@ import type { StreamToken } from '../types/processedDocument';
 export const SMART_NAV_CHUNK_SIZE = 15;
 export const PAUSE_CONTEXT_RADIUS = 15;
 
-const TRAILING_PUNCT_RE = /^(.+?)([.,!?;:)}\]"']+)$/;
-const SENTENCE_END_RE = /[.!?]/;
+/** Trailing punctuation captured from a token (may include trailing hyphens for display). */
+const TRAILING_PUNCT_RE = /^(.+?)([.,!?;:)}\]"'\-]+)$/;
 
 export interface NavWord {
 	wordIndex: number;
@@ -34,8 +34,18 @@ export function parseTrailingPunctuation(raw: string): { word: string; punctuati
 	return { word: raw, punctuation: '' };
 }
 
+/**
+ * Line-by-line / line-repeat unit boundaries break after these markers:
+ * `--`, `;`, `.`, `!`
+ */
 export function isSentenceEndPunctuation(punctuation: string): boolean {
-	return SENTENCE_END_RE.test(punctuation);
+	if (!punctuation) {
+		return false;
+	}
+	if (punctuation.includes('--')) {
+		return true;
+	}
+	return /[;.!]/.test(punctuation);
 }
 
 export function navWordsFromLegacy(words: WordData[]): NavWord[] {

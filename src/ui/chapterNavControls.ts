@@ -8,10 +8,16 @@ export interface ChapterNavControlsHandle {
 	setVisible(visible: boolean): void;
 }
 
+export interface ChapterNavHandlers {
+	onPrevChapter: () => void;
+	onNextChapter: () => void;
+	onJumpToChapter: (chapterId: string) => void;
+}
+
 export function mountChapterNavControls(
 	container: HTMLElement,
 	engine: RSVPEngine,
-	onRefocus: () => void
+	handlers: ChapterNavHandlers
 ): ChapterNavControlsHandle {
 	const row = container.createDiv({ cls: 'speed-reader-ai-section-nav-row' });
 
@@ -29,20 +35,13 @@ export function mountChapterNavControls(
 	const picker = pickerWrap.createEl('select', { cls: 'speed-reader-ai-section-picker' });
 	picker.createEl('option', { text: 'Jump to chapter', value: '' });
 
-	const onPrev = () => {
-		engine.prevSection();
-		onRefocus();
-	};
-	const onNext = () => {
-		engine.nextSection();
-		onRefocus();
-	};
+	const onPrev = () => handlers.onPrevChapter();
+	const onNext = () => handlers.onNextChapter();
 	const onPicker = () => {
 		const value = picker.value;
 		if (!value) return;
-		engine.goToSection(value);
+		handlers.onJumpToChapter(value);
 		picker.value = '';
-		onRefocus();
 	};
 
 	prevBtn.addEventListener('click', onPrev);

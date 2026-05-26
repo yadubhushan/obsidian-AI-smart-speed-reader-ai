@@ -752,14 +752,12 @@ export class RSVPEngine implements RSVPEngineContext {
 		const unit = this.sentenceUnits[unitIndex];
 
 		if (this.playbackMode === 'lineByLine') {
-			const chunkSize = this.settings.reader.chunkSize;
 			if (this.playbackSource === 'manifest') {
 				const stream = this.getActiveStream();
 				const { lineStartIndex, lineEndSeekIndex } = getManifestLineChunk(
 					stream,
 					this.sentenceUnits,
-					seekIndex,
-					chunkSize
+					seekIndex
 				);
 				return {
 					currentLineIndex: unitIndex,
@@ -773,8 +771,7 @@ export class RSVPEngine implements RSVPEngineContext {
 			const { lineStartIndex, lineEndSeekIndex } = getLegacyLineChunk(
 				this.words,
 				this.sentenceUnits,
-				seekIndex,
-				chunkSize
+				seekIndex
 			);
 			return {
 				currentLineIndex: unitIndex,

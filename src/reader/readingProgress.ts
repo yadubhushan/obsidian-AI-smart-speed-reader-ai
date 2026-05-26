@@ -1,5 +1,6 @@
 import { navWordsFromStream, wordIndexForSeekIndex } from '../engine/readingNavigation';
 import type { RSVPEngine } from '../engine/rsvpEngine';
+import type { ReaderState } from '../types';
 import type {
 	BookCacheIndex,
 	BookPosition,
@@ -278,4 +279,50 @@ export function computeProgressPercent(input: ProgressInput): number {
 		return noteProgressPercent(input.processed, input.position);
 	}
 	return 0;
+}
+
+export interface DocumentProgressInput {
+	sourceKind: SourceKind;
+	bookIndex?: BookCacheIndex;
+	engine: Pick<RSVPEngine, 'getLoadedProcessedDocument' | 'getSectionList'>;
+	state: ReaderState;
+}
+
+/** Progress through the full note or book (all sections/chapters), not the current section only. */
+export function computeDocumentProgressFromEngine(input: DocumentProgressInput): number {
+	const { engine, state, sourceKind, bookIndex } = input;
+	const processed = engine.getLoadedProcessedDocument();
+	if (!processed) {
+		const total = state.totalTokens ?? state.totalWords ?? 0;
+		const current = state.currentTokenIndex ?? state.currentIndex ?? 0;
+		if (total <= 0) {
+			return 0;
+		}
+		return clampProgressPercent((current / total) * 100);
+	}
+
+	const sections = engine.getSectionList();
+	const sectionId =
+		sections.length > 0 ? sections[state.currentSectionIndex ?? 0]?.id : undefined;
+	const tokenIndex = state.currentTokenIndex ?? state.currentIndex;
+
+	let position: BookPosition | NotePosition;
+	if (sourceKind === 'book' && bookIndex) {
+		const navWords =
+			processed.kind === 'sections'
+				? navWordsFromStream(processed.sections[state.currentSectionIndex ?? 0]?.stream ?? [])
+				: [];
+		const wordIndex =
+			navWords.length > 0 ? wordIndexForSeekIndex(navWords, tokenIndex) : tokenIndex;
+		position = bookPositionFromEngine(bookIndex, sectionId, wordIndex);
+	} else {
+		position = notePositionFromEngine(processed, sectionId, tokenIndex);
+	}
+
+	return computeProgressPercent({
+		sourceKind,
+		bookIndex,
+		processed,
+		position
+	});
 }

@@ -8,10 +8,16 @@ export interface SectionNavControlsHandle {
 	setVisible(visible: boolean): void;
 }
 
+export interface SectionNavHandlers {
+	onPrevSection: () => void;
+	onNextSection: () => void;
+	onJumpToSection: (sectionId: string) => void;
+}
+
 export function mountSectionNavControls(
 	container: HTMLElement,
 	engine: RSVPEngine,
-	onRefocus: () => void
+	handlers: SectionNavHandlers
 ): SectionNavControlsHandle {
 	const row = container.createDiv({ cls: 'speed-reader-ai-section-nav-row' });
 
@@ -29,20 +35,13 @@ export function mountSectionNavControls(
 	const picker = pickerWrap.createEl('select', { cls: 'speed-reader-ai-section-picker' });
 	picker.createEl('option', { text: 'Jump to section', value: '' });
 
-	const onPrev = () => {
-		engine.prevSection();
-		onRefocus();
-	};
-	const onNext = () => {
-		engine.nextSection();
-		onRefocus();
-	};
+	const onPrev = () => handlers.onPrevSection();
+	const onNext = () => handlers.onNextSection();
 	const onPicker = () => {
 		const value = picker.value;
 		if (!value) return;
-		engine.goToSection(value);
+		handlers.onJumpToSection(value);
 		picker.value = '';
-		onRefocus();
 	};
 
 	prevBtn.addEventListener('click', onPrev);

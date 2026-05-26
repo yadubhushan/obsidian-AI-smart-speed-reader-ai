@@ -20,6 +20,8 @@ import {
 } from './readingProgress';
 import type { SaveScheduler } from './saveScheduler';
 
+export const PERIODIC_FLUSH_MS = 30_000;
+
 export interface ReaderSessionHooks {
 	onEngineStateChange?(state: ReaderState, previousIsPlaying: boolean | null): void;
 	onSectionChange?(sectionId: string): void;
@@ -51,6 +53,25 @@ export function createReadingProgressTracker(
 	let lastIsPlaying: boolean | null = null;
 	let lastSectionId: string | null = null;
 	let lastState: ReaderState | null = null;
+	let periodicFlushTimer: ReturnType<typeof setInterval> | null = null;
+
+	const clearPeriodicFlush = () => {
+		if (periodicFlushTimer !== null) {
+			clearInterval(periodicFlushTimer);
+			periodicFlushTimer = null;
+		}
+	};
+
+	const startPeriodicFlush = () => {
+		if (periodicFlushTimer !== null) {
+			return;
+		}
+		periodicFlushTimer = setInterval(() => {
+			if (lastState?.isPlaying) {
+				void deps.scheduler.flushNow();
+			}
+		}, PERIODIC_FLUSH_MS);
+	};
 
 	const resolveSectionId = (state: ReaderState): string | undefined => {
 		const sections = deps.engine.getSectionList();
@@ -136,8 +157,10 @@ export function createReadingProgressTracker(
 
 			const paused = previousIsPlaying === true && !state.isPlaying;
 			if (paused) {
+				clearPeriodicFlush();
 				void persistState(state, true);
 			} else if (state.isPlaying) {
+				startPeriodicFlush();
 				void persistState(state, false);
 			}
 
@@ -159,6 +182,7 @@ export function createReadingProgressTracker(
 		},
 
 		async destroy() {
+			clearPeriodicFlush();
 			deps.scheduler.destroy();
 			if (lastState) {
 				await persistState(lastState, true);

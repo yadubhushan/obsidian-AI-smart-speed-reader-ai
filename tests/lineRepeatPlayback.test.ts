@@ -8,15 +8,13 @@ import {
 	nextLineUnitIndex,
 	prevLineUnitIndex
 } from '../src/engine/lineRepeatPlayback';
-import { navWordsFromLegacy } from '../src/engine/readingNavigation';
+import { navWordsFromLegacy, parseTrailingPunctuation } from '../src/engine/readingNavigation';
 import type { WordData } from '../src/types';
 
 function legacyNavWords(text: string) {
 	const tokens = text.split(/\s+/).filter(Boolean);
 	const words: WordData[] = tokens.map((raw, index) => {
-		const match = raw.match(/^(.+?)([.,!?;:)}\]"']+)$/);
-		const word = match?.[1] ?? raw;
-		const punctuation = match?.[2] ?? '';
+		const { word, punctuation } = parseTrailingPunctuation(raw);
 		return {
 			raw,
 			word,
@@ -30,7 +28,7 @@ function legacyNavWords(text: string) {
 }
 
 describe('lineRepeatPlayback', () => {
-	it('builds sentence units from punctuation boundaries', () => {
+	it('builds sentence units from line-breaker punctuation', () => {
 		const navWords = legacyNavWords('Hello world. Next sentence here!');
 		const units = buildSentenceUnits(navWords);
 
@@ -60,6 +58,22 @@ describe('lineRepeatPlayback', () => {
 			startSeekIndex: 0,
 			endSeekIndex: 0
 		});
+	});
+
+	it('splits units on semicolon and double-hyphen breaks but not single hyphen', () => {
+		const navWords = legacyNavWords('Part one; Part two. End here- Next bit-- Done!');
+		const units = buildSentenceUnits(navWords);
+
+		expect(units).toHaveLength(4);
+		expect(units[0]!.endWordIdx).toBe(1);
+		expect(navWords[units[0]!.endWordIdx]!.display).toMatch(/;$/);
+		expect(units[1]!.endWordIdx).toBe(3);
+		expect(navWords[units[1]!.endWordIdx]!.display).toMatch(/\.$/);
+		expect(units[2]!.startWordIdx).toBe(4);
+		expect(units[2]!.endWordIdx).toBe(7);
+		expect(navWords[units[2]!.endWordIdx]!.display).toMatch(/--$/);
+		expect(navWords[5]!.display).toBe('here-');
+		expect(navWords[5]!.isSentenceEnd).toBe(false);
 	});
 
 	it('includes trailing text without sentence punctuation in final unit', () => {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildSentenceUnits } from '../src/engine/lineRepeatPlayback';
-import type { NavWord } from '../src/engine/readingNavigation';
+import {
+	isSentenceEndPunctuation,
+	parseTrailingPunctuation,
+	type NavWord
+} from '../src/engine/readingNavigation';
 import {
 	buildBookmarkContextLinesFromData,
 	groupSelectionsByParagraph,
@@ -19,7 +23,7 @@ function nav(words: string[], paragraphStarts: number[] = [0]): NavWord[] {
 		wordIndex,
 		seekIndex: wordIndex,
 		display,
-		isSentenceEnd: /[.!?]$/.test(display),
+		isSentenceEnd: isSentenceEndPunctuation(parseTrailingPunctuation(display).punctuation),
 		isParagraphStart: startSet.has(wordIndex)
 	}));
 }

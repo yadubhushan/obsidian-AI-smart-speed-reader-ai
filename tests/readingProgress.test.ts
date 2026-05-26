@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	bookProgressPercent,
+	computeDocumentProgressFromEngine,
 	defaultNotePosition,
 	notePositionFromReadingState,
 	notePositionToEngineIndices,
@@ -8,6 +9,7 @@ import {
 	shouldResetReadingState,
 	statusFromProgressPercent
 } from '../src/reader/readingProgress';
+import type { ReaderState } from '../src/types';
 import type { BookCacheIndex } from '../src/types/m2Contracts';
 import type { ProcessedDocument } from '../src/types/processedDocument';
 
@@ -185,5 +187,49 @@ describe('readingProgress', () => {
 			sectionId: 'single_story',
 			wordIndex: 0
 		});
+	});
+
+	it('computeDocumentProgressFromEngine uses full note position across sections', () => {
+		const engine = {
+			getLoadedProcessedDocument: () => noteProcessed,
+			getSectionList: () => [
+				{ id: 'intro', title: 'Intro' },
+				{ id: 'body', title: 'Body' }
+			]
+		};
+		const state = {
+			currentSectionIndex: 1,
+			currentTokenIndex: 1,
+			currentIndex: 1,
+			totalWords: 4,
+			totalTokens: 4
+		} as ReaderState;
+		expect(
+			computeDocumentProgressFromEngine({
+				sourceKind: 'note',
+				engine,
+				state
+			})
+		).toBeCloseTo(83.33, 1);
+	});
+
+	it('computeDocumentProgressFromEngine falls back to loaded chunk when no processed doc', () => {
+		const engine = {
+			getLoadedProcessedDocument: () => null,
+			getSectionList: () => []
+		};
+		const state = {
+			currentIndex: 25,
+			totalWords: 100,
+			currentTokenIndex: 25,
+			totalTokens: 100
+		} as ReaderState;
+		expect(
+			computeDocumentProgressFromEngine({
+				sourceKind: 'note',
+				engine,
+				state
+			})
+		).toBe(25);
 	});
 });

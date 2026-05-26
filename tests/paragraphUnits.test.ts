@@ -6,7 +6,11 @@ import {
 	paragraphTextFromUnit
 } from '../src/engine/paragraphUnits';
 import { buildSentenceUnits } from '../src/engine/lineRepeatPlayback';
-import type { NavWord } from '../src/engine/readingNavigation';
+import {
+	isSentenceEndPunctuation,
+	parseTrailingPunctuation,
+	type NavWord
+} from '../src/engine/readingNavigation';
 
 function nav(words: string[], paragraphStarts: number[] = [0]): NavWord[] {
 	const startSet = new Set(paragraphStarts);
@@ -14,7 +18,7 @@ function nav(words: string[], paragraphStarts: number[] = [0]): NavWord[] {
 		wordIndex,
 		seekIndex: wordIndex,
 		display,
-		isSentenceEnd: /[.!?]$/.test(display),
+		isSentenceEnd: isSentenceEndPunctuation(parseTrailingPunctuation(display).punctuation),
 		isParagraphStart: startSet.has(wordIndex)
 	}));
 }

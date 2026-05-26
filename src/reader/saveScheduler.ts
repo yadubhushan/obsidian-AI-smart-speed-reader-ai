@@ -1,6 +1,6 @@
 import type { ReadingStateStore } from '../types/m2Contracts';
 
-export const DEFAULT_SAVE_DEBOUNCE_MS = 5000;
+export const DEFAULT_SAVE_DEBOUNCE_MS = 2000;
 
 export interface SaveScheduler {
 	scheduleSave(): void;

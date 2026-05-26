@@ -6,6 +6,10 @@ import type {
 	ReadingStateStore
 } from '../types/m2Contracts';
 import { ensureParentFolderForFile } from '../utils/vaultAdapterDirs';
+import {
+	mergeReadingStateFiles,
+	readingStateFilesEqual
+} from './readingStateMerge';
 
 const EMPTY_FILE: ReadingStateFile = {
 	lastGlobalSourcePath: '',
@@ -34,7 +38,9 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 			return this.file;
 		}
 
-		await this.readFileFromDisk();
+		this.file = await this.readDiskFile();
+		this.loaded = true;
+		this.dirty = false;
 		return this.file;
 	}
 
@@ -42,29 +48,46 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 		return this.dirty;
 	}
 
-	/** Re-read disk when synced from another device. Skips if local edits are not flushed yet. */
+	/** Re-read disk and merge with local edits (newer `lastOpenedAt` wins per source). */
 	async reloadFromDisk(): Promise<boolean> {
-		if (this.dirty) {
-			return false;
+		const diskFile = await this.readDiskFile();
+
+		if (!this.loaded) {
+			this.file = diskFile;
+			this.loaded = true;
+			this.dirty = false;
+			this.notifyReload();
+			return true;
 		}
 
-		await this.readFileFromDisk();
-		this.notifyReload();
+		if (!this.dirty) {
+			const changed = !readingStateFilesEqual(this.file, diskFile);
+			this.file = diskFile;
+			if (changed) {
+				this.notifyReload();
+			}
+			return true;
+		}
+
+		const { merged, localHadNewer } = mergeReadingStateFiles(this.file, diskFile);
+		const changed = !readingStateFilesEqual(this.file, merged);
+		this.file = merged;
+		this.dirty = localHadNewer;
+		if (changed) {
+			this.notifyReload();
+		}
 		return true;
 	}
 
-	private async readFileFromDisk(): Promise<void> {
+	private async readDiskFile(): Promise<ReadingStateFile> {
 		const adapter = this.app.vault.adapter;
 		try {
 			const raw = await adapter.read(this.filePath);
 			const parsed = JSON.parse(raw) as Partial<ReadingStateFile>;
-			this.file = normalizeFile(parsed);
+			return normalizeFile(parsed);
 		} catch {
-			this.file = { ...EMPTY_FILE, sources: {} };
+			return { ...EMPTY_FILE, sources: {} };
 		}
-
-		this.loaded = true;
-		this.dirty = false;
 	}
 
 	private notifyReload(): void {
@@ -111,6 +134,8 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 		for (const sourcePath of changedPaths) {
 			this.eventBus.emit('reading-state-changed', { sourcePath });
 		}
+
+		this.eventBus.emit('reading-state-flushed', {});
 	}
 
 	onChanged(callback: () => void): () => void {

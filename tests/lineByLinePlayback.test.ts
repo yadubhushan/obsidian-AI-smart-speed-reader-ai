@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
 	applyLineByLineRewindBuffer,
-	effectiveLineChunkMax,
 	getLegacyLineChunk,
 	getManifestLineChunk,
+	partitionLineWordSeekIndices,
 	partitionSentenceIntoEqualChunks,
 	partitionSentenceIntoChunks,
 	sumLegacyLineDelayMs,
@@ -11,7 +11,7 @@ import {
 	LINE_BY_LINE_REWIND_BUFFER_MULTIPLIER
 } from '../src/engine/lineByLinePlayback';
 import { buildSentenceUnits } from '../src/engine/lineRepeatPlayback';
-import { navWordsFromLegacy } from '../src/engine/readingNavigation';
+import { navWordsFromLegacy, parseTrailingPunctuation } from '../src/engine/readingNavigation';
 import { MicropauseService } from '../src/services/micropauseService';
 import { DEFAULT_SETTINGS, type WordData } from '../src/types';
 import type { StreamToken } from '../src/types/processedDocument';
@@ -19,9 +19,7 @@ import type { StreamToken } from '../src/types/processedDocument';
 function legacyNavWords(text: string) {
 	const tokens = text.split(/\s+/).filter(Boolean);
 	const words: WordData[] = tokens.map((raw, index) => {
-		const match = raw.match(/^(.+?)([.,!?;:)}\]"']+)$/);
-		const word = match?.[1] ?? raw;
-		const punctuation = match?.[2] ?? '';
+		const { word, punctuation } = parseTrailingPunctuation(raw);
 		return {
 			raw,
 			word,
@@ -35,16 +33,25 @@ function legacyNavWords(text: string) {
 }
 
 describe('lineByLinePlayback', () => {
-	it('uses chunkSize directly as the effective line chunk max', () => {
-		expect(effectiveLineChunkMax(1)).toBe(1);
-		expect(effectiveLineChunkMax(15)).toBe(15);
+	it('keeps lines with 12 or fewer words in a single chunk', () => {
+		expect(partitionLineWordSeekIndices(Array.from({ length: 8 }, (_, i) => i))).toEqual([0]);
+		expect(partitionLineWordSeekIndices(Array.from({ length: 12 }, (_, i) => i))).toEqual([0]);
+	});
+
+	it('chunks lines longer than 12 words into equal parts of at most 10', () => {
+		expect(partitionLineWordSeekIndices(Array.from({ length: 13 }, (_, i) => i))).toEqual([0, 7]);
+		expect(partitionLineWordSeekIndices(Array.from({ length: 15 }, (_, i) => i))).toEqual([0, 8]);
+		expect(partitionLineWordSeekIndices(Array.from({ length: 20 }, (_, i) => i))).toEqual([0, 10]);
+		expect(partitionLineWordSeekIndices(Array.from({ length: 30 }, (_, i) => i))).toEqual([
+			0, 10, 20
+		]);
 	});
 
 	it('returns the full sentence as a legacy line chunk', () => {
 		const { words, navWords } = legacyNavWords('One two. Three four.');
 		const units = buildSentenceUnits(navWords);
 
-		expect(getLegacyLineChunk(words, units, 1, 10)).toEqual({
+		expect(getLegacyLineChunk(words, units, 1)).toEqual({
 			words: words.slice(0, 2),
 			endIndex: 2,
 			lineStartIndex: 0,
@@ -61,7 +68,7 @@ describe('lineByLinePlayback', () => {
 			{ kind: 'word', text: 'Three.' }
 		];
 
-		expect(getManifestLineChunk(stream, units, 1, 10)).toEqual({
+		expect(getManifestLineChunk(stream, units, 1)).toEqual({
 			tokens: stream.slice(0, 2),
 			endIndex: 2,
 			lineStartIndex: 0,
@@ -72,7 +79,7 @@ describe('lineByLinePlayback', () => {
 	it('sums per-word delay for a line instead of using max delay', () => {
 		const { words, navWords } = legacyNavWords('One two.');
 		const units = buildSentenceUnits(navWords);
-		const { words: lineWords } = getLegacyLineChunk(words, units, 0, 10);
+		const { words: lineWords } = getLegacyLineChunk(words, units, 0);
 		const settings = {
 			...DEFAULT_SETTINGS,
 			reader: {
@@ -111,7 +118,7 @@ describe('lineByLinePlayback', () => {
 		expect(sumManifestLineDelayMs(stream, settings, micropause)).toBe(200);
 	});
 
-	it('splits a 15-word sentence into equal 8+7 chunks', () => {
+	it('splits a 15-word sentence into equal 8+7 chunks via equal partition helper', () => {
 		const wordSeekIndices = Array.from({ length: 15 }, (_, i) => i);
 		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0, 8]);
 	});
@@ -126,7 +133,7 @@ describe('lineByLinePlayback', () => {
 		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0, 10, 20]);
 	});
 
-	it('keeps short sentences in a single chunk', () => {
+	it('keeps short sentences in a single chunk via equal partition helper', () => {
 		const wordSeekIndices = Array.from({ length: 8 }, (_, i) => i);
 		expect(partitionSentenceIntoEqualChunks(wordSeekIndices, 10)).toEqual([0]);
 	});
@@ -143,12 +150,12 @@ describe('lineByLinePlayback', () => {
 		const { words, navWords } = legacyNavWords(wordsText);
 		const units = buildSentenceUnits(navWords);
 
-		expect(getLegacyLineChunk(words, units, 16, 10)).toEqual({
+		expect(getLegacyLineChunk(words, units, 16)).toEqual({
 			words: words.slice(10, 20),
 			endIndex: 20,
 			lineStartIndex: 10,
 			lineEndSeekIndex: 19
 		});
-		expect(getLegacyLineChunk(words, units, 16, 10).words.length).toBe(10);
+		expect(getLegacyLineChunk(words, units, 16).words.length).toBe(10);
 	});
 });

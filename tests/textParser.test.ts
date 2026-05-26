@@ -128,6 +128,20 @@ describe('stripMarkdown', () => {
 		expect(result).toContain('italic');
 		expect(result).toContain('code');
 	});
+
+	it('strips HTML tags keeping inner text', () => {
+		expect(stripMarkdown('Hello <strong>world</strong>')).toBe('Hello world');
+	});
+
+	it('replaces br tags with a space', () => {
+		expect(stripMarkdown('Line one<br>Line two')).toBe('Line one Line two');
+		expect(stripMarkdown('Line one<br/>Line two')).toBe('Line one Line two');
+		expect(stripMarkdown('Line one<br />Line two')).toBe('Line one Line two');
+	});
+
+	it('strips HTML tags with attributes', () => {
+		expect(stripMarkdown('<span class="cm-highlight">marked</span>')).toBe('marked');
+	});
 });
 
 describe('parseDocument', () => {

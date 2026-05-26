@@ -99,6 +99,9 @@ function stripMarkdown(text: string): string {
 	result = result.replace(/^---+\s*$/gm, '');
 	result = result.replace(/^-{3,}\s*$/gm, '');
 
+	result = result.replace(/<br\s*\/?>/gi, ' ');
+	result = result.replace(/<[^>]+>/g, '');
+
 	return result;
 }
 

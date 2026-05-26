@@ -434,7 +434,7 @@ describe('RSVPEngine manifest playback', () => {
 		it('advances to next sentence at end instead of looping', () => {
 			engine.setSettings({
 				...settings,
-				reader: { ...settings.reader, enableMicropause: false, wpm: 300, chunkSize: 10 }
+				reader: { ...settings.reader, enableMicropause: false, wpm: 300 }
 			});
 			engine.setPlaybackMode('lineByLine');
 			engine.loadText('One two. Three four.');
@@ -453,10 +453,6 @@ describe('RSVPEngine manifest playback', () => {
 		});
 
 		it('nextLine and prevLine work in line by line mode', () => {
-			engine.setSettings({
-				...settings,
-				reader: { ...settings.reader, chunkSize: 10 }
-			});
 			engine.setPlaybackMode('lineByLine');
 			engine.loadText('First sentence. Second sentence.');
 			engine.nextLine();
@@ -478,32 +474,12 @@ describe('RSVPEngine manifest playback', () => {
 			expect(progress).toBeCloseTo((1 / 3) * 100, 5);
 		});
 
-		it('advances one word at a time with default chunk size in a long sentence', () => {
+		it('shows ten-word sub-chunks in long sentences regardless of RSVP chunk size', () => {
 			const longSentence =
 				Array.from({ length: 20 }, (_, i) => `word${i + 1}`).join(' ') + '.';
 			engine.setSettings({
 				...settings,
-				reader: { ...settings.reader, enableMicropause: false, wpm: 600 }
-			});
-			engine.setPlaybackMode('lineByLine');
-			engine.loadText(longSentence);
-			engine.play();
-
-			expect(stateChanges[stateChanges.length - 1]!.chunk.length).toBe(1);
-			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(0);
-
-			const wordDelay = 60000 / 600;
-			vi.advanceTimersByTime(wordDelay * 10 + 50);
-			expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(10);
-			expect(stateChanges[stateChanges.length - 1]!.chunk.length).toBe(1);
-		});
-
-		it('advances through sub-chunks within a long sentence when chunk size is larger', () => {
-			const longSentence =
-				Array.from({ length: 20 }, (_, i) => `word${i + 1}`).join(' ') + '.';
-			engine.setSettings({
-				...settings,
-				reader: { ...settings.reader, enableMicropause: false, wpm: 600, chunkSize: 10 }
+				reader: { ...settings.reader, enableMicropause: false, wpm: 600, chunkSize: 1 }
 			});
 			engine.setPlaybackMode('lineByLine');
 			engine.loadText(longSentence);
@@ -521,10 +497,6 @@ describe('RSVPEngine manifest playback', () => {
 		it('nextLine and prevLine step through sub-chunks in a long sentence', () => {
 			const longSentence =
 				Array.from({ length: 20 }, (_, i) => `word${i + 1}`).join(' ') + '.';
-			engine.setSettings({
-				...settings,
-				reader: { ...settings.reader, chunkSize: 10 }
-			});
 			engine.setPlaybackMode('lineByLine');
 			engine.loadText(longSentence);
 
@@ -536,10 +508,6 @@ describe('RSVPEngine manifest playback', () => {
 		});
 
 		it('shows one sentence at a time for dialogue with glued tokens', () => {
-			engine.setSettings({
-				...settings,
-				reader: { ...settings.reader, chunkSize: 10 }
-			});
 			engine.setPlaybackMode('lineByLine');
 			engine.loadText(
 				"They are perfectly charming.''That entirely depends on how you sit to-day, Dorian.' 'Oh, I am tired."

@@ -28,7 +28,7 @@ Use it when you want to:
 - **Markdown-aware cleanup** — Removes formatting noise like links, bold text, code, frontmatter, and comments before reading.
 - **Natural pacing** — Adds small pauses at punctuation, numbers, and longer words so the flow feels less robotic.
 - **Live speed control** — Change WPM, skip forward or backward, and jump between sections while reading.
-- **Focus mode** — Hide controls and keep only the current word on screen.
+- **Focus mode** — On desktop, press **F** for immersive fullscreen: the reader fills the screen, Obsidian sidebars collapse, and controls hide so only the current word (or paused context) remains. Press **F** or **Esc** once to exit focus; **Esc** again closes the reader.
 - **Selection support** — Read selected text, or start from the whole note.
 - **EPUB books** — Speed read vault EPUBs with chapter navigation and resume.
 - **Word lookup** — Press **D** to look up the current word in an inline overlay (English; requires internet).
@@ -68,17 +68,28 @@ Reload Obsidian and enable the plugin.
 
 ### Obsidian Sync and mobile
 
-Install plugin binaries on each device via BRAT or the community catalog (~350 KB per install). Enable **Settings → Sync → Plugin settings** to sync settings, reading progress, and caches across devices.
+Install plugin binaries on each device via BRAT or the community catalog (~350 KB per install). On **each device**, enable **Settings → Sync → Vault configuration sync → Active community plugin list** and **Installed community plugin list** to sync settings, reading progress, and caches.
 
 | Path | Sync? | Why |
 |------|-------|-----|
-| `{configDir}/plugins/speed-reader-ai/data.json` | **With plugin sync** | Reader and AI settings |
+| `{configDir}/plugins/speed-reader-ai/data.json` | **With plugin sync** | Reader and AI settings; also carries a lightweight reading-state sync stamp |
 | `{configDir}/plugins/speed-reader-ai/data/` | **With plugin sync** | Reading progress, AI prepare cache, EPUB parse cache, LLM model list, prompts |
 | Notes and EPUBs | **Yes** | Source content |
 
 Replace `{configDir}` with your vault config folder (usually `.obsidian`). Do not rely on Sync to deliver `main.js` — use BRAT or the catalog per device.
 
-**Mobile history empty while desktop shows progress?** Turn on **Plugin settings** sync on mobile, install/update the plugin on that device, force-quit Obsidian, and reopen **Reading history**. Progress is stored in `{configDir}/plugins/speed-reader-ai/data/reading-state.json`. Legacy data under `vault/.speedreader/` is imported automatically when the plugin copy is empty.
+**Cross-device resume workflow**
+
+1. **Pause** or close the reader before switching devices (ensures progress is flushed to disk).
+2. Wait until Sync shows **Fully synced** on the device you read on.
+3. On the other device, open Obsidian (foreground reloads synced progress) or force-quit and reopen.
+4. Use **Continue reading** or **Reading history** to resume — not a stale file tab.
+
+**Verify sync is working:** open **Settings → Sync → View sync activity** and look for `.obsidian/plugins/speed-reader-ai/data/reading-state.json` uploading on the source device and downloading on the target. If absent, toggle any Speed Reader setting to force a plugin sync cycle.
+
+**Resume position stale on second device?** Progress saves every ~2s while playing and every 30s during long playback; pausing flushes immediately. Obsidian Sync is not live — the reader does not auto-open on another device while you read. Avoid reading the same document on two devices at once (last-write-wins on the whole state file).
+
+**Mobile history empty while desktop shows progress?** Turn on **Installed community plugin list** sync on mobile, install/update the plugin on that device, force-quit Obsidian, and reopen **Reading history**. Progress is stored in `{configDir}/plugins/speed-reader-ai/data/reading-state.json`. Legacy data under `vault/.speedreader/` is imported automatically when the plugin copy is empty.
 
 ### Mobile reader
 
@@ -125,7 +136,7 @@ Equivalent to `SPEED_READER_OUT=vault npm run build`. Override the target with `
 
 **Reader** options (in-modal):
 
-- **Settings tab** — font, WPM, chunk size, color scheme, auto-start, display toggles
+- **Settings tab** — font, WPM, chunk size (RSVP modes only), color scheme, auto-start, display toggles. **Line by line** shows the full sentence when it has 12 words or fewer; longer sentences split into equal chunks of at most 10 words (not controlled by chunk size). Line boundaries use `--`, `;`, `.`, and `!` at the end of a word.
 - **Advanced tab** — micropause, bookmark templates, dictionary
 
 Open without a document: command palette **Open speed reader preferences**, or **Settings → Speed Reader AI → Open speed reader preferences**.
@@ -140,7 +151,7 @@ Open without a document: command palette **Open speed reader preferences**, or *
 | `←` / `→` | Skip 10 words |
 | `↑` / `↓` | Change speed by 25 WPM |
 | `D` | Look up current word |
-| `F` | Toggle focus mode |
+| `F` | Toggle immersive focus (fullscreen on desktop) |
 | `Esc` | Close reader (dismisses dictionary overlay first if open) |
 
 ## Network and privacy

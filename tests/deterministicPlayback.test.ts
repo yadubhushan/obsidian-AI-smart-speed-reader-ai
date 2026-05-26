@@ -5,9 +5,14 @@ import {
 	segmentsToStream,
 	findStoryTokenIndexForOffset
 } from '../src/prepare/deterministicPlayback';
+import type { NormalizedSegment } from '../src/parse/normalizeTypes';
 import { overviewBundle } from './prepareFixtures';
 import { parseSegments } from '../src/parse/segmentParser';
 import { OVERVIEW_EXCERPT } from './prepareFixtures';
+
+function wordTexts(stream: ReturnType<typeof segmentsToStream>): string[] {
+	return stream.filter((t) => t.kind === 'word').map((t) => t.text ?? '');
+}
 
 describe('deterministicPlayback', () => {
 	it('segmentsToStream produces word and image tokens', () => {
@@ -59,5 +64,35 @@ describe('deterministicPlayback', () => {
 		const token = processed.stream[tokenIndex];
 		expect(token?.kind).toBe('section_break');
 		expect(token?.text).toContain('Networking');
+	});
+
+	it('strips markdown and HTML from deterministic word tokens', () => {
+		const segments: NormalizedSegment[] = [
+			{
+				index: 0,
+				kind: 'paragraph',
+				body: 'This is **bold** and *italic*'
+			},
+			{
+				index: 1,
+				kind: 'paragraph',
+				body: 'See [[Note|Display]] and `code`'
+			},
+			{
+				index: 2,
+				kind: 'paragraph',
+				body: 'Before <em>emphasis</em> after'
+			}
+		];
+
+		const words = wordTexts(segmentsToStream(segments));
+		expect(words).toContain('bold');
+		expect(words).toContain('italic');
+		expect(words).toContain('Display');
+		expect(words).toContain('code');
+		expect(words).toContain('emphasis');
+		expect(words.some((w) => w.includes('**'))).toBe(false);
+		expect(words.some((w) => w.includes('`'))).toBe(false);
+		expect(words.some((w) => w.includes('<'))).toBe(false);
 	});
 });

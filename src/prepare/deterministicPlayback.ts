@@ -6,6 +6,7 @@ import type {
 	ProcessedDocumentMeta,
 	StreamToken
 } from '../types/processedDocument';
+import { stripMarkdown } from '../services/textParser';
 import { proseToWordTokens } from './proseToStream';
 
 const PROSE_PARAGRAPH_KINDS = new Set<NormalizedSegment['kind']>([
@@ -13,6 +14,10 @@ const PROSE_PARAGRAPH_KINDS = new Set<NormalizedSegment['kind']>([
 	'blockquote',
 	'list'
 ]);
+
+function markdownTextToWordTokens(text: string): StreamToken[] {
+	return proseToWordTokens(stripMarkdown(text));
+}
 
 /** Word indices at the start of each prose paragraph segment in a section stream. */
 export function paragraphStartsFromSegments(segments: NormalizedSegment[]): number[] {
@@ -26,7 +31,7 @@ export function paragraphStartsFromSegments(segments: NormalizedSegment[]): numb
 		if (!segment.body?.trim()) {
 			continue;
 		}
-		const tokens = proseToWordTokens(segment.body);
+		const tokens = markdownTextToWordTokens(segment.body);
 		if (tokens.length === 0) {
 			continue;
 		}
@@ -40,11 +45,11 @@ export function paragraphStartsFromSegments(segments: NormalizedSegment[]): numb
 function tableToWordTokens(table: { headers: string[]; rows: string[][] }): StreamToken[] {
 	const tokens: StreamToken[] = [];
 	if (table.headers.length > 0) {
-		tokens.push(...proseToWordTokens(table.headers.join(' ')));
+		tokens.push(...markdownTextToWordTokens(table.headers.join(' ')));
 	}
 	for (const row of table.rows) {
 		if (row.length > 0) {
-			tokens.push(...proseToWordTokens(row.join(' ')));
+			tokens.push(...markdownTextToWordTokens(row.join(' ')));
 		}
 	}
 	return tokens;
@@ -65,15 +70,15 @@ export function segmentsToStream(segments: NormalizedSegment[]): StreamToken[] {
 			case 'list':
 			case 'blockquote':
 				if (segment.body) {
-					stream.push(...proseToWordTokens(segment.body));
+					stream.push(...markdownTextToWordTokens(segment.body));
 				}
 				break;
 			case 'callout':
 				if (segment.title) {
-					stream.push(...proseToWordTokens(segment.title));
+					stream.push(...markdownTextToWordTokens(segment.title));
 				}
 				if (segment.body) {
-					stream.push(...proseToWordTokens(segment.body));
+					stream.push(...markdownTextToWordTokens(segment.body));
 				}
 				break;
 			case 'table':
@@ -142,7 +147,7 @@ export function bundleToStoryProcessed(bundle: NormalizedDocumentBundle): Proces
 			continue;
 		}
 		if (i > 0) {
-			stream.push({ kind: 'section_break', text: section.title });
+			stream.push({ kind: 'section_break', text: stripMarkdown(section.title) });
 		}
 		const sectionStarts = paragraphStartsFromSegments(section.segments);
 		for (const start of sectionStarts) {

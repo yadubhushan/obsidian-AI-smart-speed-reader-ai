@@ -10,12 +10,6 @@
 	background: rgba(0, 0, 0, 0.25);
 }
 
-.speed-reader-ai-modal-container.is-focus-active .modal-bg {
-	backdrop-filter: blur(16px);
-	-webkit-backdrop-filter: blur(16px);
-	background: rgba(0, 0, 0, 0.55);
-}
-
 .speed-reader-ai-modal-container .modal,
 .speed-reader-ai-modal {
 	--modal-width: 85vw;
@@ -261,6 +255,17 @@
 	color: var(--sr-text, var(--text-normal));
 	min-width: 2rem;
 	text-align: center;
+}
+
+.speed-reader-ai-control-doc-pct {
+	min-width: 2.5rem;
+	margin-left: 0.15rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--sr-muted, var(--text-muted));
+}
+
+.speed-reader-ai-control-doc-pct.is-hidden {
+	display: none;
 }
 
 .speed-reader-ai-control-nav-group {
@@ -2284,13 +2289,15 @@
 	min-height: 0;
 }
 
-/* Immersive fullscreen while reading on mobile (unpaused home) */
+/* Immersive fullscreen: mobile while playing, desktop focus mode (F) */
+.speed-reader-ai-modal-container.is-focus-active .modal-bg,
 .speed-reader-ai-modal-container.speed-reader-ai-mobile-playing .modal-bg {
 	background: var(--sr-bg, var(--modal-background));
 	backdrop-filter: none;
 	-webkit-backdrop-filter: none;
 }
 
+.speed-reader-ai-modal-container.is-focus-active .modal,
 .speed-reader-ai-modal-container.speed-reader-ai-mobile-playing .modal {
 	top: 0;
 	left: 0;
@@ -2310,18 +2317,22 @@
 	--modal-max-width: 100%;
 }
 
+.speed-reader-ai-modal-container.is-focus-active .speed-reader-ai-content,
 .speed-reader-ai-modal-container.speed-reader-ai-mobile-playing .speed-reader-ai-content,
+.speed-reader-ai-focus-active.speed-reader-ai-shell,
 .speed-reader-ai-mobile-playing.speed-reader-ai-shell {
 	height: 100%;
 	min-height: 100%;
 }
 
+.speed-reader-ai-focus-active .speed-reader-ai-pane-stack,
 .speed-reader-ai-mobile-playing .speed-reader-ai-pane-stack {
 	padding-top: 0;
 	flex: 1;
 	min-height: 0;
 }
 
+.speed-reader-ai-focus-active .speed-reader-ai-pane-home,
 .speed-reader-ai-mobile-playing .speed-reader-ai-pane-home {
 	justify-content: center;
 	align-items: stretch;
@@ -2331,6 +2342,7 @@
 	min-height: 0;
 }
 
+.speed-reader-ai-focus-active .speed-reader-ai-word-container,
 .speed-reader-ai-mobile-playing .speed-reader-ai-word-container {
 	flex: 1;
 	min-height: 0;
@@ -2343,6 +2355,7 @@
 		env(safe-area-inset-left, 0px);
 }
 
+.speed-reader-ai-focus-active .speed-reader-ai-word-display,
 .speed-reader-ai-mobile-playing .speed-reader-ai-word-display {
 	flex: 0 0 auto;
 	width: 100%;
@@ -2836,6 +2849,17 @@
 	text-align: center;
 }
 
+.speed-reader-ai-inter-section-done {
+	font-size: 1.1rem;
+	font-weight: var(--font-medium);
+	color: var(--text-success);
+}
+
+.speed-reader-ai-inter-section-countdown {
+	font-size: var(--font-ui-small);
+	color: var(--sr-muted, var(--text-muted));
+}
+
 .speed-reader-ai-inter-section-label {
 	font-size: 0.75rem;
 	text-transform: uppercase;
@@ -2849,6 +2873,11 @@
 	color: var(--text-normal);
 	text-align: center;
 	max-width: 90%;
+}
+
+.speed-reader-ai-section-intro-title {
+	font-size: 1.5rem;
+	line-height: 1.35;
 }
 
 @media (max-width: 600px) {

@@ -17,6 +17,7 @@ export interface ContinueReadingDeps {
 export async function resolveContinueReadingTarget(
 	deps: ContinueReadingDeps
 ): Promise<ContinueReadingTarget | null> {
+	await deps.services.readingStateStore.reloadFromDisk();
 	const file = await deps.services.readingStateStore.load();
 	const sourcePath = file.lastGlobalSourcePath?.trim();
 	if (!sourcePath) {

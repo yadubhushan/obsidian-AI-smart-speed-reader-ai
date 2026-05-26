@@ -36,7 +36,9 @@ import { migratePluginData } from './store/migratePluginData';
 import { createPluginDataPaths, pluginReadCacheDisplayPath, type PluginDataPaths } from './store/pluginDataPaths';
 import {
 	pluginDataFromSettings,
-	settingsFromPluginData
+	readingStateSyncFromPluginData,
+	settingsFromPluginData,
+	type ReadingStateSyncStamp
 } from './store/pluginDataStorage';
 import { listReadCacheDocKeys } from './store/readCachePaths';
 import { createVaultManifestAdapter } from './store/vaultManifestAdapter';
@@ -55,6 +57,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	private prepareStatusBarEl: HTMLElement | null = null;
 	private services: PluginServices | null = null;
 	private pluginSettingTab: SpeedReaderAiSettingTab | null = null;
+	private readingStateSync: ReadingStateSyncStamp | undefined;
 
 	async onload() {
 		initAI(this.app, this, async () => undefined, { disableFallback: true });
@@ -95,6 +98,9 @@ export default class SpeedReaderAiPlugin extends Plugin {
 			new Notice('Speed Reader data moved to plugin folder for sync.');
 		}
 		this.services = createPluginServices(this, this.dataPaths);
+		this.services.eventBus.on('reading-state-flushed', () => {
+			void this.bumpReadingStateSyncStamp();
+		});
 		registerFeature1(this, this.services);
 		registerFeature2(this, this.services);
 		registerFeature3A(this, this.services);
@@ -210,13 +216,26 @@ export default class SpeedReaderAiPlugin extends Plugin {
 		this.registerDomEvent(document, 'visibilitychange', () => {
 			if (document.visibilityState === 'visible') {
 				void this.reloadReadingStateFromSync();
+			} else if (document.visibilityState === 'hidden') {
+				void this.flushReadingStateBeforeBackground();
 			}
 		});
 	}
 
 	onunload() {
+		const store = this.services?.readingStateStore;
+		if (store?.isDirty()) {
+			void store.flush();
+		}
 		this.prepareStatusBarEl = null;
 		this.services = null;
+	}
+
+	private async flushReadingStateBeforeBackground(): Promise<void> {
+		if (!this.services?.readingStateStore.isDirty()) {
+			return;
+		}
+		await this.services.readingStateStore.flush();
 	}
 
 	onPrepareStatusChange(): void {
@@ -291,10 +310,19 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	async loadSettings() {
 		const raw = await this.loadData();
 		this.settings = settingsFromPluginData(raw, this.llmModelCatalog);
+		this.readingStateSync = readingStateSyncFromPluginData(raw);
 	}
 
 	async saveSettings() {
-		await this.saveData(pluginDataFromSettings(this.settings));
+		await this.saveData(pluginDataFromSettings(this.settings, this.readingStateSync));
+	}
+
+	async bumpReadingStateSyncStamp(): Promise<void> {
+		this.readingStateSync = {
+			revision: (this.readingStateSync?.revision ?? 0) + 1,
+			updatedAt: new Date().toISOString()
+		};
+		await this.saveData(pluginDataFromSettings(this.settings, this.readingStateSync));
 	}
 
 	async onExternalSettingsChange(): Promise<void> {

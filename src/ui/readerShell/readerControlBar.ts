@@ -4,7 +4,7 @@ import { mountPlaybackModeSelect, type PlaybackModeSelectHandle } from './playba
 
 export interface ReaderControlBarHandle {
 	destroy(): void;
-	update(state: ReaderState | null): void;
+	update(state: ReaderState | null, documentProgressPercent?: number | null): void;
 	setVisible(visible: boolean): void;
 	setPrepareVisible(visible: boolean): void;
 	getPrepareControls(): PrepareControlsHandle | null;
@@ -28,8 +28,11 @@ export function mountReaderControlBar(
 	options: {
 		showSectionNav: boolean;
 		sectionNavLabel: string;
+		/** When true, show total note/book read % beside Mode (desktop). */
+		showDocumentProgress?: boolean;
 	}
 ): ReaderControlBarHandle {
+	const showDocumentProgress = options.showDocumentProgress ?? false;
 	const bar = container.createDiv({ cls: 'speed-reader-ai-control-bar' });
 	const row = bar.createDiv({ cls: 'speed-reader-ai-control-row' });
 
@@ -52,6 +55,15 @@ export function mountReaderControlBar(
 		ariaLabel: 'Playback mode',
 		onChange: handlers.onPlaybackModeChange
 	});
+	const docPctVal = showDocumentProgress
+		? modeGroup.createSpan({
+				cls: 'speed-reader-ai-control-value speed-reader-ai-control-doc-pct',
+				attr: {
+					'aria-live': 'polite',
+					title: 'Total read progress through this note or book'
+				}
+			})
+		: null;
 
 	const navGroup = row.createDiv({ cls: 'speed-reader-ai-control-nav-group' });
 	const prevBtn = navGroup.createEl('button', {
@@ -82,10 +94,20 @@ export function mountReaderControlBar(
 			prepareControls?.destroy();
 			bar.remove();
 		},
-		update(state) {
+		update(state, documentProgressPercent) {
 			fontVal.setText(String(settings.reader.fontSize));
 			wpmVal.setText(String(state ? Math.round(state.currentWpm) : settings.reader.wpm));
 			modePicker.setMode(state?.playbackMode ?? settings.reader.defaultPlaybackMode);
+			if (docPctVal) {
+				if (documentProgressPercent == null || !state) {
+					docPctVal.setText('');
+					docPctVal.addClass('is-hidden');
+				} else {
+					const pct = Math.min(Math.round(documentProgressPercent), 100);
+					docPctVal.setText(`${pct}%`);
+					docPctVal.removeClass('is-hidden');
+				}
+			}
 		},
 		setVisible(visible) {
 			bar.toggleClass('is-hidden', !visible);

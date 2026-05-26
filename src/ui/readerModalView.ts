@@ -15,7 +15,11 @@ import { mountVersionPicker, type VersionPickerHandle } from './versionPicker';
 import { mountPrepareControls, type PrepareControlsHandle } from './prepareControls';
 import { mountChapterNavControls, type ChapterNavControlsHandle } from './chapterNavControls';
 import { mountSectionNavControls, type SectionNavControlsHandle } from './sectionNavControls';
-import { applyNoteResumePosition } from '../reader/readingProgress';
+import {
+	applyNoteResumePosition,
+	computeDocumentProgressFromEngine
+} from '../reader/readingProgress';
+import type { SourceKind } from '../types/m2Contracts';
 import { splitWordForOrpDisplay } from '../services/textParser';
 import type { SpeedReaderOpen } from './speedReaderOpen';
 import { StructuredReaderSession, type PlaybackLoadKind } from './structuredReaderSession';
@@ -97,8 +101,13 @@ import {
 	resolveReaderBackAction,
 	type ReaderBackAction
 } from './readerShell/readerBackNavigation';
+import {
+	applyDesktopFocusChrome,
+	type SidebarSnapshot
+} from './readerShell/desktopFocusChrome';
 
-const INTER_SECTION_MS = 2000;
+const INTER_SECTION_MS = 5000;
+const SECTION_INTRO_MS = 2500;
 const FONT_SIZE_STEP = 3;
 const MIN_FONT_SIZE = 24;
 const MAX_FONT_SIZE = 200;
@@ -142,6 +151,7 @@ export class SpeedReaderAiModal extends Modal {
 	private session: StructuredReaderSession | null = null;
 	private engine: RSVPEngine;
 	private focusMode = false;
+	private sidebarSnapshot: SidebarSnapshot | null = null;
 	private activeTab: ReaderTabId = 'home';
 	private state: ReaderState | null = null;
 	private wasPlayingBeforeBlur = false;
@@ -194,6 +204,9 @@ export class SpeedReaderAiModal extends Modal {
 	private prepareOverlayEl: HTMLElement | null = null;
 	private prepareOverlaySublineEl: HTMLElement | null = null;
 	private interSectionTimer: number | null = null;
+	private interSectionCountdownInterval: number | null = null;
+	private sectionIntroShownForIndex: number | null = null;
+	private skipNextSectionIntro = false;
 
 	private modePicker: ModePickerHandle | null = null;
 	private versionPicker: VersionPickerHandle | null = null;
@@ -269,7 +282,7 @@ export class SpeedReaderAiModal extends Modal {
 			showProgress: this.settings.reader.display.showProgress
 		});
 		this.header.onPlayPause(() => {
-			this.engine.togglePlayPause();
+			this.toggleReaderPlayPause();
 			this.refocusContent();
 		});
 		this.header.onProgressClick((percentage) => {
@@ -297,7 +310,7 @@ export class SpeedReaderAiModal extends Modal {
 
 			this.mobileCompactBar = mountMobileCompactBar(this.mobilePausedStackEl, {
 				onPlayPause: () => {
-					this.engine.togglePlayPause();
+					this.toggleReaderPlayPause();
 					this.refocusContent();
 				},
 				onWpmDelta: (delta) => this.adjustWpm(delta),
@@ -386,7 +399,7 @@ export class SpeedReaderAiModal extends Modal {
 			void this.bookmarkHandlers?.openBookmarkMarkdownInObsidian();
 		});
 		this.bookmarksPane.onPlayPause(() => {
-			this.engine.togglePlayPause();
+			this.toggleReaderPlayPause();
 			this.refocusContent();
 		});
 		this.bookmarksPane.onSwipeBack(() => {
@@ -452,22 +465,13 @@ export class SpeedReaderAiModal extends Modal {
 				onReadWithoutAi: () => this.onReadWithoutAi(),
 				onPrepare: () => this.onPrepareWithAi(),
 				onClearCache: () => this.onClearDocumentCache(),
-				onPrevSection: () => {
-					if (!this.canNavigateSections()) return;
-					this.engine.prevSection();
-					this.notifySectionChange();
-					this.refocusContent();
-				},
-				onNextSection: () => {
-					if (!this.canNavigateSections()) return;
-					this.engine.nextSection();
-					this.notifySectionChange();
-					this.refocusContent();
-				}
+				onPrevSection: () => this.navigateToAdjacentSection(-1),
+				onNextSection: () => this.navigateToAdjacentSection(1)
 			},
 			{
 				showSectionNav: false,
-				sectionNavLabel: this.readerOpen.kind === 'book' ? 'Chapter' : 'Section'
+				sectionNavLabel: this.readerOpen.kind === 'book' ? 'Chapter' : 'Section',
+				showDocumentProgress: !this.mobileReader
 			}
 		);
 
@@ -597,6 +601,9 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	onClose() {
+		if (this.focusMode || this.sidebarSnapshot) {
+			this.setFocusMode(false);
+		}
 		this.clearAutoStartTimer();
 		this.revokeCoverObjectUrl();
 		this.bookmarkHandlers = null;
@@ -942,7 +949,7 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		const seconds = this.settings.reader.autoStart.seconds;
 		this.autoStartTimer = window.setTimeout(() => {
-			this.engine.play();
+			this.startPlayback();
 		}, seconds * 1000);
 	}
 
@@ -1088,6 +1095,99 @@ export class SpeedReaderAiModal extends Modal {
 		}
 	}
 
+	private navigateToAdjacentSection(direction: 1 | -1): void {
+		if (!this.canNavigateSections()) {
+			return;
+		}
+		const wasPlaying = Boolean(this.state?.isPlaying);
+		if (wasPlaying) {
+			this.engine.pause();
+		}
+		if (direction > 0) {
+			this.engine.nextSection();
+		} else {
+			this.engine.prevSection();
+		}
+		this.notifySectionChange();
+		if (wasPlaying) {
+			this.startPlayback();
+		}
+		this.refocusContent();
+	}
+
+	private jumpToSection(sectionId: string): void {
+		if (!this.engine.getSectionList().some((s) => s.id === sectionId)) {
+			return;
+		}
+		const wasPlaying = Boolean(this.state?.isPlaying);
+		if (wasPlaying) {
+			this.engine.pause();
+		}
+		this.engine.goToSection(sectionId);
+		this.notifySectionChange();
+		if (wasPlaying) {
+			this.startPlayback();
+		}
+		this.refocusContent();
+	}
+
+	private getSectionNavLabel(): string {
+		return this.readerOpen.kind === 'book' ? 'Chapter' : 'Section';
+	}
+
+	private getCurrentSectionTitle(): string {
+		const state = this.state;
+		const fromState = state?.sectionTitle?.trim();
+		if (fromState) {
+			return fromState;
+		}
+		const index = state?.currentSectionIndex ?? 0;
+		const sections = this.engine.getSectionList();
+		return sections[index]?.title?.trim() || this.getSectionNavLabel();
+	}
+
+	private hasMultipleSections(): boolean {
+		return this.engine.getSectionList().length > 1;
+	}
+
+	private needsSectionIntro(): boolean {
+		if (!this.hasMultipleSections()) {
+			return false;
+		}
+		const index = this.state?.currentSectionIndex ?? 0;
+		return this.sectionIntroShownForIndex !== index;
+	}
+
+	private markSectionIntroShown(): void {
+		this.sectionIntroShownForIndex = this.state?.currentSectionIndex ?? 0;
+	}
+
+	private toggleReaderPlayPause(): void {
+		if (this.state?.isPlaying) {
+			this.engine.togglePlayPause();
+			return;
+		}
+		this.startPlayback();
+	}
+
+	private startPlayback(): void {
+		if (this.skipNextSectionIntro) {
+			this.skipNextSectionIntro = false;
+			this.markSectionIntroShown();
+			this.engine.play();
+			return;
+		}
+		if (this.needsSectionIntro()) {
+			this.engine.pause();
+			this.showSectionIntroOverlay(() => {
+				this.markSectionIntroShown();
+				this.engine.play();
+			});
+			return;
+		}
+		this.engine.play();
+	}
+
 	private playbackOptions() {
 		const preferredVersionId =
 			this.readerOpen.kind === 'structured'
@@ -1135,7 +1235,11 @@ export class SpeedReaderAiModal extends Modal {
 		this.refreshVersionPicker();
 
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
-		this.sectionNav = mountSectionNavControls(sectionHost, this.engine, () => this.refocusContent());
+		this.sectionNav = mountSectionNavControls(sectionHost, this.engine, {
+			onPrevSection: () => this.navigateToAdjacentSection(-1),
+			onNextSection: () => this.navigateToAdjacentSection(1),
+			onJumpToSection: (id) => this.jumpToSection(id)
+		});
 		if (!this.mobileReader) {
 			this.structuredBarEl.removeClass('is-hidden');
 		}
@@ -1143,7 +1247,11 @@ export class SpeedReaderAiModal extends Modal {
 
 	private mountBookControls() {
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
-		this.chapterNav = mountChapterNavControls(sectionHost, this.engine, () => this.refocusContent());
+		this.chapterNav = mountChapterNavControls(sectionHost, this.engine, {
+			onPrevChapter: () => this.navigateToAdjacentSection(-1),
+			onNextChapter: () => this.navigateToAdjacentSection(1),
+			onJumpToChapter: (id) => this.jumpToSection(id)
+		});
 	}
 
 	private async onVersionChange(versionId: string) {
@@ -1309,47 +1417,121 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private handleSectionComplete() {
-		const profile = this.engine.getReaderUxProfile();
 		const state = this.state;
-		if (!profile?.interSectionPause || state?.isDeterministic) {
-			this.engine.nextSection();
-			this.notifySectionChange();
-			return;
-		}
-
 		const sections = this.engine.getSectionList();
 		const nextIndex = (state?.currentSectionIndex ?? 0) + 1;
 		if (nextIndex >= sections.length) {
 			return;
 		}
 
-		const nextTitle = sections[nextIndex]?.title ?? 'Next section';
+		const isBook = this.readerOpen.kind === 'book';
+		const nextLabel = isBook ? 'Next chapter' : 'Next section';
+		const nextTitle = sections[nextIndex]?.title ?? nextLabel;
 		this.engine.pause();
-		this.showInterSectionOverlay(nextTitle, () => {
+		this.showInterSectionOverlay(nextLabel, nextTitle, () => {
+			this.skipNextSectionIntro = true;
 			this.engine.nextSection();
 			this.notifySectionChange();
-			this.engine.play();
+			this.startPlayback();
 		});
 	}
 
-	private showInterSectionOverlay(title: string, onContinue: () => void) {
+	private showSectionIntroOverlay(onStart: () => void) {
 		if (!this.interSectionOverlayEl) return;
 		this.clearInterSectionTimer();
 		this.interSectionOverlayEl.empty();
 		this.interSectionOverlayEl.removeClass('is-hidden');
 		this.interSectionOverlayEl.createSpan({
 			cls: 'speed-reader-ai-inter-section-label',
-			text: 'Next section'
+			text: this.getSectionNavLabel()
+		});
+		this.interSectionOverlayEl.createSpan({
+			cls: 'speed-reader-ai-inter-section-title speed-reader-ai-section-intro-title',
+			text: this.getCurrentSectionTitle()
+		});
+		const countdownSeconds = Math.round(SECTION_INTRO_MS / 1000);
+		const countdownEl = this.interSectionOverlayEl.createSpan({
+			cls: 'speed-reader-ai-inter-section-countdown'
+		});
+		const setCountdownText = (seconds: number) => {
+			countdownEl.setText(
+				seconds === 1 ? 'Starting in 1 second…' : `Starting in ${seconds} seconds…`
+			);
+		};
+		setCountdownText(countdownSeconds);
+		const startBtn = this.interSectionOverlayEl.createEl('button', {
+			cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
+			text: 'Start reading'
+		});
+		startBtn.addEventListener('click', () => this.dismissInterSectionOverlay(onStart), {
+			once: true
+		});
+
+		let remaining = countdownSeconds;
+		this.interSectionCountdownInterval = window.setInterval(() => {
+			remaining -= 1;
+			if (remaining <= 0) {
+				this.clearInterSectionCountdownInterval();
+				return;
+			}
+			setCountdownText(remaining);
+		}, 1000);
+
+		this.interSectionTimer = window.setTimeout(() => {
+			this.dismissInterSectionOverlay(onStart);
+		}, SECTION_INTRO_MS);
+	}
+
+	private showInterSectionOverlay(
+		nextLabel: string,
+		nextTitle: string,
+		onContinue: () => void
+	) {
+		if (!this.interSectionOverlayEl) return;
+		this.clearInterSectionTimer();
+		this.interSectionOverlayEl.empty();
+		this.interSectionOverlayEl.removeClass('is-hidden');
+		this.interSectionOverlayEl.createSpan({
+			cls: 'speed-reader-ai-inter-section-label',
+			text: nextLabel
 		});
 		this.interSectionOverlayEl.createSpan({
 			cls: 'speed-reader-ai-inter-section-title',
-			text: title
+			text: nextTitle
 		});
+		this.interSectionOverlayEl.createSpan({
+			cls: 'speed-reader-ai-inter-section-done',
+			text: 'Finished'
+		});
+		const countdownSeconds = Math.round(INTER_SECTION_MS / 1000);
+		const countdownEl = this.interSectionOverlayEl.createSpan({
+			cls: 'speed-reader-ai-inter-section-countdown'
+		});
+		const setCountdownText = (seconds: number) => {
+			countdownEl.setText(
+				seconds === 1
+					? 'Starting next in 1 second…'
+					: `Starting next in ${seconds} seconds…`
+			);
+		};
+		setCountdownText(countdownSeconds);
 		const skip = this.interSectionOverlayEl.createEl('button', {
 			cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
-			text: 'Continue'
+			text: 'Continue now'
 		});
-		skip.addEventListener('click', () => this.dismissInterSectionOverlay(onContinue), { once: true });
+		skip.addEventListener('click', () => this.dismissInterSectionOverlay(onContinue), {
+			once: true
+		});
+
+		let remaining = countdownSeconds;
+		this.interSectionCountdownInterval = window.setInterval(() => {
+			remaining -= 1;
+			if (remaining <= 0) {
+				this.clearInterSectionCountdownInterval();
+				return;
+			}
+			setCountdownText(remaining);
+		}, 1000);
 
 		this.interSectionTimer = window.setTimeout(() => {
 			this.dismissInterSectionOverlay(onContinue);
@@ -1357,12 +1539,23 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private dismissInterSectionOverlay(onContinue: () => void) {
+		if (this.interSectionOverlayEl?.hasClass('is-hidden')) {
+			return;
+		}
 		this.clearInterSectionTimer();
 		this.interSectionOverlayEl?.addClass('is-hidden');
 		onContinue();
 	}
 
+	private clearInterSectionCountdownInterval() {
+		if (this.interSectionCountdownInterval !== null) {
+			window.clearInterval(this.interSectionCountdownInterval);
+			this.interSectionCountdownInterval = null;
+		}
+	}
+
 	private clearInterSectionTimer() {
+		this.clearInterSectionCountdownInterval();
 		if (this.interSectionTimer !== null) {
 			window.clearTimeout(this.interSectionTimer);
 			this.interSectionTimer = null;
@@ -1481,7 +1674,7 @@ export class SpeedReaderAiModal extends Modal {
 			if (this.isInputBlockedByOverlay()) {
 				return false;
 			}
-			this.engine.togglePlayPause();
+			this.toggleReaderPlayPause();
 			return false;
 		});
 
@@ -1591,7 +1784,7 @@ export class SpeedReaderAiModal extends Modal {
 				if (this.isInputBlockedByOverlay()) {
 					return;
 				}
-				this.engine.togglePlayPause();
+				this.toggleReaderPlayPause();
 			}
 		});
 	}
@@ -1615,21 +1808,11 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private handleShiftArrowLeft() {
-		if (!this.canNavigateSections()) {
-			return;
-		}
-		this.engine.prevSection();
-		this.notifySectionChange();
-		this.refocusContent();
+		this.navigateToAdjacentSection(-1);
 	}
 
 	private handleShiftArrowRight() {
-		if (!this.canNavigateSections()) {
-			return;
-		}
-		this.engine.nextSection();
-		this.notifySectionChange();
-		this.refocusContent();
+		this.navigateToAdjacentSection(1);
 	}
 
 	private canNavigateSections(): boolean {
@@ -1639,6 +1822,29 @@ export class SpeedReaderAiModal extends Modal {
 			(profile?.sectionNav ?? false) &&
 			this.engine.getSectionList().length > 0
 		);
+	}
+
+	private getDocumentProgressSourceKind(): SourceKind | null {
+		if (this.readerOpen.kind === 'book') {
+			return 'book';
+		}
+		if (this.readerOpen.kind === 'structured' || this.readerOpen.kind === 'legacy') {
+			return 'note';
+		}
+		return null;
+	}
+
+	private getDocumentProgressPercent(state: ReaderState): number | null {
+		const sourceKind = this.getDocumentProgressSourceKind();
+		if (!sourceKind) {
+			return null;
+		}
+		return computeDocumentProgressFromEngine({
+			sourceKind,
+			bookIndex: this.readerOpen.kind === 'book' ? this.readerOpen.bookIndex : undefined,
+			engine: this.engine,
+			state
+		});
 	}
 
 	private registerFocusHandlers() {
@@ -1653,6 +1859,13 @@ export class SpeedReaderAiModal extends Modal {
 		this.focusMode = enabled;
 		this.contentEl.toggleClass('speed-reader-ai-focus-active', this.focusMode);
 		this.containerEl.toggleClass('is-focus-active', this.focusMode);
+		if (!this.mobileReader) {
+			this.sidebarSnapshot = applyDesktopFocusChrome(
+				this.app.workspace,
+				enabled,
+				this.sidebarSnapshot
+			);
+		}
 		this.render();
 	}
 
@@ -1729,8 +1942,9 @@ export class SpeedReaderAiModal extends Modal {
 		if (profile?.sectionNav === false) {
 			this.engine.seekToHeading(value);
 		} else if (this.engine.getSectionList().some((s) => s.id === value)) {
-			this.engine.goToSection(value);
-			this.notifySectionChange();
+			this.jumpToSection(value);
+			this.sectionSelect.value = '';
+			return;
 		} else {
 			const wordIndex = Number.parseInt(value, 10);
 			if (!Number.isNaN(wordIndex)) {
@@ -1841,7 +2055,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.wordContainer?.toggleClass('is-line-by-line', state.playbackMode === 'lineByLine');
 		this.renderWord(state);
 		this.header?.update(state);
-		this.controlBar?.update(state);
+		this.controlBar?.update(state, this.getDocumentProgressPercent(state));
 		const showPauseContextInFocus =
 			this.focusMode && !state.isPlaying && !state.finished;
 		const showContext =
@@ -1904,7 +2118,7 @@ export class SpeedReaderAiModal extends Modal {
 						this.refocusContent();
 						return;
 					}
-					this.engine.togglePlayPause();
+					this.toggleReaderPlayPause();
 					this.refocusContent();
 				},
 				onDoubleTapLeft: () => {
@@ -2032,8 +2246,7 @@ export class SpeedReaderAiModal extends Modal {
 		if (profile?.sectionNav === false && this.engine.getStreamHeadings().length > 0) {
 			this.engine.seekToHeading(sectionId);
 		} else if (this.engine.getSectionList().some((s) => s.id === sectionId)) {
-			this.engine.goToSection(sectionId);
-			this.notifySectionChange();
+			this.jumpToSection(sectionId);
 		} else {
 			const wordIndex = Number.parseInt(sectionId, 10);
 			if (!Number.isNaN(wordIndex)) {
