@@ -1,10 +1,14 @@
 import { normalizePlaybackMode } from '../engine/playbackMode';
 import {
 	DEFAULT_SETTINGS,
+	FOCUS_STRATEGY_IDS,
+	M4_THEME_PRESET_IDS,
 	READER_FONT_OPTIONS,
 	SpeedReaderAiSettings,
 	type ApiProviderPreset,
+	type FocusStrategyId,
 	type LlmBackend,
+	type M4ThemePresetId,
 	type ReaderColorScheme,
 	type ReaderFontOption
 } from '../types';
@@ -49,6 +53,20 @@ function normalizeColorScheme(value: unknown): ReaderColorScheme {
 		return value;
 	}
 	return 'dark';
+}
+
+function normalizeM4ThemePreset(value: unknown): M4ThemePresetId {
+	if (typeof value === 'string' && (M4_THEME_PRESET_IDS as string[]).includes(value)) {
+		return value as M4ThemePresetId;
+	}
+	return DEFAULT_SETTINGS.reader.themePreset;
+}
+
+function normalizeFocusStrategy(value: unknown): FocusStrategyId {
+	if (typeof value === 'string' && (FOCUS_STRATEGY_IDS as string[]).includes(value)) {
+		return value as FocusStrategyId;
+	}
+	return DEFAULT_SETTINGS.reader.focusStrategy;
 }
 
 function normalizeFont(value: unknown): ReaderFontOption {
@@ -199,8 +217,18 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 					DEFAULT_SETTINGS.reader.display.showRemainingTime
 				),
 				showContext: toBoolean(raw.showContext, DEFAULT_SETTINGS.reader.display.showContext),
-				showProgress: toBoolean(raw.showProgress, DEFAULT_SETTINGS.reader.display.showProgress)
+				showProgress: toBoolean(raw.showProgress, DEFAULT_SETTINGS.reader.display.showProgress),
+				showGuideLine: toBoolean(
+					isRecord(raw.display) ? raw.display.showGuideLine : undefined,
+					DEFAULT_SETTINGS.reader.display.showGuideLine
+				),
+				useM4Shell: toBoolean(
+					isRecord(raw.display) ? raw.display.useM4Shell : undefined,
+					DEFAULT_SETTINGS.reader.display.useM4Shell
+				)
 			},
+			themePreset: normalizeM4ThemePreset(raw.themePreset),
+			focusStrategy: normalizeFocusStrategy(raw.focusStrategy),
 			defaultPlaybackMode: normalizePlaybackMode(raw.defaultPlaybackMode),
 			progressiveRsvpMaxWordLength: toNumber(
 				raw.progressiveRsvpMaxWordLength,
@@ -335,6 +363,14 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			showProgress: toBoolean(
 				firstDefined(displayRaw.showProgress, flat.showProgress),
 				DEFAULT_SETTINGS.reader.display.showProgress
+			),
+			showGuideLine: toBoolean(
+				firstDefined(displayRaw.showGuideLine, flat.showGuideLine),
+				DEFAULT_SETTINGS.reader.display.showGuideLine
+			),
+			useM4Shell: toBoolean(
+				firstDefined(displayRaw.useM4Shell, flat.useM4Shell),
+				DEFAULT_SETTINGS.reader.display.useM4Shell
 			)
 		},
 		defaultPlaybackMode: normalizePlaybackMode(
@@ -380,7 +416,9 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			),
 			12,
 			32
-		)
+		),
+		themePreset: normalizeM4ThemePreset(firstDefined(r.themePreset, flat.themePreset)),
+		focusStrategy: normalizeFocusStrategy(firstDefined(r.focusStrategy, flat.focusStrategy))
 	};
 }
 

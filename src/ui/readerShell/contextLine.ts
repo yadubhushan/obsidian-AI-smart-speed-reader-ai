@@ -1,5 +1,6 @@
 import type { RSVPEngine } from '../../engine/rsvpEngine';
 import type { ReaderState } from '../../types';
+import { scrollContextLineIntoView } from './scrollContextLineIntoView';
 
 export interface ContextLineHandle {
 	destroy(): void;
@@ -14,6 +15,12 @@ export interface MountContextLineOptions {
 	enableClickActivation?: boolean;
 	/** Mobile: show current sentence only when paused (no paragraph prefix/suffix). */
 	lineOnlyContext?: boolean;
+	/** When set, show current line plus this many lines above/below. */
+	neighborLines?: number;
+	/** When true, show every sentence line in the current paragraph. */
+	paragraphLines?: boolean;
+	/** Scroll container for auto-scrolling the active line into view. */
+	scrollContainer?: HTMLElement;
 }
 
 export function wordTextFromContextEvent(event: Event): string | null {
@@ -22,6 +29,22 @@ export function wordTextFromContextEvent(event: Event): string | null {
 	);
 	const text = target?.textContent?.trim();
 	return text?.length ? text : null;
+}
+
+function appendContextTokens(
+	parent: HTMLElement,
+	tokens: Array<{ text: string; isCurrent: boolean }>
+): void {
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i]!;
+		if (i > 0) {
+			parent.createSpan({ text: ' ' });
+		}
+		parent.createSpan({
+			cls: `speed-reader-ai-context-word${token.isCurrent ? ' is-current' : ''}`,
+			text: token.text
+		});
+	}
 }
 
 export function mountContextLine(
@@ -44,6 +67,42 @@ export function mountContextLine(
 		el.addEventListener('click', onWordClick);
 	}
 
+	const usesLineContext =
+		options.paragraphLines || options.neighborLines !== undefined;
+
+	const renderLineContext = (engine: RSVPEngine, state: ReaderState) => {
+		const lineContext = options.paragraphLines
+			? engine.getPauseParagraphLineContext()
+			: engine.getPauseLineContext(options.neighborLines ?? 0);
+		if (!lineContext || lineContext.lines.length === 0) {
+			el.addClass('is-hidden');
+			return;
+		}
+
+		el.removeClass('is-hidden');
+		el.addClass('is-paused');
+		el.addClass('is-multi-line');
+		if (options.paragraphLines) {
+			el.addClass('is-paragraph-lines');
+		}
+
+		for (let i = 0; i < lineContext.lines.length; i++) {
+			const line = lineContext.lines[i]!;
+			const row = el.createDiv({
+				cls: `speed-reader-ai-context-line-row${line.isCurrentLine ? ' is-current-line' : ' is-adjacent-line'}`
+			});
+			appendContextTokens(row, line.tokens);
+		}
+
+		if (options.scrollContainer) {
+			const scrollContainer = options.scrollContainer;
+			const smooth = !state.isPlaying;
+			requestAnimationFrame(() => {
+				scrollContextLineIntoView(scrollContainer, el, smooth);
+			});
+		}
+	};
+
 	return {
 		destroy() {
 			if (options.enableClickActivation !== false) {
@@ -60,9 +119,16 @@ export function mountContextLine(
 		render(state, engine, showContext) {
 			el.empty();
 			el.removeClass('is-paused');
+			el.removeClass('is-multi-line');
+			el.removeClass('is-paragraph-lines');
 
 			if (!showContext || !state || state.finished) {
 				el.addClass('is-hidden');
+				return;
+			}
+
+			if (usesLineContext) {
+				renderLineContext(engine, state);
 				return;
 			}
 
@@ -88,16 +154,7 @@ export function mountContextLine(
 					});
 				}
 
-				for (let i = 0; i < sentenceContext.sentenceTokens.length; i++) {
-					const token = sentenceContext.sentenceTokens[i]!;
-					if (i > 0) {
-						el.createSpan({ text: ' ' });
-					}
-					el.createSpan({
-						cls: `speed-reader-ai-context-word${token.isCurrent ? ' is-current' : ''}`,
-						text: token.text
-					});
-				}
+				appendContextTokens(el, sentenceContext.sentenceTokens);
 
 				if (
 					!options.lineOnlyContext &&
@@ -118,17 +175,7 @@ export function mountContextLine(
 			}
 
 			el.removeClass('is-hidden');
-
-			for (let i = 0; i < tokens.length; i++) {
-				const token = tokens[i]!;
-				if (i > 0) {
-					el.createSpan({ text: ' ' });
-				}
-				el.createSpan({
-					cls: `speed-reader-ai-context-word${token.isCurrent ? ' is-current' : ''}`,
-					text: token.text
-				});
-			}
+			appendContextTokens(el, tokens);
 		}
 	};
 }

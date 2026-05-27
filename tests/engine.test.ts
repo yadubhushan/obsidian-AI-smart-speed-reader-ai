@@ -187,6 +187,34 @@ describe('RSVPEngine', () => {
 		expect(ctx!.sentenceTokens.some((t) => t.isCurrent)).toBe(true);
 	});
 
+	it('getPauseLineContext returns current line with neighbors', () => {
+		engine.loadText('Line one here. Line two here. Line three here.');
+		engine.seekToIndex(5);
+		engine.pause();
+		const ctx = engine.getPauseLineContext(1);
+		expect(ctx).not.toBeNull();
+		expect(ctx!.lines).toHaveLength(3);
+		expect(ctx!.lines.some((line) => line.isCurrentLine)).toBe(true);
+		expect(ctx!.lines.find((line) => line.isCurrentLine)?.tokens.some((t) => t.isCurrent)).toBe(
+			true
+		);
+		expect(ctx!.lines.find((line) => line.isCurrentLine)?.tokens.map((t) => t.text)).toEqual([
+			'Line',
+			'two',
+			'here.'
+		]);
+	});
+
+	it('getPauseParagraphLineContext returns all lines in the paragraph', () => {
+		engine.loadText('First sentence. Second sentence. Third sentence.');
+		engine.seekToIndex(4);
+		engine.pause();
+		const ctx = engine.getPauseParagraphLineContext();
+		expect(ctx).not.toBeNull();
+		expect(ctx!.lines.length).toBeGreaterThanOrEqual(3);
+		expect(ctx!.lines.filter((line) => line.isCurrentLine)).toHaveLength(1);
+	});
+
 	it('seeks to percentage', () => {
 		engine.loadText('One two three four five six seven eight nine ten');
 		engine.seekToPercent(0.5);

@@ -4,6 +4,7 @@ import {
 	computeLineByLineAdvance,
 	computeLineRepeatAdvance,
 	findSentenceUnitForSeekIndex,
+	findSentenceUnitForWordIdx,
 	getLineBoundary,
 	nextLineUnitIndex,
 	prevLineUnitIndex
@@ -28,6 +29,13 @@ function legacyNavWords(text: string) {
 }
 
 describe('lineRepeatPlayback', () => {
+	it('findSentenceUnitForWordIdx resolves line from word index', () => {
+		const navWords = legacyNavWords('Hello world. Next sentence here!');
+		const units = buildSentenceUnits(navWords);
+		expect(findSentenceUnitForWordIdx(units, 2)).toBe(1);
+		expect(findSentenceUnitForWordIdx(units, 0)).toBe(0);
+	});
+
 	it('builds sentence units from line-breaker punctuation', () => {
 		const navWords = legacyNavWords('Hello world. Next sentence here!');
 		const units = buildSentenceUnits(navWords);

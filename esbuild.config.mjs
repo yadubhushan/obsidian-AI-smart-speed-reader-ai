@@ -61,8 +61,10 @@ const buildOptions = {
 		js: banner,
 	},
 	entryPoints: [join(__dirname, "src/main.ts")],
+	jsx: "automatic",
 	loader: {
 		".txt": "text",
+		".tsx": "tsx",
 	},
 	bundle: true,
 	external: [

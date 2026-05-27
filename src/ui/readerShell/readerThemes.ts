@@ -1,4 +1,5 @@
-import type { ReaderColorScheme } from '../../types';
+import type { M4ThemePresetId, ReaderColorScheme } from '../../types';
+import { applyM4ShellTokens, mergeThemeTokensWithPreset } from './m4/m4ThemePresets';
 
 export type ResolvedReaderTheme = 'dark' | 'light';
 
@@ -120,17 +121,32 @@ export function resolveReaderTheme(
 	return colorScheme;
 }
 
-export function getReaderThemeTokens(resolved: ResolvedReaderTheme): ReaderThemeTokens {
-	return resolved === 'light' ? LIGHT_TOKENS : DARK_TOKENS;
+export function getReaderThemeTokens(
+	resolved: ResolvedReaderTheme,
+	themePreset?: M4ThemePresetId
+): ReaderThemeTokens {
+	const base = resolved === 'light' ? LIGHT_TOKENS : DARK_TOKENS;
+	if (!themePreset) {
+		return base;
+	}
+	return mergeThemeTokensWithPreset(base, themePreset);
+}
+
+export interface ApplyReaderThemeOptions {
+	isObsidianDark?: boolean;
+	themePreset?: M4ThemePresetId;
+	m4ShellEl?: HTMLElement | null;
 }
 
 export function applyReaderThemeToElement(
 	el: HTMLElement,
 	colorScheme: ReaderColorScheme,
-	isObsidianDark?: boolean
+	options: ApplyReaderThemeOptions | boolean = {}
 ): ResolvedReaderTheme {
-	const resolved = resolveReaderTheme(colorScheme, isObsidianDark);
-	const tokens = getReaderThemeTokens(resolved);
+	const opts: ApplyReaderThemeOptions =
+		typeof options === 'boolean' ? { isObsidianDark: options } : options;
+	const resolved = resolveReaderTheme(colorScheme, opts.isObsidianDark);
+	const tokens = getReaderThemeTokens(resolved, opts.themePreset);
 	el.style.setProperty('--sr-bg', tokens.bg);
 	el.style.setProperty('--sr-text', tokens.text);
 	el.style.setProperty('--sr-orp', tokens.orp);
@@ -166,6 +182,9 @@ export function applyReaderThemeToElement(
 	el.style.setProperty('--sr-saved-shadow', tokens.savedShadow);
 	el.toggleClass('speed-reader-theme-dark', resolved === 'dark');
 	el.toggleClass('speed-reader-theme-light', resolved === 'light');
+	if (opts.m4ShellEl && opts.themePreset) {
+		applyM4ShellTokens(opts.m4ShellEl, opts.themePreset);
+	}
 	return resolved;
 }
 

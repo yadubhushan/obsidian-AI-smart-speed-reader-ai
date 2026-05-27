@@ -39,6 +39,32 @@ export type {
 export type PlaybackMode = 'rsvp' | 'progressiveRsvp' | 'lineByLine' | 'lineRepeat';
 
 export type ReaderColorScheme = 'dark' | 'light' | 'auto';
+
+export type M4ThemePresetId = 'vintage-amber' | 'cyber-mint' | 'nova-violet' | 'crimson-surge';
+
+export type FocusStrategyId =
+	| 'orp'
+	| 'peach-anchor'
+	| 'forward-pull'
+	| 'parafoveal'
+	| 'multi-orp'
+	| 'crowding-shield';
+
+export const M4_THEME_PRESET_IDS: M4ThemePresetId[] = [
+	'vintage-amber',
+	'cyber-mint',
+	'nova-violet',
+	'crimson-surge'
+];
+
+export const FOCUS_STRATEGY_IDS: FocusStrategyId[] = [
+	'orp',
+	'peach-anchor',
+	'forward-pull',
+	'parafoveal',
+	'multi-orp',
+	'crowding-shield'
+];
 export type LlmBackend = 'auto' | 'cursor-cli' | 'ai-providers' | 'openai-compatible';
 export type ApiProviderPreset = 'openai' | 'openrouter' | 'custom';
 
@@ -49,6 +75,8 @@ export interface ReaderDisplaySettings {
 	showRemainingTime: boolean;
 	showContext: boolean;
 	showProgress: boolean;
+	showGuideLine: boolean;
+	useM4Shell: boolean;
 }
 
 export interface ReaderTextOrientationSettings {
@@ -81,6 +109,8 @@ export interface ReaderSettings {
 	contextWords: number;
 	/** Font size (px) for paused context line subtitle */
 	contextLineFontSize: number;
+	themePreset: M4ThemePresetId;
+	focusStrategy: FocusStrategyId;
 }
 
 export interface AiSettings {
@@ -185,8 +215,12 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		display: {
 			showRemainingTime: true,
 			showContext: true,
-			showProgress: true
+			showProgress: true,
+			showGuideLine: true,
+			useM4Shell: true
 		},
+		themePreset: 'vintage-amber',
+		focusStrategy: 'orp',
 		defaultPlaybackMode: 'rsvp',
 		progressiveRsvpMaxWordLength: 4,
 		lineRepeatGapMs: 600,

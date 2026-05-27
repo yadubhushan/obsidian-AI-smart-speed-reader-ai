@@ -192,6 +192,7 @@ export function mountSettingsPane(
 						autoDetect: autoDetectCheck.checked
 					},
 					display: {
+						...draft.reader.display,
 						showRemainingTime: remainingCheck.checked,
 						showContext: contextCheck.checked,
 						showProgress: progressCheck.checked

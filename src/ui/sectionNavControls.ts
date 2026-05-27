@@ -1,5 +1,7 @@
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { RSVPEngine } from '../engine/rsvpEngine';
 import type { ReaderState } from '../types';
+import { appendM4IconToButton, createM4Icon } from './readerShell/m4/m4Icons';
 
 export interface SectionNavControlsHandle {
 	destroy(): void;
@@ -14,25 +16,65 @@ export interface SectionNavHandlers {
 	onJumpToSection: (sectionId: string) => void;
 }
 
+export interface SectionNavControlsOptions {
+	m4Style?: boolean;
+}
+
 export function mountSectionNavControls(
 	container: HTMLElement,
 	engine: RSVPEngine,
-	handlers: SectionNavHandlers
+	handlers: SectionNavHandlers,
+	options: SectionNavControlsOptions = {}
 ): SectionNavControlsHandle {
-	const row = container.createDiv({ cls: 'speed-reader-ai-section-nav-row' });
+	const m4 = options.m4Style ?? false;
+	const row = container.createDiv({
+		cls: m4
+			? 'speed-reader-ai-section-nav-row speed-reader-m4-section-nav'
+			: 'speed-reader-ai-section-nav-row'
+	});
 
 	const prevBtn = row.createEl('button', {
-		cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
-		text: 'Prev section'
+		cls: m4 ? 'speed-reader-m4-nav-btn' : 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
+		attr: {
+			type: 'button',
+			'aria-label': 'Previous section',
+			...(m4 ? {} : { text: 'Prev section' })
+		}
 	});
-	const counter = row.createSpan({ cls: 'speed-reader-ai-section-counter' });
-	const nextBtn = row.createEl('button', {
-		cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
-		text: 'Next section'
+	if (m4) {
+		appendM4IconToButton(prevBtn, ChevronLeft, { size: 16 });
+	}
+
+	const counter = row.createSpan({
+		cls: m4 ? 'speed-reader-m4-section-nav__counter' : 'speed-reader-ai-section-counter'
 	});
 
-	const pickerWrap = row.createDiv({ cls: 'speed-reader-ai-section-picker-wrap' });
-	const picker = pickerWrap.createEl('select', { cls: 'speed-reader-ai-section-picker' });
+	const nextBtn = row.createEl('button', {
+		cls: m4 ? 'speed-reader-m4-nav-btn' : 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
+		attr: {
+			type: 'button',
+			'aria-label': 'Next section',
+			...(m4 ? {} : { text: 'Next section' })
+		}
+	});
+	if (m4) {
+		appendM4IconToButton(nextBtn, ChevronRight, { size: 16 });
+	}
+
+	const pickerWrap = row.createDiv({
+		cls: m4 ? 'speed-reader-m4-section-nav__picker' : 'speed-reader-ai-section-picker-wrap'
+	});
+	if (m4) {
+		pickerWrap.appendChild(
+			createM4Icon(ChevronDown, {
+				className: 'speed-reader-m4-icon speed-reader-m4-section-nav__picker-icon',
+				size: 12
+			})
+		);
+	}
+	const picker = pickerWrap.createEl('select', {
+		cls: m4 ? 'speed-reader-m4-section-nav__select' : 'speed-reader-ai-section-picker'
+	});
 	picker.createEl('option', { text: 'Jump to section', value: '' });
 
 	const onPrev = () => handlers.onPrevSection();

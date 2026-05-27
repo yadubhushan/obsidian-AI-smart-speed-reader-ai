@@ -27,6 +27,44 @@ function mockEngineWithParagraphContext(): RSVPEngine {
 				{ text: 'line', isCurrent: true }
 			]
 		}),
+		getPauseLineContext: () => ({
+			lines: [
+				{
+					isCurrentLine: false,
+					tokens: [{ text: 'Previous', isCurrent: false }]
+				},
+				{
+					isCurrentLine: true,
+					tokens: [
+						{ text: 'Current', isCurrent: false },
+						{ text: 'line', isCurrent: true }
+					]
+				},
+				{
+					isCurrentLine: false,
+					tokens: [{ text: 'Next', isCurrent: false }]
+				}
+			]
+		}),
+		getPauseParagraphLineContext: () => ({
+			lines: [
+				{
+					isCurrentLine: false,
+					tokens: [{ text: 'Line', isCurrent: false }, { text: 'one.', isCurrent: false }]
+				},
+				{
+					isCurrentLine: true,
+					tokens: [
+						{ text: 'Current', isCurrent: false },
+						{ text: 'line', isCurrent: true }
+					]
+				},
+				{
+					isCurrentLine: false,
+					tokens: [{ text: 'Line', isCurrent: false }, { text: 'three.', isCurrent: false }]
+				}
+			]
+		}),
 		getPauseContext: () => []
 	} as unknown as RSVPEngine;
 }
@@ -151,6 +189,39 @@ describe('mountContextLine lineOnlyContext', () => {
 		const root = handle.getRootEl();
 		expect(root.querySelector('.speed-reader-ai-context-paragraph-prefix')).not.toBeNull();
 		expect(root.querySelector('.speed-reader-ai-context-paragraph-suffix')).not.toBeNull();
+		handle.destroy();
+	});
+
+	it('renders current line with neighbors when neighborLines is set', () => {
+		const container = obsidianContainer();
+		const handle = mountContextLine(container, { neighborLines: 1 });
+		const engine = mockEngineWithParagraphContext();
+
+		handle.render(pausedState, engine, true);
+
+		const root = handle.getRootEl();
+		expect(root.querySelector('.speed-reader-ai-context-paragraph-prefix')).toBeNull();
+		expect(root.querySelectorAll('.speed-reader-ai-context-line-row')).toHaveLength(3);
+		expect(root.querySelector('.speed-reader-ai-context-line-row.is-current-line')).not.toBeNull();
+		expect(root.querySelectorAll('.speed-reader-ai-context-line-row.is-adjacent-line')).toHaveLength(2);
+		handle.destroy();
+	});
+
+	it('renders paragraph lines when paragraphLines is set', () => {
+		const container = obsidianContainer();
+		const scrollContainer = document.createElement('div');
+		container.appendChild(scrollContainer);
+		const handle = mountContextLine(scrollContainer, {
+			paragraphLines: true,
+			scrollContainer
+		});
+		const engine = mockEngineWithParagraphContext();
+
+		handle.render(pausedState, engine, true);
+
+		const root = handle.getRootEl();
+		expect(root.classList.contains('is-paragraph-lines')).toBe(true);
+		expect(root.querySelectorAll('.speed-reader-ai-context-line-row')).toHaveLength(3);
 		handle.destroy();
 	});
 });

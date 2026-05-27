@@ -105,9 +105,20 @@ import {
 	applyDesktopFocusChrome,
 	type SidebarSnapshot
 } from './readerShell/desktopFocusChrome';
+import {
+	renderM4ReaderShell,
+	type M4ReaderShellHandle,
+	type M4ShellRoute
+} from './readerShell/m4/m4ReaderShell';
+import {
+	mountM4FocusGestures,
+	type M4FocusGesturesHandle
+} from './readerShell/m4/m4FocusGestures';
+import type { M4OverflowRoute } from './readerShell/m4/m4OverflowMenu';
+import { renderLiveFocusBlock } from './readerShell/m4/focusStrategies/focusStrategyRegistry';
+import { appendFocusBlockToElement } from './readerShell/m4/focusStrategies/renderFocusBlock';
 
 const INTER_SECTION_MS = 5000;
-const SECTION_INTRO_MS = 2500;
 const FONT_SIZE_STEP = 3;
 const MIN_FONT_SIZE = 24;
 const MAX_FONT_SIZE = 200;
@@ -158,6 +169,8 @@ export class SpeedReaderAiModal extends Modal {
 	private autoStartTimer: number | null = null;
 	private boundVisibilityHandler: () => void;
 	private boundBlurHandler: () => void;
+	private boundReaderSurfaceFocusHandler: (event: PointerEvent) => void;
+	private boundM4SpaceFallbackHandler: (event: KeyboardEvent) => void;
 
 	private ownerDoc!: Document;
 	private shellEl!: HTMLElement;
@@ -165,9 +178,11 @@ export class SpeedReaderAiModal extends Modal {
 	private homePaneEl!: HTMLElement;
 	private wordContainer!: HTMLElement;
 	private wordDisplayEl!: HTMLElement;
-	private header!: ReaderHeaderHandle;
-	private controlBar!: ReaderControlBarHandle;
+	private header: ReaderHeaderHandle | null = null;
+	private controlBar: ReaderControlBarHandle | null = null;
 	private contextLine!: ContextLineHandle;
+	private m4Shell: M4ReaderShellHandle | null = null;
+	private m4FocusGestures: M4FocusGesturesHandle | null = null;
 	private tabDock: ReaderTabDockHandle | null = null;
 	private mobileCompactBar: MobileCompactBarHandle | null = null;
 	private mobileActionBar: MobileActionBarHandle | null = null;
@@ -191,9 +206,9 @@ export class SpeedReaderAiModal extends Modal {
 	private contentPane!: ContentPaneHandle;
 	private bookmarksPane!: BookmarksPaneHandle;
 	private bookmarkContextLines: BookmarkContextLine[] = [];
-	private settingsPane!: SettingsPaneHandle;
+	private settingsPane: SettingsPaneHandle | null = null;
 	private shortcutsPane!: ShortcutsPaneHandle;
-	private advancedPane!: AdvancedPaneHandle;
+	private advancedPane: AdvancedPaneHandle | null = null;
 	private mobileMenuHubPane: MobileMenuHubPaneHandle | null = null;
 	private modePickerHost!: HTMLElement;
 	private versionPickerHost!: HTMLElement;
@@ -205,8 +220,6 @@ export class SpeedReaderAiModal extends Modal {
 	private prepareOverlaySublineEl: HTMLElement | null = null;
 	private interSectionTimer: number | null = null;
 	private interSectionCountdownInterval: number | null = null;
-	private sectionIntroShownForIndex: number | null = null;
-	private skipNextSectionIntro = false;
 
 	private modePicker: ModePickerHandle | null = null;
 	private versionPicker: VersionPickerHandle | null = null;
@@ -245,6 +258,39 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		this.boundVisibilityHandler = () => this.handleVisibilityChange();
 		this.boundBlurHandler = () => this.handleWindowBlur();
+		this.boundReaderSurfaceFocusHandler = (event: PointerEvent) => {
+			const target = event.target;
+			if (
+				target instanceof HTMLInputElement ||
+				target instanceof HTMLTextAreaElement ||
+				target instanceof HTMLSelectElement ||
+				(target instanceof HTMLElement && target.isContentEditable)
+			) {
+				return;
+			}
+			this.refocusContent();
+		};
+		this.boundM4SpaceFallbackHandler = (event: KeyboardEvent) => {
+			if (event.key !== ' ' || !this.modalEl.isConnected) {
+				return;
+			}
+			const active = this.ownerDoc.activeElement;
+			if (active === this.contentEl) {
+				return;
+			}
+			if (
+				active instanceof HTMLInputElement ||
+				active instanceof HTMLTextAreaElement ||
+				active instanceof HTMLSelectElement ||
+				(active instanceof HTMLElement && active.isContentEditable)
+			) {
+				return;
+			}
+			if (!this.modalEl.contains(active) && active !== this.ownerDoc.body) {
+				return;
+			}
+			this.handleReaderSpaceKey(event);
+		};
 		this.engine = new RSVPEngine(
 			this.settings,
 			(state) => {
@@ -271,32 +317,43 @@ export class SpeedReaderAiModal extends Modal {
 		contentEl.setAttr('tabindex', '-1');
 		contentEl.focus();
 
-		applyReaderThemeToElement(contentEl, this.settings.reader.colorScheme);
+		applyReaderThemeToElement(contentEl, this.settings.reader.colorScheme, {
+			themePreset: this.settings.reader.themePreset
+		});
 		this.applyFontFamily();
 
-		this.shellEl = contentEl.createDiv({ cls: 'speed-reader-ai-shell' });
+		const m4Enabled = this.settings.reader.display.useM4Shell;
+		contentEl.toggleClass('speed-reader-ai-m4-modal', m4Enabled);
 
-		this.header = mountReaderHeader(this.shellEl, {
-			rtl: this.settings.reader.textOrientation.rtl,
-			showRemainingTime: this.settings.reader.display.showRemainingTime,
-			showProgress: this.settings.reader.display.showProgress
+		this.shellEl = contentEl.createDiv({
+			cls: `speed-reader-ai-shell${m4Enabled ? ' speed-reader-ai-shell-host' : ''}`
 		});
-		this.header.onPlayPause(() => {
-			this.toggleReaderPlayPause();
-			this.refocusContent();
-		});
-		this.header.onProgressClick((percentage) => {
-			this.engine.seekToPercent(percentage);
-			this.refocusContent();
-		});
+
+		if (!m4Enabled) {
+			this.header = mountReaderHeader(this.shellEl, {
+				rtl: this.settings.reader.textOrientation.rtl,
+				showRemainingTime: this.settings.reader.display.showRemainingTime,
+				showProgress: this.settings.reader.display.showProgress
+			});
+			this.header.onPlayPause(() => {
+				this.toggleReaderPlayPause();
+				this.refocusContent();
+			});
+			this.header.onProgressClick((percentage) => {
+				this.engine.seekToPercent(percentage);
+				this.refocusContent();
+			});
+		}
 
 		if (this.mobileReader) {
 			applyMobileShellClass(this.shellEl);
-			this.mobileProgressStripEl = mountMobileProgressStrip(this.shellEl);
+			if (!m4Enabled) {
+				this.mobileProgressStripEl = mountMobileProgressStrip(this.shellEl);
+			}
 		}
 
 		const useMobilePausedStack =
-			this.mobileReader && this.readerOpen.kind !== 'preferences';
+			this.mobileReader && this.readerOpen.kind !== 'preferences' && !m4Enabled;
 		if (useMobilePausedStack) {
 			this.mobilePausedStackEl = this.shellEl.createDiv({
 				cls: 'speed-reader-ai-mobile-paused-stack'
@@ -327,47 +384,13 @@ export class SpeedReaderAiModal extends Modal {
 		}
 
 		const paneParent = this.mobilePausedStackEl ?? this.shellEl;
-		this.paneStackEl = paneParent.createDiv({ cls: 'speed-reader-ai-pane-stack' });
+		this.paneStackEl = paneParent.createDiv({
+			cls: `speed-reader-ai-pane-stack${m4Enabled ? ' is-hidden' : ''}`
+		});
 
-		this.homePaneEl = this.paneStackEl.createDiv({ cls: 'speed-reader-ai-pane speed-reader-ai-pane-home' });
-		this.wordContainer = this.homePaneEl.createDiv({ cls: 'speed-reader-ai-word-container' });
-		this.applyFontSize();
-		this.applyContextLineFontSize();
-
-		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
-		this.interSectionOverlayEl = this.wordContainer.createDiv({
-			cls: 'speed-reader-ai-inter-section-overlay is-hidden'
+		this.homePaneEl = this.paneStackEl.createDiv({
+			cls: 'speed-reader-ai-pane speed-reader-ai-pane-home'
 		});
-		this.prepareOverlayEl = this.wordContainer.createDiv({
-			cls: 'speed-reader-ai-prepare-overlay is-hidden'
-		});
-		this.prepareOverlayEl.createDiv({ cls: 'speed-reader-ai-prepare-spinner' });
-		this.prepareOverlayEl.createSpan({
-			cls: 'speed-reader-ai-prepare-title',
-			text: PREPARE_OVERLAY_PRIMARY
-		});
-		this.prepareOverlaySublineEl = this.prepareOverlayEl.createSpan({
-			cls: 'speed-reader-ai-prepare-subline is-hidden'
-		});
-		this.contextLine = mountContextLine(this.homePaneEl, {
-			enableClickActivation: !this.mobileReader,
-			lineOnlyContext: this.mobileReader,
-			onWordActivate: (word) => {
-				void this.wordLookupHandlers?.lookupWord(word);
-			}
-		});
-		const onDictionaryDismiss = () => {
-			this.dismissDictionaryOverlayIfVisible();
-		};
-		if (this.mobileReader) {
-			this.mobileDictionarySheet = mountMobileDictionarySheet(this.shellEl, onDictionaryDismiss);
-			this.mobileDictionarySheet.onOpenChange((open) => {
-				this.mobileDictionaryOpen = open;
-				this.render();
-			});
-		} else {
-			this.dictionaryOverlay = mountDictionaryOverlay(this.wordContainer, onDictionaryDismiss);
-		}
 
 		this.structuredBarEl = this.homePaneEl.createDiv({
 			cls: 'speed-reader-ai-structured-bar is-hidden'
@@ -383,6 +406,46 @@ export class SpeedReaderAiModal extends Modal {
 			cls: 'speed-reader-ai-section-select'
 		});
 		this.sectionSelect.addEventListener('change', () => this.onHeadingSelectChange());
+
+		if (!m4Enabled) {
+			this.wordContainer = this.homePaneEl.createDiv({ cls: 'speed-reader-ai-word-container' });
+			this.applyFontSize();
+			this.applyContextLineFontSize();
+
+			this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
+			this.interSectionOverlayEl = this.wordContainer.createDiv({
+				cls: 'speed-reader-ai-inter-section-overlay is-hidden'
+			});
+			this.prepareOverlayEl = this.wordContainer.createDiv({
+				cls: 'speed-reader-ai-prepare-overlay is-hidden'
+			});
+			this.prepareOverlayEl.createDiv({ cls: 'speed-reader-ai-prepare-spinner' });
+			this.prepareOverlayEl.createSpan({
+				cls: 'speed-reader-ai-prepare-title',
+				text: PREPARE_OVERLAY_PRIMARY
+			});
+			this.prepareOverlaySublineEl = this.prepareOverlayEl.createSpan({
+				cls: 'speed-reader-ai-prepare-subline is-hidden'
+			});
+			this.contextLine = mountContextLine(this.homePaneEl, {
+				enableClickActivation: !this.mobileReader,
+				lineOnlyContext: this.mobileReader,
+				onWordActivate: (word) => {
+					void this.wordLookupHandlers?.lookupWord(word);
+				}
+			});
+		}
+
+		const onDictionaryDismiss = () => {
+			this.dismissDictionaryOverlayIfVisible();
+		};
+		if (this.mobileReader) {
+			this.mobileDictionarySheet = mountMobileDictionarySheet(this.shellEl, onDictionaryDismiss);
+			this.mobileDictionarySheet.onOpenChange((open) => {
+				this.mobileDictionaryOpen = open;
+				this.render();
+			});
+		}
 
 		this.contentPane = mountContentPane(this.paneStackEl, { isMobile: this.mobileReader });
 		this.bookmarksPane = mountBookmarksPane(this.paneStackEl, { isMobile: this.mobileReader });
@@ -406,46 +469,56 @@ export class SpeedReaderAiModal extends Modal {
 			this.popMobileRoute();
 		});
 		this.contentPane.onSwipeBack(() => {
-			this.popMobileRoute();
+			if (m4Enabled) {
+				this.m4Shell?.setRoute('reader');
+			} else {
+				this.popMobileRoute();
+			}
 		});
-		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
-			onSave: (next) => {
-				this.persistSettings(next);
-				this.returnToReadingAfterPaneAction();
-			},
-			onDefaults: () => {
-				const defaults = structuredClone(DEFAULT_SETTINGS);
-				this.returnToReadingAfterPaneAction();
-				return defaults;
-			},
-			onResetFontSize: () => {
-				this.applyFontSize();
-				this.applyContextLineFontSize();
-				this.engine.setSettings(this.settings);
-				this.returnToReadingAfterPaneAction();
-			},
-			showMobileGesturesGuide: this.mobileReader,
-			isMobile: this.mobileReader
-		});
-		this.settingsPane.onSwipeBack(() => {
-			this.popMobileRoute();
-		});
+		if (!m4Enabled) {
+			this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
+				onSave: (next) => {
+					this.persistSettings(next);
+					this.returnToReadingAfterPaneAction();
+				},
+				onDefaults: () => {
+					const defaults = structuredClone(DEFAULT_SETTINGS);
+					this.returnToReadingAfterPaneAction();
+					return defaults;
+				},
+				onResetFontSize: () => {
+					this.applyFontSize();
+					this.applyContextLineFontSize();
+					this.engine.setSettings(this.settings);
+					this.returnToReadingAfterPaneAction();
+				},
+				showMobileGesturesGuide: this.mobileReader,
+				isMobile: this.mobileReader
+			});
+			this.settingsPane.onSwipeBack(() => {
+				this.popMobileRoute();
+			});
+			this.advancedPane = mountAdvancedPane(this.paneStackEl, this.settings, {
+				onSave: (next) => {
+					this.persistSettings(next);
+					this.returnToReadingAfterPaneAction();
+				},
+				isMobile: this.mobileReader
+			});
+			this.advancedPane.onSwipeBack(() => {
+				this.popMobileRoute();
+			});
+		}
 		this.shortcutsPane = mountShortcutsPane(this.paneStackEl, { isMobile: this.mobileReader });
 		this.shortcutsPane.onSwipeBack(() => {
-			this.popMobileRoute();
-		});
-		this.advancedPane = mountAdvancedPane(this.paneStackEl, this.settings, {
-			onSave: (next) => {
-				this.persistSettings(next);
-				this.returnToReadingAfterPaneAction();
-			},
-			isMobile: this.mobileReader
-		});
-		this.advancedPane.onSwipeBack(() => {
-			this.popMobileRoute();
+			if (m4Enabled) {
+				this.m4Shell?.setRoute('reader');
+			} else {
+				this.popMobileRoute();
+			}
 		});
 
-		if (this.mobileReader) {
+		if (this.mobileReader && !m4Enabled) {
 			this.mobileMenuHubPane = mountMobileMenuHubPane(this.paneStackEl, {
 				onSelectRoute: (route) => this.pushMobileRoute(route),
 				preferencesOnly: this.readerOpen.kind === 'preferences'
@@ -455,27 +528,42 @@ export class SpeedReaderAiModal extends Modal {
 			});
 		}
 
-		this.controlBar = mountReaderControlBar(
-			this.shellEl,
-			this.settings,
-			{
-				onWpmDelta: (delta) => this.adjustWpm(delta),
-				onFontDelta: (delta) => this.adjustFontSize(delta),
-				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
-				onReadWithoutAi: () => this.onReadWithoutAi(),
-				onPrepare: () => this.onPrepareWithAi(),
-				onClearCache: () => this.onClearDocumentCache(),
-				onPrevSection: () => this.navigateToAdjacentSection(-1),
-				onNextSection: () => this.navigateToAdjacentSection(1)
-			},
-			{
-				showSectionNav: false,
-				sectionNavLabel: this.readerOpen.kind === 'book' ? 'Chapter' : 'Section',
-				showDocumentProgress: !this.mobileReader
-			}
-		);
+		if (m4Enabled) {
+			this.mountM4ShellLayout();
+		}
 
-		if (this.mobileReader && this.readerOpen.kind !== 'preferences') {
+		if (!this.mobileReader) {
+			const dictHost = m4Enabled
+				? (this.m4Shell?.getOverlayHostEl() ?? this.wordContainer)
+				: this.wordContainer;
+			if (dictHost) {
+				this.dictionaryOverlay = mountDictionaryOverlay(dictHost, onDictionaryDismiss);
+			}
+		}
+
+		if (!m4Enabled) {
+			this.controlBar = mountReaderControlBar(
+				this.shellEl,
+				this.settings,
+				{
+					onWpmDelta: (delta) => this.adjustWpm(delta),
+					onFontDelta: (delta) => this.adjustFontSize(delta),
+					onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
+					onReadWithoutAi: () => this.onReadWithoutAi(),
+					onPrepare: () => this.onPrepareWithAi(),
+					onClearCache: () => this.onClearDocumentCache(),
+					onPrevSection: () => this.navigateToAdjacentSection(-1),
+					onNextSection: () => this.navigateToAdjacentSection(1)
+				},
+				{
+					showSectionNav: false,
+					sectionNavLabel: this.readerOpen.kind === 'book' ? 'Chapter' : 'Section',
+					showDocumentProgress: !this.mobileReader
+				}
+			);
+		}
+
+		if (this.mobileReader && this.readerOpen.kind !== 'preferences' && !m4Enabled) {
 			this.mobileActionBar = mountMobileActionBar(this.mobilePausedStackEl!);
 			this.mobileActionBar.onBookmark(() => {
 				void this.createMobileBookmark();
@@ -491,7 +579,7 @@ export class SpeedReaderAiModal extends Modal {
 			});
 		}
 
-		if (this.mobileReader) {
+		if (this.mobileReader && !m4Enabled) {
 			this.mobileBottomSheet = mountMobileBottomSheet(this.shellEl, this.engine, {
 				onChapterSelect: (sectionId) => this.onMobileChapterSelect(sectionId),
 				onFabClick:
@@ -506,7 +594,7 @@ export class SpeedReaderAiModal extends Modal {
 				}
 				this.render();
 			});
-		} else {
+		} else if (!m4Enabled) {
 			this.tabDock = mountReaderTabDock(
 				this.shellEl,
 				this.activeTab,
@@ -522,9 +610,13 @@ export class SpeedReaderAiModal extends Modal {
 		}
 
 		if (this.readerOpen.kind === 'preferences') {
-			this.setActiveTab(this.activeTab);
+			if (m4Enabled) {
+				this.m4Shell?.setRoute('settings');
+			} else {
+				this.setActiveTab(this.activeTab);
+			}
 			this.registerKeyboardHandlers();
-			if (this.mobileReader) {
+			if (this.mobileReader && !m4Enabled) {
 				this.mountMobileGesturesIfNeeded();
 			}
 			return;
@@ -578,11 +670,16 @@ export class SpeedReaderAiModal extends Modal {
 		}
 
 		this.rebuildHeadingSelector();
-		this.controlBar.setPrepareVisible(this.readerOpen.kind === 'structured');
-		this.prepareControls = this.controlBar.getPrepareControls();
+		this.controlBar?.setPrepareVisible(this.readerOpen.kind === 'structured');
+		this.prepareControls = this.controlBar?.getPrepareControls() ?? null;
+		if (m4Enabled && this.readerOpen.kind === 'structured') {
+			this.mountM4PrepareControls();
+		}
 		this.setActiveTab('home');
 		this.registerKeyboardHandlers();
 		this.registerFocusHandlers();
+		this.registerReaderSurfaceFocus();
+		this.registerM4SpaceFallback();
 		this.mountMobileGesturesIfNeeded();
 		this.mountMobileCoachMarksIfNeeded();
 		this.updateModeSpecificUi();
@@ -619,6 +716,10 @@ export class SpeedReaderAiModal extends Modal {
 		this.prepareControls?.destroy();
 		this.sectionNav?.destroy();
 		this.chapterNav?.destroy();
+		this.m4FocusGestures?.destroy();
+		this.m4FocusGestures = null;
+		this.m4Shell?.destroy();
+		this.m4Shell = null;
 		this.header?.destroy();
 		this.controlBar?.destroy();
 		this.contextLine?.destroy();
@@ -639,6 +740,12 @@ export class SpeedReaderAiModal extends Modal {
 		this.advancedPane?.destroy();
 		this.mobileMenuHubPane?.destroy();
 		this.mobileMenuHubPane = null;
+		this.shellEl?.removeEventListener('pointerdown', this.boundReaderSurfaceFocusHandler, {
+			capture: true
+		});
+		this.ownerDoc.removeEventListener('keydown', this.boundM4SpaceFallbackHandler, {
+			capture: true
+		});
 		this.ownerDoc.removeEventListener('visibilitychange', this.boundVisibilityHandler);
 		this.ownerDoc.defaultView?.removeEventListener('blur', this.boundBlurHandler);
 		this.engine.pause();
@@ -656,7 +763,10 @@ export class SpeedReaderAiModal extends Modal {
 		const snapshot = buildBookmarkContextLines(this.engine);
 		this.bookmarkContextLines = snapshot.lines;
 		this.bookmarksPane?.setContextLines(snapshot.lines, snapshot.currentLineIndex, true);
-		if (this.mobileReader) {
+		if (this.m4Shell) {
+			this.setM4SecondaryRoute('bookmarks');
+			this.m4Shell.setRoute('bookmarks');
+		} else if (this.mobileReader) {
 			this.pushMobileRoute('bookmarks');
 		} else {
 			this.setActiveTab('bookmarks');
@@ -930,11 +1040,15 @@ export class SpeedReaderAiModal extends Modal {
 	private persistSettings(next: SpeedReaderAiSettings) {
 		this.settings = validateSettings(next, this.llmModelCatalog);
 		this.engine.setSettings(this.settings);
-		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme);
+		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme, {
+			themePreset: this.settings.reader.themePreset,
+			m4ShellEl: this.m4Shell?.getShellEl() ?? null
+		});
 		this.applyFontFamily();
 		this.applyFontSize();
 		this.applyContextLineFontSize();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
+		this.m4Shell?.updateSettings(this.settings);
 		this.onSettingsChange(this.settings);
 		new Notice('Settings saved');
 	}
@@ -1146,22 +1260,6 @@ export class SpeedReaderAiModal extends Modal {
 		return sections[index]?.title?.trim() || this.getSectionNavLabel();
 	}
 
-	private hasMultipleSections(): boolean {
-		return this.engine.getSectionList().length > 1;
-	}
-
-	private needsSectionIntro(): boolean {
-		if (!this.hasMultipleSections()) {
-			return false;
-		}
-		const index = this.state?.currentSectionIndex ?? 0;
-		return this.sectionIntroShownForIndex !== index;
-	}
-
-	private markSectionIntroShown(): void {
-		this.sectionIntroShownForIndex = this.state?.currentSectionIndex ?? 0;
-	}
-
 	private toggleReaderPlayPause(): void {
 		if (this.state?.isPlaying) {
 			this.engine.togglePlayPause();
@@ -1171,20 +1269,6 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private startPlayback(): void {
-		if (this.skipNextSectionIntro) {
-			this.skipNextSectionIntro = false;
-			this.markSectionIntroShown();
-			this.engine.play();
-			return;
-		}
-		if (this.needsSectionIntro()) {
-			this.engine.pause();
-			this.showSectionIntroOverlay(() => {
-				this.markSectionIntroShown();
-				this.engine.play();
-			});
-			return;
-		}
 		this.engine.play();
 	}
 
@@ -1235,11 +1319,16 @@ export class SpeedReaderAiModal extends Modal {
 		this.refreshVersionPicker();
 
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
-		this.sectionNav = mountSectionNavControls(sectionHost, this.engine, {
-			onPrevSection: () => this.navigateToAdjacentSection(-1),
-			onNextSection: () => this.navigateToAdjacentSection(1),
-			onJumpToSection: (id) => this.jumpToSection(id)
-		});
+		this.sectionNav = mountSectionNavControls(
+			sectionHost,
+			this.engine,
+			{
+				onPrevSection: () => this.navigateToAdjacentSection(-1),
+				onNextSection: () => this.navigateToAdjacentSection(1),
+				onJumpToSection: (id) => this.jumpToSection(id)
+			},
+			{ m4Style: this.settings.reader.display.useM4Shell }
+		);
 		if (!this.mobileReader) {
 			this.structuredBarEl.removeClass('is-hidden');
 		}
@@ -1247,11 +1336,16 @@ export class SpeedReaderAiModal extends Modal {
 
 	private mountBookControls() {
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
-		this.chapterNav = mountChapterNavControls(sectionHost, this.engine, {
-			onPrevChapter: () => this.navigateToAdjacentSection(-1),
-			onNextChapter: () => this.navigateToAdjacentSection(1),
-			onJumpToChapter: (id) => this.jumpToSection(id)
-		});
+		this.chapterNav = mountChapterNavControls(
+			sectionHost,
+			this.engine,
+			{
+				onPrevChapter: () => this.navigateToAdjacentSection(-1),
+				onNextChapter: () => this.navigateToAdjacentSection(1),
+				onJumpToChapter: (id) => this.jumpToSection(id)
+			},
+			{ m4Style: this.settings.reader.display.useM4Shell }
+		);
 	}
 
 	private async onVersionChange(versionId: string) {
@@ -1424,19 +1518,24 @@ export class SpeedReaderAiModal extends Modal {
 			return;
 		}
 
-		const isBook = this.readerOpen.kind === 'book';
-		const nextLabel = isBook ? 'Next chapter' : 'Next section';
-		const nextTitle = sections[nextIndex]?.title ?? nextLabel;
+		const nextTitle =
+			sections[nextIndex]?.title ??
+			(this.readerOpen.kind === 'book' ? 'Next chapter' : 'Next section');
 		this.engine.pause();
-		this.showInterSectionOverlay(nextLabel, nextTitle, () => {
-			this.skipNextSectionIntro = true;
-			this.engine.nextSection();
-			this.notifySectionChange();
-			this.startPlayback();
-		});
+		this.showSectionIntroOverlay(
+			() => {
+				this.engine.nextSection();
+				this.notifySectionChange();
+				this.engine.play();
+			},
+			{ title: nextTitle, countdownMs: INTER_SECTION_MS }
+		);
 	}
 
-	private showSectionIntroOverlay(onStart: () => void) {
+	private showSectionIntroOverlay(
+		onStart: () => void,
+		options: { title?: string; countdownMs?: number } = {}
+	) {
 		if (!this.interSectionOverlayEl) return;
 		this.clearInterSectionTimer();
 		this.interSectionOverlayEl.empty();
@@ -1447,9 +1546,10 @@ export class SpeedReaderAiModal extends Modal {
 		});
 		this.interSectionOverlayEl.createSpan({
 			cls: 'speed-reader-ai-inter-section-title speed-reader-ai-section-intro-title',
-			text: this.getCurrentSectionTitle()
+			text: options.title ?? this.getCurrentSectionTitle()
 		});
-		const countdownSeconds = Math.round(SECTION_INTRO_MS / 1000);
+		const countdownMs = options.countdownMs ?? INTER_SECTION_MS;
+		const countdownSeconds = Math.round(countdownMs / 1000);
 		const countdownEl = this.interSectionOverlayEl.createSpan({
 			cls: 'speed-reader-ai-inter-section-countdown'
 		});
@@ -1479,63 +1579,7 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.interSectionTimer = window.setTimeout(() => {
 			this.dismissInterSectionOverlay(onStart);
-		}, SECTION_INTRO_MS);
-	}
-
-	private showInterSectionOverlay(
-		nextLabel: string,
-		nextTitle: string,
-		onContinue: () => void
-	) {
-		if (!this.interSectionOverlayEl) return;
-		this.clearInterSectionTimer();
-		this.interSectionOverlayEl.empty();
-		this.interSectionOverlayEl.removeClass('is-hidden');
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-label',
-			text: nextLabel
-		});
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-title',
-			text: nextTitle
-		});
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-done',
-			text: 'Finished'
-		});
-		const countdownSeconds = Math.round(INTER_SECTION_MS / 1000);
-		const countdownEl = this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-countdown'
-		});
-		const setCountdownText = (seconds: number) => {
-			countdownEl.setText(
-				seconds === 1
-					? 'Starting next in 1 second…'
-					: `Starting next in ${seconds} seconds…`
-			);
-		};
-		setCountdownText(countdownSeconds);
-		const skip = this.interSectionOverlayEl.createEl('button', {
-			cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
-			text: 'Continue now'
-		});
-		skip.addEventListener('click', () => this.dismissInterSectionOverlay(onContinue), {
-			once: true
-		});
-
-		let remaining = countdownSeconds;
-		this.interSectionCountdownInterval = window.setInterval(() => {
-			remaining -= 1;
-			if (remaining <= 0) {
-				this.clearInterSectionCountdownInterval();
-				return;
-			}
-			setCountdownText(remaining);
-		}, 1000);
-
-		this.interSectionTimer = window.setTimeout(() => {
-			this.dismissInterSectionOverlay(onContinue);
-		}, INTER_SECTION_MS);
+		}, countdownMs);
 	}
 
 	private dismissInterSectionOverlay(onContinue: () => void) {
@@ -1614,6 +1658,14 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private handleReaderBack(): boolean {
+		if (this.m4Shell?.popRoute()) {
+			return true;
+		}
+		if (this.isM4PlayingOnReaderRoute()) {
+			this.engine.pause();
+			this.refocusContent();
+			return true;
+		}
 		const action = resolveReaderBackAction(this.buildBackSnapshot());
 		if (action === 'close-modal') {
 			return false;
@@ -1622,9 +1674,24 @@ export class SpeedReaderAiModal extends Modal {
 		return true;
 	}
 
+	private isM4PlayingOnReaderRoute(): boolean {
+		if (!this.m4Shell || this.m4Shell.getRoute() !== 'reader') {
+			return false;
+		}
+		const state = this.state;
+		return Boolean(state?.isPlaying && !state.finished);
+	}
+
 	private returnToReadingAfterPaneAction(): void {
 		if (this.readerOpen.kind === 'preferences') {
 			this.forceClose();
+			return;
+		}
+		if (this.m4Shell) {
+			this.m4Shell.setRoute('reader');
+			this.paneStackEl.toggleClass('is-hidden', true);
+			this.homePaneEl.toggleClass('is-hidden', false);
+			this.refocusContent();
 			return;
 		}
 		if (this.activeTab !== 'home') {
@@ -1667,14 +1734,7 @@ export class SpeedReaderAiModal extends Modal {
 
 	private registerKeyboardHandlers() {
 		this.scope.register([], ' ', (event) => {
-			event.preventDefault();
-			if (this.dismissDictionaryOverlayIfVisible()) {
-				return false;
-			}
-			if (this.isInputBlockedByOverlay()) {
-				return false;
-			}
-			this.toggleReaderPlayPause();
+			this.handleReaderSpaceKey(event);
 			return false;
 		});
 
@@ -1774,19 +1834,6 @@ export class SpeedReaderAiModal extends Modal {
 			this.forceClose();
 			return false;
 		});
-
-		this.contentEl.addEventListener('keydown', (event) => {
-			if (event.key === ' ') {
-				event.preventDefault();
-				if (this.dismissDictionaryOverlayIfVisible()) {
-					return;
-				}
-				if (this.isInputBlockedByOverlay()) {
-					return;
-				}
-				this.toggleReaderPlayPause();
-			}
-		});
 	}
 
 	private handleArrowLeft() {
@@ -1853,8 +1900,12 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private setFocusMode(enabled: boolean) {
-		if (enabled && this.activeTab !== 'home') {
-			this.setActiveTab('home');
+		if (enabled) {
+			if (this.m4Shell && this.m4Shell.getRoute() !== 'reader') {
+				this.m4Shell.setRoute('reader');
+			} else if (this.activeTab !== 'home') {
+				this.setActiveTab('home');
+			}
 		}
 		this.focusMode = enabled;
 		this.contentEl.toggleClass('speed-reader-ai-focus-active', this.focusMode);
@@ -1894,9 +1945,45 @@ export class SpeedReaderAiModal extends Modal {
 
 	private refocusContent() {
 		const active = this.ownerDoc.activeElement;
-		if (active instanceof HTMLButtonElement || active instanceof HTMLSelectElement) {
-			this.contentEl.focus();
+		if (
+			active instanceof HTMLInputElement ||
+			active instanceof HTMLTextAreaElement ||
+			active instanceof HTMLSelectElement ||
+			(active instanceof HTMLElement && active.isContentEditable)
+		) {
+			return;
 		}
+		this.contentEl.focus();
+	}
+
+	private handleReaderSpaceKey(event?: Event): void {
+		event?.preventDefault();
+		if (this.dismissDictionaryOverlayIfVisible()) {
+			return;
+		}
+		if (this.isInputBlockedByOverlay()) {
+			return;
+		}
+		this.toggleReaderPlayPause();
+		this.refocusContent();
+	}
+
+	private registerReaderSurfaceFocus() {
+		if (!this.shellEl) {
+			return;
+		}
+		this.shellEl.addEventListener('pointerdown', this.boundReaderSurfaceFocusHandler, {
+			capture: true
+		});
+	}
+
+	private registerM4SpaceFallback() {
+		if (!this.m4Shell) {
+			return;
+		}
+		this.ownerDoc.addEventListener('keydown', this.boundM4SpaceFallbackHandler, {
+			capture: true
+		});
 	}
 
 	private rebuildHeadingSelector() {
@@ -1956,6 +2043,10 @@ export class SpeedReaderAiModal extends Modal {
 		this.refocusContent();
 	}
 
+	private syncM4ControlBar(): void {
+		this.m4Shell?.updateSettings(this.settings);
+	}
+
 	private adjustWpm(delta: number) {
 		const newWpm = this.engine.adjustWpm(delta);
 		this.settings = {
@@ -1963,6 +2054,7 @@ export class SpeedReaderAiModal extends Modal {
 			reader: { ...this.settings.reader, wpm: newWpm }
 		};
 		this.engine.setSettings(this.settings);
+		this.syncM4ControlBar();
 		new Notice(`Speed: ${newWpm} WPM`);
 	}
 
@@ -2000,10 +2092,9 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private applyFontSize() {
-		this.wordContainer?.style.setProperty(
-			'--speed-reader-ai-font-size',
-			`${this.settings.reader.fontSize}px`
-		);
+		const fontSize = `${this.settings.reader.fontSize}px`;
+		this.wordContainer?.style.setProperty('--speed-reader-ai-font-size', fontSize);
+		this.wordDisplayEl?.style.setProperty('--speed-reader-ai-font-size', fontSize);
 	}
 
 	private applyContextLineFontSize() {
@@ -2037,6 +2128,7 @@ export class SpeedReaderAiModal extends Modal {
 		};
 		this.applyFontSize();
 		this.applyContextLineFontSize();
+		this.syncM4ControlBar();
 		new Notice(`Font size: ${newSize}px`);
 	}
 
@@ -2056,13 +2148,21 @@ export class SpeedReaderAiModal extends Modal {
 		this.renderWord(state);
 		this.header?.update(state);
 		this.controlBar?.update(state, this.getDocumentProgressPercent(state));
+		this.updateM4ShellFromState(state);
 		const showPauseContextInFocus =
 			this.focusMode && !state.isPlaying && !state.finished;
-		const showContext =
-			this.settings.reader.display.showContext || showPauseContextInFocus;
-		const onReadingSurface = this.mobileReader
-			? isMobileReadingRoot(this.mobileRoute)
-			: this.activeTab === 'home';
+		const onReadingSurface = this.m4Shell
+			? this.m4Shell.getRoute() === 'reader'
+			: this.mobileReader
+				? isMobileReadingRoot(this.mobileRoute)
+				: this.activeTab === 'home';
+		const showContext = this.m4Shell
+			? onReadingSurface &&
+				this.settings.reader.display.showContext &&
+				!state.isPlaying &&
+				!state.finished
+			: !state.isPlaying &&
+				(this.settings.reader.display.showContext || showPauseContextInFocus);
 		this.contextLine?.setVisible(onReadingSurface && showContext);
 		this.contextLine?.render(state, this.engine, showContext);
 		this.renderSectionVisibility();
@@ -2104,7 +2204,12 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private mountMobileGesturesIfNeeded() {
-		if (!this.mobileReader || this.mobileGestures || this.readerOpen.kind === 'preferences') {
+		if (
+			!this.mobileReader ||
+			this.mobileGestures ||
+			this.m4Shell ||
+			this.readerOpen.kind === 'preferences'
+		) {
 			return;
 		}
 		this.mobileGestures = mountMobileGestures(
@@ -2183,13 +2288,11 @@ export class SpeedReaderAiModal extends Modal {
 		this.stopEdgeScrub();
 		this.edgeHoldSide = side;
 		this.edgeScrubTickCount = 0;
-		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
-		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
-		this.shellEl.addClass(
-			side === 'left'
-				? 'speed-reader-ai-mobile-edge-hold-left'
-				: 'speed-reader-ai-mobile-edge-hold-right'
-		);
+		const holdLeftClass = 'speed-reader-ai-mobile-edge-hold-left';
+		const holdRightClass = 'speed-reader-ai-mobile-edge-hold-right';
+		this.shellEl.removeClass(holdLeftClass);
+		this.shellEl.removeClass(holdRightClass);
+		this.shellEl.addClass(side === 'left' ? holdLeftClass : holdRightClass);
 		this.runEdgeScrubTick();
 	}
 
@@ -2359,8 +2462,27 @@ export class SpeedReaderAiModal extends Modal {
 			return;
 		}
 
-		const wordWrapper = this.wordDisplayEl.createDiv({ cls: 'speed-reader-ai-word' });
+		const wordWrapper = this.wordDisplayEl.createDiv({
+			cls: this.m4Shell ? 'speed-reader-m4-rsvp-focus' : 'speed-reader-ai-word'
+		});
 		const seekIndices = state.chunkSeekIndices ?? state.chunk.map((_, i) => state.currentIndex + i);
+
+		if (
+			this.m4Shell &&
+			state.chunk.length > 0 &&
+			state.playbackMode !== 'lineByLine' &&
+			!isLinePlaybackMode(state.playbackMode)
+		) {
+			const block = renderLiveFocusBlock({
+				words: state.chunk,
+				chunkSize: this.settings.reader.chunkSize,
+				focusStrategy: this.settings.reader.focusStrategy
+			});
+			const focusEl = wordWrapper.createDiv({ cls: 'speed-reader-m4-focus-block' });
+			appendFocusBlockToElement(focusEl, block.segments);
+			return;
+		}
+
 		for (let i = 0; i < state.chunk.length; i++) {
 			const word = state.chunk[i]!;
 			this.renderWordUnit(
@@ -2405,6 +2527,15 @@ export class SpeedReaderAiModal extends Modal {
 			return;
 		}
 
+		const useM4Focus =
+			this.m4Shell &&
+			this.settings.reader.focusStrategy !== 'orp' &&
+			state.chunk.length > 1;
+
+		if (useM4Focus) {
+			return;
+		}
+
 		const { before, orp, after } = splitWordForOrpDisplay(word.word, word.orpIndex);
 
 		unit.createSpan({ cls: 'speed-reader-ai-left', text: before });
@@ -2429,5 +2560,260 @@ export class SpeedReaderAiModal extends Modal {
 						: hasStreamHeadings || hasLegacyHeadings;
 
 		this.headingSelectWrapper.toggleClass('is-hidden', !showPicker);
+	}
+
+	private mountM4ShellLayout(): void {
+		const initialRoute: M4ShellRoute | undefined =
+			this.readerOpen.kind === 'preferences' ? 'settings' : undefined;
+
+		this.m4Shell = renderM4ReaderShell(this.shellEl, {
+			settings: this.settings,
+			isMobile: this.mobileReader,
+			initialRoute,
+			preferencesOnly: this.readerOpen.kind === 'preferences',
+			callbacks: {
+				onTapPlayPause: () => {
+					this.toggleReaderPlayPause();
+					this.refocusContent();
+				},
+				onWpmDelta: (delta) => this.adjustWpm(delta),
+				onFontDelta: (delta) => this.adjustFontSize(delta),
+				onChunkSizeChange: (size) => this.setM4ChunkSize(size),
+				onGuideLineToggle: (enabled) => this.setM4GuideLine(enabled),
+				onBookmarkOnce: () => void this.createM4Bookmark(),
+				onBookmarkExplorer: () => this.showBookmarkPicker(),
+				onClose: () => this.close(),
+				onChapterSelect: (id) => this.onM4ChapterSelect(id),
+				onChapterPillTap: () => this.m4Shell?.getReaderView()?.openChapterModal(),
+				onWordSeek: (word) => this.seekContextWord(word),
+				onWordLookup: (word) => void this.wordLookupHandlers?.lookupWord(word),
+				onSaveSettings: (next) => {
+					this.persistSettings(next);
+					this.returnToReadingAfterPaneAction();
+				},
+				onDefaultsSettings: () => {
+					const defaults = structuredClone(DEFAULT_SETTINGS);
+					this.returnToReadingAfterPaneAction();
+					return defaults;
+				},
+				onResetFontSize: () => {
+					this.applyFontSize();
+					this.applyContextLineFontSize();
+					this.engine.setSettings(this.settings);
+					this.returnToReadingAfterPaneAction();
+				},
+				onSecondaryRoute: (route) => this.setM4SecondaryRoute(route),
+				structuredBarHost: this.structuredBarEl,
+				secondaryPaneHost: this.paneStackEl
+			}
+		});
+
+		this.shellEl = this.m4Shell.getShellEl();
+		const wordContainer = this.m4Shell.getWordContainerEl();
+		const wordDisplay = this.m4Shell.getWordDisplayEl();
+		const contextLine = this.m4Shell.getContextLine();
+		if (!wordContainer || !wordDisplay || !contextLine) {
+			return;
+		}
+
+		this.wordContainer = wordContainer;
+		this.wordDisplayEl = wordDisplay;
+		this.contextLine = contextLine;
+
+		this.interSectionOverlayEl = this.wordContainer.createDiv({
+			cls: 'speed-reader-ai-inter-section-overlay is-hidden'
+		});
+		this.prepareOverlayEl = this.wordContainer.createDiv({
+			cls: 'speed-reader-ai-prepare-overlay is-hidden'
+		});
+		this.prepareOverlayEl.createDiv({ cls: 'speed-reader-ai-prepare-spinner' });
+		this.prepareOverlayEl.createSpan({
+			cls: 'speed-reader-ai-prepare-title',
+			text: PREPARE_OVERLAY_PRIMARY
+		});
+		this.prepareOverlaySublineEl = this.prepareOverlayEl.createSpan({
+			cls: 'speed-reader-ai-prepare-subline is-hidden'
+		});
+
+		this.applyFontSize();
+		this.applyContextLineFontSize();
+		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme, {
+			themePreset: this.settings.reader.themePreset,
+			m4ShellEl: this.shellEl
+		});
+		this.refreshM4ChapterItems();
+		this.mountM4FocusGesturesIfNeeded();
+	}
+
+	private mountM4FocusGesturesIfNeeded() {
+		if (!this.m4Shell || this.m4FocusGestures || this.readerOpen.kind === 'preferences') {
+			return;
+		}
+		const wordContainer = this.m4Shell.getWordContainerEl();
+		if (!wordContainer) {
+			return;
+		}
+
+		this.m4FocusGestures = mountM4FocusGestures(wordContainer, {
+			onTapCenter: () => {
+				if (this.isDictionaryOverlayVisible()) {
+					this.dismissDictionaryOverlayIfVisible();
+					this.refocusContent();
+					return;
+				}
+				this.toggleReaderPlayPause();
+				this.refocusContent();
+			},
+			onHoldStart: (side) => {
+				this.flashSkipEdge(side);
+				this.startEdgeScrub(side);
+			},
+			onHoldEnd: () => this.stopEdgeScrub(),
+			onSwipeLeft: () => {
+				this.flashSkipEdge('left');
+				this.handleArrowLeft();
+			},
+			onSwipeRight: () => {
+				this.flashSkipEdge('right');
+				this.handleArrowRight();
+			},
+			onSwipeUp: () => this.adjustWpmFromSwipe(25),
+			onSwipeDown: () => this.adjustWpmFromSwipe(-25),
+			isBlocked: () => {
+				if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
+					return true;
+				}
+				if (!this.prepareOverlayEl?.hasClass('is-hidden')) {
+					return true;
+				}
+				if (this.m4Shell?.getRoute() !== 'reader') {
+					return true;
+				}
+				return this.isDictionaryOverlayVisible();
+			},
+			isPlaying: () => Boolean(this.state?.isPlaying && !this.state.finished)
+		});
+	}
+
+	private mountM4PrepareControls(): void {
+		if (this.prepareControls) {
+			return;
+		}
+		this.prepareControls = mountPrepareControls(this.structuredBarEl, {
+			onReadWithoutAi: () => this.onReadWithoutAi(),
+			onPrepare: () => this.onPrepareWithAi(),
+			onClearCache: () => this.onClearDocumentCache()
+		});
+		this.structuredBarEl.removeClass('is-hidden');
+	}
+
+	private setM4ChunkSize(size: 1 | 2 | 3): void {
+		this.settings = {
+			...this.settings,
+			reader: { ...this.settings.reader, chunkSize: size }
+		};
+		this.engine.setSettings(this.settings);
+		this.render();
+	}
+
+	private setM4GuideLine(enabled: boolean): void {
+		this.settings = {
+			...this.settings,
+			reader: {
+				...this.settings.reader,
+				display: { ...this.settings.reader.display, showGuideLine: enabled }
+			}
+		};
+		this.m4Shell?.getReaderView()?.setGuideLineVisible(enabled);
+	}
+
+	private async createM4Bookmark(): Promise<void> {
+		await this.bookmarkHandlers?.createBookmark();
+		if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+			navigator.vibrate(10);
+		}
+	}
+
+	private seekContextWord(word: string): void {
+		if (!this.engine.seekToWordInCurrentSentence(word)) {
+			void this.wordLookupHandlers?.lookupWord(word);
+		}
+	}
+
+	private onM4ChapterSelect(sectionId: string): void {
+		if (this.readerOpen.kind === 'book') {
+			this.jumpToSection(sectionId);
+			return;
+		}
+		this.engine.seekToHeading(sectionId);
+		this.engine.pause();
+		this.render();
+	}
+
+	private setM4SecondaryRoute(route: M4OverflowRoute): void {
+		this.activeTab = route;
+		this.paneStackEl.toggleClass('is-hidden', false);
+		this.homePaneEl.toggleClass('is-hidden', true);
+		this.paneStackEl
+			.querySelector('.speed-reader-ai-pane-content')
+			?.toggleClass('is-hidden', route !== 'content');
+		this.paneStackEl
+			.querySelector('.speed-reader-ai-pane-bookmarks')
+			?.toggleClass('is-hidden', route !== 'bookmarks');
+		this.paneStackEl
+			.querySelector('.speed-reader-ai-pane-shortcuts')
+			?.toggleClass('is-hidden', route !== 'shortcuts');
+		if (route === 'bookmarks') {
+			void this.refreshBookmarksPaneData();
+		}
+	}
+
+	private refreshM4ChapterItems(): void {
+		if (!this.m4Shell) {
+			return;
+		}
+		const sections = this.engine.getSectionList();
+		if (sections.length > 0) {
+			const state = this.state;
+			this.m4Shell.setChapterItems(
+				sections.map((section) => ({
+					id: section.id,
+					label: section.title,
+					active: state?.sectionTitle === section.title
+				}))
+			);
+			return;
+		}
+		const headings = this.engine.getStreamHeadings();
+		if (headings.length > 0) {
+			this.m4Shell.setChapterItems(
+				headings.map((heading) => ({
+					id: heading.title,
+					label: heading.title
+				}))
+			);
+		}
+	}
+
+	private updateM4ShellFromState(state: ReaderState | null): void {
+		if (!this.m4Shell || !state) {
+			return;
+		}
+		const progress =
+			state.totalWords > 0
+				? `${Math.min(state.currentIndex + 1, state.totalWords)}/${state.totalWords}`
+				: '—';
+		const chapterLabel =
+			state.sectionTitle ??
+			state.currentHeading?.text ??
+			(this.readerOpen.kind === 'book' ? 'Chapter' : 'Section');
+		this.m4Shell.setChapterProgress(progress, chapterLabel);
+		const isPlaying = Boolean(state.isPlaying && !state.finished);
+		this.m4Shell.syncFocusState(this.focusMode, isPlaying);
+		this.containerEl.toggleClass('speed-reader-m4-focus-playing', isPlaying);
+		if (this.mobileReader) {
+			this.m4Shell.syncMobilePlaying(isPlaying);
+		}
+		this.refreshM4ChapterItems();
 	}
 }

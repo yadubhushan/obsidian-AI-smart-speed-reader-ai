@@ -12,6 +12,7 @@
 		"noUncheckedIndexedAccess": true,
 		"isolatedModules": true,
 		"allowSyntheticDefaultImports": true,
+		"jsx": "react-jsx",
 		"lib": [
 			"DOM",
 			"ES2017"
@@ -22,6 +23,7 @@
 	},
 	"include": [
 		"src/**/*.ts",
+		"src/**/*.tsx",
 		"src/**/*.d.ts"
 	]
 }

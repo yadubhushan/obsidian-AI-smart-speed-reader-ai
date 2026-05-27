@@ -48,6 +48,25 @@ export function buildSentenceUnits(navWords: NavWord[]): SentenceUnit[] {
 	return units;
 }
 
+export function findSentenceUnitForWordIdx(units: SentenceUnit[], wordIdx: number): number {
+	if (units.length === 0) {
+		return 0;
+	}
+
+	for (let i = 0; i < units.length; i++) {
+		const unit = units[i]!;
+		if (wordIdx >= unit.startWordIdx && wordIdx <= unit.endWordIdx) {
+			return i;
+		}
+	}
+
+	if (wordIdx < units[0]!.startWordIdx) {
+		return 0;
+	}
+
+	return units.length - 1;
+}
+
 export function findSentenceUnitForSeekIndex(
 	units: SentenceUnit[],
 	seekIndex: number

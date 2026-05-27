@@ -32,6 +32,7 @@ import {
 } from './manifestPlayback';
 import {
 	buildSentenceUnits,
+	findSentenceUnitForWordIdx,
 	findSentenceUnitForSeekIndex,
 	getLineBoundary,
 	SentenceUnit
@@ -41,8 +42,12 @@ import {
 	buildBookmarkContextLinesFromData,
 	type BookmarkContextSnapshot
 } from '../bookmarks/bookmarkContextLines';
-import type { BookmarkPassage, PauseSentenceContext } from './paragraphContracts';
-export type { BookmarkPassage, PauseSentenceContext } from './paragraphContracts';
+import type {
+	BookmarkPassage,
+	PauseLineContext,
+	PauseSentenceContext
+} from './paragraphContracts';
+export type { BookmarkPassage, PauseLineContext, PauseSentenceContext } from './paragraphContracts';
 export type { BookmarkContextSnapshot } from '../bookmarks/bookmarkContextLines';
 import {
 	buildParagraphUnits,
@@ -524,6 +529,38 @@ export class RSVPEngine implements RSVPEngineContext {
 		}
 	}
 
+	/** Seek to a word span tapped in the paused context sentence. */
+	seekToWordInCurrentSentence(wordText: string): boolean {
+		const trimmed = wordText.trim();
+		if (!trimmed) {
+			return false;
+		}
+		const navWords = this.getNavWords();
+		if (navWords.length === 0 || this.sentenceUnits.length === 0) {
+			return false;
+		}
+		const unitIndex = findSentenceUnitForSeekIndex(this.sentenceUnits, this.getCurrentSeekIndex());
+		const unit = this.sentenceUnits[unitIndex];
+		if (!unit) {
+			return false;
+		}
+		const normalizedTap = trimmed.toLowerCase().replace(/[^\w']/g, '');
+		for (let i = unit.startWordIdx; i <= unit.endWordIdx; i++) {
+			const navWord = navWords[i];
+			if (!navWord) {
+				continue;
+			}
+			const display = navWord.display;
+			const normalizedDisplay = display.toLowerCase().replace(/[^\w']/g, '');
+			if (display === trimmed || normalizedDisplay === normalizedTap) {
+				this.seekToNavWord(navWord);
+				this.pause();
+				return true;
+			}
+		}
+		return false;
+	}
+
 	getSentenceUnitCount(): number {
 		return this.sentenceUnits.length;
 	}
@@ -544,8 +581,8 @@ export class RSVPEngine implements RSVPEngineContext {
 			return null;
 		}
 
-		const seekIndex = this.getCurrentSeekIndex();
-		const unitIndex = findSentenceUnitForSeekIndex(this.sentenceUnits, seekIndex);
+		const wordIdx = this.getCurrentWordIndex(navWords);
+		const unitIndex = findSentenceUnitForWordIdx(this.sentenceUnits, wordIdx);
 		const unit = this.sentenceUnits[unitIndex];
 		if (!unit) {
 			return null;
@@ -560,7 +597,6 @@ export class RSVPEngine implements RSVPEngineContext {
 			});
 		}
 
-		const wordIdx = this.getCurrentWordIndex(navWords);
 		const paragraphUnits = buildParagraphUnits(navWords, this.sentenceUnits);
 		const paragraph = findParagraphForWordIndex(paragraphUnits, wordIdx);
 
@@ -588,6 +624,87 @@ export class RSVPEngine implements RSVPEngineContext {
 		}
 
 		return { paragraphPrefix, paragraphSuffix, sentenceTokens };
+	}
+
+	/** Line-based pause context: current sentence line plus optional neighbors. */
+	getPauseLineContext(neighborLines = 1): PauseLineContext | null {
+		const navWords = this.getNavWords();
+		if (navWords.length === 0 || this.sentenceUnits.length === 0) {
+			return null;
+		}
+
+		const wordIdx = this.getCurrentWordIndex(navWords);
+		const unitIndex = findSentenceUnitForWordIdx(this.sentenceUnits, wordIdx);
+		const currentWordIndices = new Set(this.getCurrentChunkWordIndices(navWords));
+		const startLine = Math.max(0, unitIndex - neighborLines);
+		const endLine = Math.min(this.sentenceUnits.length - 1, unitIndex + neighborLines);
+		const lines: PauseLineContext['lines'] = [];
+
+		for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+			const unit = this.sentenceUnits[lineIndex]!;
+			const tokens: PauseContextToken[] = [];
+			for (let i = unit.startWordIdx; i <= unit.endWordIdx; i++) {
+				tokens.push({
+					text: navWords[i]!.display,
+					isCurrent: lineIndex === unitIndex && currentWordIndices.has(i)
+				});
+			}
+			lines.push({
+				isCurrentLine: lineIndex === unitIndex,
+				tokens
+			});
+		}
+
+		return { lines };
+	}
+
+	/** All sentence lines in the current paragraph, with the active line marked. */
+	getPauseParagraphLineContext(): PauseLineContext | null {
+		const navWords = this.getNavWords();
+		if (navWords.length === 0 || this.sentenceUnits.length === 0) {
+			return null;
+		}
+
+		const wordIdx = this.getCurrentWordIndex(navWords);
+		const unitIndex = findSentenceUnitForWordIdx(this.sentenceUnits, wordIdx);
+		const paragraphUnits = buildParagraphUnits(navWords, this.sentenceUnits);
+		const paragraph = findParagraphForWordIndex(paragraphUnits, wordIdx);
+		if (!paragraph) {
+			return this.getPauseLineContext(1);
+		}
+
+		let startLine = this.sentenceUnits.length - 1;
+		let endLine = 0;
+		for (let i = 0; i < this.sentenceUnits.length; i++) {
+			const unit = this.sentenceUnits[i]!;
+			if (unit.endWordIdx < paragraph.startWordIdx) {
+				continue;
+			}
+			if (unit.startWordIdx > paragraph.endWordIdx) {
+				break;
+			}
+			startLine = Math.min(startLine, i);
+			endLine = Math.max(endLine, i);
+		}
+
+		const currentWordIndices = new Set(this.getCurrentChunkWordIndices(navWords));
+		const lines: PauseLineContext['lines'] = [];
+		for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+			const unit = this.sentenceUnits[lineIndex]!;
+			const tokens: PauseContextToken[] = [];
+			for (let wi = unit.startWordIdx; wi <= unit.endWordIdx; wi++) {
+				tokens.push({
+					text: navWords[wi]!.display,
+					isCurrent: lineIndex === unitIndex && currentWordIndices.has(wi)
+				});
+			}
+			lines.push({
+				isCurrentLine: lineIndex === unitIndex,
+				tokens
+			});
+		}
+
+		return lines.length > 0 ? { lines } : this.getPauseLineContext(1);
 	}
 
 	getContext(contextWords: number): { before: string[]; after: string[] } {

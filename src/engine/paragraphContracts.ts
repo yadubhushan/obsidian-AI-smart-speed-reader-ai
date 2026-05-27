@@ -12,3 +12,12 @@ export interface PauseSentenceContext {
 	paragraphSuffix?: string;
 	sentenceTokens: PauseContextToken[];
 }
+
+export interface PauseLineContextLine {
+	isCurrentLine: boolean;
+	tokens: PauseContextToken[];
+}
+
+export interface PauseLineContext {
+	lines: PauseLineContextLine[];
+}
