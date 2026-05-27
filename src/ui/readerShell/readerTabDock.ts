@@ -1,12 +1,11 @@
-export type ReaderTabId = 'home' | 'content' | 'bookmarks' | 'settings' | 'shortcuts' | 'advanced';
+export type ReaderTabId = 'home' | 'content' | 'bookmarks' | 'settings' | 'shortcuts';
 
 export const READER_TABS: { id: ReaderTabId; label: string }[] = [
 	{ id: 'home', label: 'Home' },
 	{ id: 'content', label: 'Content' },
 	{ id: 'bookmarks', label: 'Bookmarks' },
 	{ id: 'settings', label: 'Settings' },
-	{ id: 'shortcuts', label: 'Shortcuts' },
-	{ id: 'advanced', label: 'Advanced' }
+	{ id: 'shortcuts', label: 'Shortcuts' }
 ];
 
 export interface ReaderTabDockHandle {
@@ -16,7 +15,7 @@ export interface ReaderTabDockHandle {
 	onTabChange(cb: (tab: ReaderTabId) => void): void;
 }
 
-const PREFERENCES_TABS = new Set<ReaderTabId>(['settings', 'shortcuts', 'advanced']);
+const PREFERENCES_TABS = new Set<ReaderTabId>(['settings', 'shortcuts']);
 
 export function mountReaderTabDock(
 	container: HTMLElement,

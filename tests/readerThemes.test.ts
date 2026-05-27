@@ -49,6 +49,25 @@ describe('readerThemes', () => {
 		expect(tokens.contentPanelBg).toBe('#FFFFFF');
 	});
 
+	it('merges theme preset orp and lineAccent onto dark base tokens', () => {
+		const tokens = getReaderThemeTokens('dark', 'cyber-mint');
+		expect(tokens.orp).toBe('#00f5a0');
+		expect(tokens.lineAccent).toBe('#00d9f5');
+		expect(tokens.bg).toBe('#000000');
+	});
+
+	it('applyReaderThemeToElement applies preset colors', () => {
+		const el = document.createElement('div') as HTMLElement & {
+			toggleClass: (cls: string, flag?: boolean) => void;
+		};
+		el.toggleClass = (cls: string, flag?: boolean) => {
+			el.classList.toggle(cls, flag);
+		};
+		applyReaderThemeToElement(el, 'dark', { themePreset: 'crimson-surge' });
+		expect(el.style.getPropertyValue('--sr-orp')).toBe('#ff5a1f');
+		expect(el.style.getPropertyValue('--sr-line-accent')).toBe('#dd2476');
+	});
+
 	it('applyReaderThemeToElement sets CSS variables on element', () => {
 		const el = document.createElement('div') as HTMLElement & {
 			toggleClass: (cls: string, flag?: boolean) => void;

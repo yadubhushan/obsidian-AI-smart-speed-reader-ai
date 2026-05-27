@@ -836,6 +836,73 @@
 	opacity: 0.9;
 }
 
+.speed-reader-ai-theme-explorer {
+	margin-bottom: 1.25rem;
+}
+
+.speed-reader-ai-theme-explorer h4 {
+	margin: 0 0 0.75rem;
+	font-size: var(--font-ui-medium);
+	color: var(--sr-text, var(--text-normal));
+}
+
+.speed-reader-ai-theme-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75rem;
+}
+
+.speed-reader-ai-theme-card {
+	appearance: none;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.5rem;
+	padding: 0.75rem;
+	border: 1px solid var(--sr-border, var(--background-modifier-border));
+	border-radius: var(--radius-m);
+	background: var(--sr-card-bg, var(--background-secondary));
+	color: var(--sr-card-text, var(--text-normal));
+	cursor: pointer;
+	text-align: left;
+	position: relative;
+}
+
+.speed-reader-ai-theme-card:hover {
+	border-color: var(--sr-accent, var(--interactive-accent));
+}
+
+.speed-reader-ai-theme-card.is-selected {
+	border-color: var(--sr-accent, var(--interactive-accent));
+	box-shadow: var(--sr-accent-glow, 0 0 0 1px var(--interactive-accent));
+}
+
+.speed-reader-ai-theme-swatch {
+	display: flex;
+	width: 100%;
+	height: 2.5rem;
+	border-radius: var(--radius-s);
+	overflow: hidden;
+}
+
+.speed-reader-ai-theme-swatch-primary,
+.speed-reader-ai-theme-swatch-secondary {
+	flex: 1;
+}
+
+.speed-reader-ai-theme-card-label {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+}
+
+.speed-reader-ai-theme-card-check {
+	position: absolute;
+	top: 0.55rem;
+	right: 0.65rem;
+	font-size: 0.85rem;
+	color: var(--sr-accent, var(--interactive-accent));
+}
+
 .speed-reader-ai-shortcuts-table {
 	display: flex;
 	flex-direction: column;
@@ -2363,6 +2430,61 @@
 
 .speed-reader-ai-mobile-playing .speed-reader-ai-mobile-progress-strip {
 	display: none;
+}
+
+/* Playing gesture bands (mobile immersive) */
+.speed-reader-ai-playing-gesture-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 5;
+	pointer-events: none;
+}
+
+.speed-reader-ai-playing-gesture-overlay.is-active .speed-reader-ai-playing-hit {
+	pointer-events: auto;
+}
+
+.speed-reader-ai-playing-hit {
+	position: fixed;
+	background: transparent;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.speed-reader-ai-playing-hit-strip {
+	position: fixed;
+	pointer-events: none;
+}
+
+.speed-reader-ai-playing-hit-strip .speed-reader-ai-playing-hit {
+	pointer-events: none;
+}
+
+.speed-reader-ai-playing-gesture-overlay.is-active .speed-reader-ai-playing-hit-strip .speed-reader-ai-playing-hit {
+	pointer-events: auto;
+}
+
+.speed-reader-ai-playing-speed-label {
+	position: fixed;
+	top: calc(50% + env(safe-area-inset-top, 0px) * 0.5);
+	left: 50%;
+	transform: translate(-50%, -50%);
+	padding: 0.45rem 0.85rem;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--interactive-accent);
+	font-size: 1.05rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s ease;
+	z-index: 6;
+}
+
+.speed-reader-ai-playing-speed-label.is-visible {
+	opacity: 1;
 }
 
 .speed-reader-ai-shell.is-preferences-only.speed-reader-ai-mobile .speed-reader-ai-mobile-top-bar,

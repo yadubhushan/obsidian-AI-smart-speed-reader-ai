@@ -54,15 +54,12 @@ describe('resolveReaderBackAction', () => {
 		).toBe('go-home');
 	});
 
-	it('returns go-home from content shortcuts and advanced tabs', () => {
+	it('returns go-home from content and shortcuts tabs', () => {
 		expect(resolveReaderBackAction(snapshot({ activeTab: 'content', mobileRoute: 'content' }))).toBe(
 			'go-home'
 		);
 		expect(
 			resolveReaderBackAction(snapshot({ activeTab: 'shortcuts', mobileRoute: 'shortcuts' }))
-		).toBe('go-home');
-		expect(
-			resolveReaderBackAction(snapshot({ activeTab: 'advanced', mobileRoute: 'advanced' }))
 		).toBe('go-home');
 	});
 

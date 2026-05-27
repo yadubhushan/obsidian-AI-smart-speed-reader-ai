@@ -153,7 +153,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 	private runManifestLoop(ctx: RSVPEngineContext) {
 		if (!ctx.isPlaying) return;
 
-		const stream = ctx.getActiveStream();
+		const stream = ctx.getPlaybackStream();
 
 		if (ctx.currentTokenIndex >= stream.length) {
 			if (ctx.processed && ctx.processed.kind === 'sections') {
@@ -208,7 +208,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 
 	getCurrentChunk(ctx: RSVPEngineContext): WordData[] {
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const stream = ctx.getPlaybackStream();
 			if (ctx.currentTokenIndex >= stream.length) return [];
 			const { tokens } = getManifestLineChunk(
 				stream,
@@ -230,7 +230,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 		const seekIndex = ctx.playbackSource === 'manifest' ? ctx.currentTokenIndex : ctx.currentIndex;
 
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const stream = ctx.getPlaybackStream();
 			const { endIndex, lineStartIndex } = getManifestLineChunk(
 				stream,
 				ctx.sentenceUnits,
@@ -258,7 +258,7 @@ export class LineByLineStrategy extends BasePlaybackStrategy {
 		let delay = 0;
 		if (ctx.playbackSource === 'manifest') {
 			const { tokens } = getManifestLineChunk(
-				ctx.getActiveStream(),
+				ctx.getPlaybackStream(),
 				ctx.sentenceUnits,
 				ctx.currentTokenIndex
 			);

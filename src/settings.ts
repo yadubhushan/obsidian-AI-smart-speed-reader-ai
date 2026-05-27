@@ -4,6 +4,10 @@ import type { SpeedReaderAiSettings } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { displayPluginAiSettings } from './ui/pluginAiSettingsSection';
 import { displayPluginDictionarySettings } from './ui/pluginDictionarySettingsSection';
+import {
+	displayPluginReaderBookmarkSettings,
+	displayPluginReaderPacingSettings
+} from './ui/pluginReaderSettingsSection';
 
 export { DEFAULT_SETTINGS };
 export type { SpeedReaderAiSettings };
@@ -36,6 +40,9 @@ export class SpeedReaderAiSettingTab extends PluginSettingTab {
 
 		displayPluginDictionarySettings({ plugin: this.plugin }, containerEl);
 
+		displayPluginReaderPacingSettings({ plugin: this.plugin }, containerEl);
+		displayPluginReaderBookmarkSettings({ plugin: this.plugin }, containerEl);
+
 		containerEl.createEl('h3', { text: 'Reader' });
 
 		new Setting(containerEl)
@@ -55,15 +62,6 @@ export class SpeedReaderAiSettingTab extends PluginSettingTab {
 					(this.app as App & { commands: { executeCommandById(id: string): void } }).commands.executeCommandById(
 						'speed-reader-ai:open-reading-history'
 					);
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Advanced reader preferences')
-			.setDesc('Micropause, bookmark templates, and dictionary options in the in-reader Advanced tab.')
-			.addButton((btn) =>
-				btn.setButtonText('Open advanced reader settings').onClick(() => {
-					void this.plugin.openReaderPreferences('advanced');
 				})
 			);
 	}

@@ -107,7 +107,7 @@ export class LineRepeatStrategy extends RsvpStrategy {
 	private runLineRepeatManifestLoop(ctx: RSVPEngineContext) {
 		if (!ctx.isPlaying) return;
 
-		const stream = ctx.getActiveStream();
+		const stream = ctx.getPlaybackStream();
 
 		if (ctx.currentTokenIndex >= stream.length) {
 			if (ctx.processed && ctx.processed.kind === 'sections') {

@@ -14,6 +14,26 @@ export function displayPluginDictionarySettings(
 
 	containerEl.createEl('h3', { text: 'Dictionary' });
 
+	new Setting(containerEl)
+		.setName('Enable word lookup')
+		.setDesc('Look up definitions while paused in the reader (requires internet).')
+		.addToggle((toggle) => {
+			toggle.setValue(plugin.settings.dictionary.enableWordLookup).onChange(async (value) => {
+				plugin.settings.dictionary.enableWordLookup = value;
+				await plugin.saveSettings();
+			});
+		});
+
+	new Setting(containerEl)
+		.setName('Cache definitions')
+		.setDesc('Keep looked-up definitions cached for the current session.')
+		.addToggle((toggle) => {
+			toggle.setValue(plugin.settings.dictionary.dictionaryCacheEnabled).onChange(async (value) => {
+				plugin.settings.dictionary.dictionaryCacheEnabled = value;
+				await plugin.saveSettings();
+			});
+		});
+
 	containerEl.createEl('p', {
 		cls: 'setting-item-description',
 		text:

@@ -34,6 +34,8 @@ export interface RSVPEngineContext {
 	onComplete(): void;
 	onSectionComplete?(): void;
 	getActiveStream(): StreamToken[];
+	getPlaybackStream(): StreamToken[];
+	getBaseTokenIndex(): number;
 }
 
 export interface PlaybackStrategy {

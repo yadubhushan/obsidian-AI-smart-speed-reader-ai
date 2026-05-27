@@ -5,13 +5,10 @@ const HUB_LINKS: { route: Exclude<MobileRoute, 'reading' | 'more' | 'bookmarks'>
 	[
 		{ route: 'content', label: MOBILE_ROUTE_LABELS.content },
 		{ route: 'settings', label: MOBILE_ROUTE_LABELS.settings },
-		{ route: 'shortcuts', label: MOBILE_ROUTE_LABELS.shortcuts },
-		{ route: 'advanced', label: MOBILE_ROUTE_LABELS.advanced }
+		{ route: 'shortcuts', label: MOBILE_ROUTE_LABELS.shortcuts }
 	];
 
-const PREFERENCES_HUB_LINKS = HUB_LINKS.filter(
-	(link) => link.route === 'settings' || link.route === 'advanced'
-);
+const PREFERENCES_HUB_LINKS = HUB_LINKS.filter((link) => link.route === 'settings');
 
 export interface MobileMenuHubPaneHandle {
 	destroy(): void;

@@ -50,6 +50,10 @@ import {
 	paragraphTextFromUnit
 } from './paragraphUnits';
 import {
+	buildSectionTitlePrefix,
+	type SectionNavLabel
+} from './sectionTitlePrefix';
+import {
 	buildPauseContext,
 	computeSmartForwardTarget,
 	computeSmartRewindTarget,
@@ -103,6 +107,8 @@ export class RSVPEngine implements RSVPEngineContext {
 	private uxProfile: ReaderUxProfile | null = null;
 	private isDeterministic = false;
 	private activeParagraphStarts: number[] | null = null;
+	private sectionTitlePrefixEnabled = false;
+	private sectionNavLabel: SectionNavLabel = 'Section';
 	private onStateChange: (state: ReaderState) => void;
 	public onComplete: () => void;
 	public onSectionComplete?: () => void;
@@ -163,7 +169,9 @@ export class RSVPEngine implements RSVPEngineContext {
 
 		const stream = this.getActiveStream();
 		const maxToken = Math.max(stream.length - 1, 0);
-		this.currentTokenIndex = clamp(opts.tokenIndex ?? 0, 0, maxToken);
+		const tokenIndex = clamp(opts.tokenIndex ?? 0, 0, maxToken);
+		this.applySectionTitlePrefixForBaseIndex(tokenIndex);
+		this.currentTokenIndex = this.sectionTitlePrefixEnabled ? 0 : tokenIndex;
 
 		this.syncParagraphStarts();
 		this.rebuildSentenceUnits();
@@ -207,6 +215,10 @@ export class RSVPEngine implements RSVPEngineContext {
 
 	getReaderUxProfile(): ReaderUxProfile | null {
 		return this.uxProfile;
+	}
+
+	setSectionNavLabel(label: SectionNavLabel): void {
+		this.sectionNavLabel = label;
 	}
 
 	setSettings(settings: SpeedReaderAiSettings) {
@@ -282,12 +294,13 @@ export class RSVPEngine implements RSVPEngineContext {
 
 	play() {
 		if (this.playbackSource === 'manifest') {
-			const stream = this.getActiveStream();
+			const stream = this.getPlaybackStream();
 			if (stream.length === 0) {
 				this.emitState(false);
 				return;
 			}
 			if (this.currentTokenIndex >= stream.length) {
+				this.applySectionTitlePrefixForBaseIndex(0);
 				this.currentTokenIndex = 0;
 			}
 		} else if (this.words.length === 0) {
@@ -377,10 +390,12 @@ export class RSVPEngine implements RSVPEngineContext {
 		this.restartLoopIfPlaying();
 	}
 
-	seekToToken(index: number) {
-		const stream = this.getActiveStream();
-		const last = Math.max(stream.length - 1, 0);
-		this.currentTokenIndex = clamp(index, 0, last);
+	seekToToken(baseIndex: number) {
+		const baseStream = this.getActiveStream();
+		const last = Math.max(baseStream.length - 1, 0);
+		const clampedBase = clamp(baseIndex, 0, last);
+		this.applySectionTitlePrefixForBaseIndex(clampedBase);
+		this.currentTokenIndex = this.sectionTitlePrefixEnabled ? 0 : clampedBase;
 		this.emitState(false);
 		this.restartLoopIfPlaying();
 	}
@@ -388,8 +403,8 @@ export class RSVPEngine implements RSVPEngineContext {
 	seekToPercent(percent: number) {
 		const clamped = clamp(percent, 0, 1);
 		if (this.playbackSource === 'manifest') {
-			const stream = this.getActiveStream();
-			this.seekToToken(Math.floor(clamped * stream.length));
+			const baseStream = this.getActiveStream();
+			this.seekToToken(Math.floor(clamped * baseStream.length));
 		} else {
 			this.seekToIndex(Math.floor(clamped * this.words.length));
 		}
@@ -431,6 +446,7 @@ export class RSVPEngine implements RSVPEngineContext {
 			0,
 			Math.max(this.processed.sections.length - 1, 0)
 		);
+		this.applySectionTitlePrefixForBaseIndex(0);
 		this.currentTokenIndex = 0;
 		this.syncParagraphStarts();
 		this.rebuildSentenceUnits();
@@ -633,7 +649,7 @@ export class RSVPEngine implements RSVPEngineContext {
 	}
 
 	private getManifestContext(contextWords: number): { before: string[]; after: string[] } {
-		const stream = this.getActiveStream();
+		const stream = this.getPlaybackStream();
 		const before: string[] = [];
 		const after: string[] = [];
 
@@ -663,6 +679,7 @@ export class RSVPEngine implements RSVPEngineContext {
 		this.currentSectionIndex = 0;
 		this.currentTokenIndex = 0;
 		this.activeParagraphStarts = null;
+		this.sectionTitlePrefixEnabled = false;
 	}
 
 	private syncParagraphStarts() {
@@ -706,6 +723,38 @@ export class RSVPEngine implements RSVPEngineContext {
 		return [];
 	}
 
+	getPlaybackStream(): StreamToken[] {
+		const baseStream = this.getActiveStream();
+		if (!this.sectionTitlePrefixEnabled || baseStream.length === 0) {
+			return baseStream;
+		}
+
+		const section = this.getActiveSection();
+		return [buildSectionTitlePrefix(section?.title, this.sectionNavLabel), ...baseStream];
+	}
+
+	getBaseTokenIndex(): number {
+		if (!this.sectionTitlePrefixEnabled) {
+			return this.currentTokenIndex;
+		}
+		return Math.max(0, this.currentTokenIndex - 1);
+	}
+
+	private shouldEnableSectionTitlePrefix(): boolean {
+		if (this.playbackSource !== 'manifest') {
+			return false;
+		}
+		if (!this.processed || !isSectionsProcessed(this.processed)) {
+			return false;
+		}
+		const title = this.getActiveSection()?.title?.trim();
+		return Boolean(title);
+	}
+
+	private applySectionTitlePrefixForBaseIndex(baseIndex: number): void {
+		this.sectionTitlePrefixEnabled = baseIndex === 0 && this.shouldEnableSectionTitlePrefix();
+	}
+
 	private restartLoopIfPlaying() {
 		if (this.isPlaying) {
 			this.pause();
@@ -718,7 +767,7 @@ export class RSVPEngine implements RSVPEngineContext {
 	}
 
 	private getCurrentSeekIndex(): number {
-		return this.playbackSource === 'manifest' ? this.currentTokenIndex : this.currentIndex;
+		return this.playbackSource === 'manifest' ? this.getBaseTokenIndex() : this.currentIndex;
 	}
 
 	private seekToSentenceUnit(unit: SentenceUnit) {
@@ -831,12 +880,13 @@ export class RSVPEngine implements RSVPEngineContext {
 		const chunkSeekIndices = this.strategy.getChunkSeekIndices(this);
 
 		if (this.playbackSource === 'manifest') {
-			const stream = this.getActiveStream();
-			const totalTokens = stream.length;
+			const baseStream = this.getActiveStream();
+			const totalTokens = baseStream.length;
+			const baseIndex = this.getBaseTokenIndex();
 			const progress = isLinePlaybackMode(playbackMode)
 				? this.getLineRepeatProgress()
 				: totalTokens > 0
-					? Math.min((this.currentTokenIndex / totalTokens) * 100, 100)
+					? Math.min((baseIndex / totalTokens) * 100, 100)
 					: 0;
 
 			const activeSection = this.getActiveSection();

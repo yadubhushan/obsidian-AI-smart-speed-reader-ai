@@ -1,4 +1,8 @@
-import type { ReaderColorScheme } from '../../types';
+import type { ReaderColorScheme, ReaderThemePresetId } from '../../types';
+import {
+	isReaderThemePresetId,
+	READER_THEME_PRESETS
+} from './readerThemePresets';
 
 export type ResolvedReaderTheme = 'dark' | 'light';
 
@@ -120,17 +124,46 @@ export function resolveReaderTheme(
 	return colorScheme;
 }
 
-export function getReaderThemeTokens(resolved: ResolvedReaderTheme): ReaderThemeTokens {
-	return resolved === 'light' ? LIGHT_TOKENS : DARK_TOKENS;
+function mergeThemePreset(
+	base: ReaderThemeTokens,
+	themePreset?: ReaderThemePresetId
+): ReaderThemeTokens {
+	if (!themePreset || !isReaderThemePresetId(themePreset)) {
+		return base;
+	}
+
+	const preset = READER_THEME_PRESETS[themePreset];
+	return {
+		...base,
+		orp: preset.orp,
+		lineAccent: preset.lineAccent,
+		accent: preset.lineAccent,
+		accentBright: preset.orp,
+		accentDeep: preset.lineAccent
+	};
+}
+
+export function getReaderThemeTokens(
+	resolved: ResolvedReaderTheme,
+	themePreset?: ReaderThemePresetId
+): ReaderThemeTokens {
+	const base = resolved === 'light' ? LIGHT_TOKENS : DARK_TOKENS;
+	return mergeThemePreset(base, themePreset);
+}
+
+export interface ApplyReaderThemeOptions {
+	themePreset?: ReaderThemePresetId;
 }
 
 export function applyReaderThemeToElement(
 	el: HTMLElement,
 	colorScheme: ReaderColorScheme,
-	isObsidianDark?: boolean
+	options?: ApplyReaderThemeOptions | boolean
 ): ResolvedReaderTheme {
+	const isObsidianDark = typeof options === 'boolean' ? options : undefined;
+	const themePreset = typeof options === 'object' ? options?.themePreset : undefined;
 	const resolved = resolveReaderTheme(colorScheme, isObsidianDark);
-	const tokens = getReaderThemeTokens(resolved);
+	const tokens = getReaderThemeTokens(resolved, themePreset);
 	el.style.setProperty('--sr-bg', tokens.bg);
 	el.style.setProperty('--sr-text', tokens.text);
 	el.style.setProperty('--sr-orp', tokens.orp);

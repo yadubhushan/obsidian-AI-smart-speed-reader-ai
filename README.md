@@ -97,12 +97,13 @@ On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout an
 
 | Gesture | Action |
 |---------|--------|
-| Tap center | Play / pause |
-| Double-tap left / right | Skip back / forward |
-| Hold screen edge | Continuous rewind / fast-forward |
-| Long-press word | Dictionary (bottom sheet) |
-| Tap context word | Dictionary for that word |
-| Swipe up / down (playing) | Increase / decrease WPM (brief toast) |
+| Tap center (playing) | Play / pause |
+| Hold left / right of word strip (playing) | Skip back / forward |
+| Hold above / below word strip (playing) | Increase / decrease WPM (+5 / −5 per tick, speed badge) |
+| Double-tap left / right (paused) | Skip back / forward |
+| Long-press word (paused) | Dictionary (bottom sheet) |
+| Tap context word (paused) | Dictionary for that word |
+| Swipe left / right (paused) | Skip back / forward |
 | Swipe down top bar | Expand chapter + progress; second swipe closes reader |
 | 🔖 (transport dock) | Bookmark current line (paragraph + highlighted sentence) |
 | 📑 (transport dock) | Open bookmark line picker (scroll, select lines, bookmark) |

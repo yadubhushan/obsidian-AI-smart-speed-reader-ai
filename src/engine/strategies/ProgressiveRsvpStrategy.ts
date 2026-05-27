@@ -14,7 +14,7 @@ import { navWordsFromStream, wordIndicesForLegacyChunk, wordIndicesForManifestCh
 export class ProgressiveRsvpStrategy extends RsvpStrategy {
 	getCurrentChunk(ctx: RSVPEngineContext): WordData[] {
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const stream = ctx.getPlaybackStream();
 			if (ctx.currentTokenIndex >= stream.length) {
 				return [];
 			}
@@ -32,17 +32,18 @@ export class ProgressiveRsvpStrategy extends RsvpStrategy {
 
 	getCurrentChunkWordIndices(ctx: RSVPEngineContext, totalNavWords: number): number[] {
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const playbackStream = ctx.getPlaybackStream();
+			const baseStream = ctx.getActiveStream();
 			const { endIndex } = getProgressiveWordTokensChunk(
-				stream,
+				playbackStream,
 				ctx.currentTokenIndex,
 				ctx.settings.reader.progressiveRsvpMaxWordLength
 			);
 			return wordIndicesForManifestChunk(
-				navWordsFromStream(stream),
-				ctx.currentTokenIndex,
+				navWordsFromStream(baseStream),
+				ctx.getBaseTokenIndex(),
 				Math.max(endIndex - ctx.currentTokenIndex, 1),
-				stream.length
+				baseStream.length
 			);
 		}
 
@@ -69,7 +70,7 @@ export class ProgressiveRsvpStrategy extends RsvpStrategy {
 	}
 
 	protected resolveManifestChunk(ctx: RSVPEngineContext, startIndex: number): { tokens: StreamToken[]; endIndex: number } {
-		const stream = ctx.getActiveStream();
+		const stream = ctx.getPlaybackStream();
 		return getProgressiveWordTokensChunk(
 			stream,
 			startIndex,

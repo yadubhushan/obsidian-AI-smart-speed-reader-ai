@@ -48,7 +48,6 @@ import {
 import { mountContentPane, type ContentPaneHandle } from './readerShell/panes/contentPane';
 import { mountSettingsPane, type SettingsPaneHandle } from './readerShell/panes/settingsPane';
 import { mountShortcutsPane, type ShortcutsPaneHandle } from './readerShell/panes/shortcutsPane';
-import { mountAdvancedPane, type AdvancedPaneHandle } from './readerShell/panes/advancedPane';
 import { mountBookmarksPane, type BookmarksPaneHandle } from './readerShell/panes/bookmarksPane';
 import {
 	mountMobileMenuHubPane,
@@ -82,6 +81,10 @@ import {
 	type MobileGesturesHandle
 } from './readerShell/mobileGestures';
 import {
+	mountPlayingGestureBands,
+	type PlayingGestureBandsHandle
+} from './readerShell/playingGestureBands';
+import {
 	mountMobileBottomSheet,
 	type MobileBottomSheetHandle
 } from './readerShell/mobileBottomSheet';
@@ -107,7 +110,6 @@ import {
 } from './readerShell/desktopFocusChrome';
 
 const INTER_SECTION_MS = 5000;
-const SECTION_INTRO_MS = 2500;
 const FONT_SIZE_STEP = 3;
 const MIN_FONT_SIZE = 24;
 const MAX_FONT_SIZE = 200;
@@ -174,6 +176,7 @@ export class SpeedReaderAiModal extends Modal {
 	private mobilePausedStackEl: HTMLElement | null = null;
 	private mobileBottomSheet: MobileBottomSheetHandle | null = null;
 	private mobileGestures: MobileGesturesHandle | null = null;
+	private playingGestureBands: PlayingGestureBandsHandle | null = null;
 	private mobileCoachMarks: MobileCoachMarksHandle | null = null;
 	private mobileProgressStripEl: HTMLElement | null = null;
 	private mobileMenuOpen = false;
@@ -193,7 +196,6 @@ export class SpeedReaderAiModal extends Modal {
 	private bookmarkContextLines: BookmarkContextLine[] = [];
 	private settingsPane!: SettingsPaneHandle;
 	private shortcutsPane!: ShortcutsPaneHandle;
-	private advancedPane!: AdvancedPaneHandle;
 	private mobileMenuHubPane: MobileMenuHubPaneHandle | null = null;
 	private modePickerHost!: HTMLElement;
 	private versionPickerHost!: HTMLElement;
@@ -205,8 +207,6 @@ export class SpeedReaderAiModal extends Modal {
 	private prepareOverlaySublineEl: HTMLElement | null = null;
 	private interSectionTimer: number | null = null;
 	private interSectionCountdownInterval: number | null = null;
-	private sectionIntroShownForIndex: number | null = null;
-	private skipNextSectionIntro = false;
 
 	private modePicker: ModePickerHandle | null = null;
 	private versionPicker: VersionPickerHandle | null = null;
@@ -259,6 +259,7 @@ export class SpeedReaderAiModal extends Modal {
 			},
 			() => this.handleSectionComplete()
 		);
+		this.engine.setSectionNavLabel(this.readerOpen.kind === 'book' ? 'Chapter' : 'Section');
 	}
 
 	async onOpen() {
@@ -271,7 +272,7 @@ export class SpeedReaderAiModal extends Modal {
 		contentEl.setAttr('tabindex', '-1');
 		contentEl.focus();
 
-		applyReaderThemeToElement(contentEl, this.settings.reader.colorScheme);
+		this.applyReaderTheme();
 		this.applyFontFamily();
 
 		this.shellEl = contentEl.createDiv({ cls: 'speed-reader-ai-shell' });
@@ -434,16 +435,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.shortcutsPane.onSwipeBack(() => {
 			this.popMobileRoute();
 		});
-		this.advancedPane = mountAdvancedPane(this.paneStackEl, this.settings, {
-			onSave: (next) => {
-				this.persistSettings(next);
-				this.returnToReadingAfterPaneAction();
-			},
-			isMobile: this.mobileReader
-		});
-		this.advancedPane.onSwipeBack(() => {
-			this.popMobileRoute();
-		});
 
 		if (this.mobileReader) {
 			this.mobileMenuHubPane = mountMobileMenuHubPane(this.paneStackEl, {
@@ -584,6 +575,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.registerKeyboardHandlers();
 		this.registerFocusHandlers();
 		this.mountMobileGesturesIfNeeded();
+		this.mountPlayingGestureBandsIfNeeded();
 		this.mountMobileCoachMarksIfNeeded();
 		this.updateModeSpecificUi();
 		this.scheduleAutoStart();
@@ -627,6 +619,8 @@ export class SpeedReaderAiModal extends Modal {
 		this.mobileActionBar?.destroy();
 		this.mobileBottomSheet?.destroy();
 		this.mobileGestures?.destroy();
+		this.playingGestureBands?.destroy();
+		this.playingGestureBands = null;
 		this.stopEdgeScrub();
 		this.clearSkipFlash();
 		this.mobileCoachMarks?.destroy();
@@ -636,7 +630,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.bookmarksPane?.destroy();
 		this.settingsPane?.destroy();
 		this.shortcutsPane?.destroy();
-		this.advancedPane?.destroy();
 		this.mobileMenuHubPane?.destroy();
 		this.mobileMenuHubPane = null;
 		this.ownerDoc.removeEventListener('visibilitychange', this.boundVisibilityHandler);
@@ -843,9 +836,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-shortcuts')
 			?.toggleClass('is-hidden', route !== 'shortcuts');
-		this.paneStackEl
-			?.querySelector('.speed-reader-ai-pane-advanced')
-			?.toggleClass('is-hidden', route !== 'advanced');
 
 		if (tab) {
 			this.activeTab = tab;
@@ -865,9 +855,6 @@ export class SpeedReaderAiModal extends Modal {
 
 		if (route === 'settings') {
 			this.settingsPane?.refresh(this.settings);
-		}
-		if (route === 'advanced') {
-			this.advancedPane?.refresh(this.settings);
 		}
 		if (route === 'bookmarks') {
 			void this.refreshBookmarksPaneData();
@@ -904,9 +891,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-shortcuts')
 			?.toggleClass('is-hidden', tab !== 'shortcuts');
-		this.paneStackEl
-			?.querySelector('.speed-reader-ai-pane-advanced')
-			?.toggleClass('is-hidden', tab !== 'advanced');
 
 		this.header?.setProgressVisible(isHome && this.settings.reader.display.showProgress);
 		this.contextLine?.setVisible(isHome && this.settings.reader.display.showContext);
@@ -915,9 +899,6 @@ export class SpeedReaderAiModal extends Modal {
 
 		if (tab === 'settings') {
 			this.settingsPane?.refresh(this.settings);
-		}
-		if (tab === 'advanced') {
-			this.advancedPane?.refresh(this.settings);
 		}
 		if (tab === 'bookmarks') {
 			void this.refreshBookmarksPaneData();
@@ -930,7 +911,7 @@ export class SpeedReaderAiModal extends Modal {
 	private persistSettings(next: SpeedReaderAiSettings) {
 		this.settings = validateSettings(next, this.llmModelCatalog);
 		this.engine.setSettings(this.settings);
-		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme);
+		this.applyReaderTheme();
 		this.applyFontFamily();
 		this.applyFontSize();
 		this.applyContextLineFontSize();
@@ -958,6 +939,12 @@ export class SpeedReaderAiModal extends Modal {
 			window.clearTimeout(this.autoStartTimer);
 			this.autoStartTimer = null;
 		}
+	}
+
+	private applyReaderTheme(): void {
+		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme, {
+			themePreset: this.settings.reader.themePreset
+		});
 	}
 
 	private applyFontFamily() {
@@ -1131,37 +1118,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.refocusContent();
 	}
 
-	private getSectionNavLabel(): string {
-		return this.readerOpen.kind === 'book' ? 'Chapter' : 'Section';
-	}
-
-	private getCurrentSectionTitle(): string {
-		const state = this.state;
-		const fromState = state?.sectionTitle?.trim();
-		if (fromState) {
-			return fromState;
-		}
-		const index = state?.currentSectionIndex ?? 0;
-		const sections = this.engine.getSectionList();
-		return sections[index]?.title?.trim() || this.getSectionNavLabel();
-	}
-
-	private hasMultipleSections(): boolean {
-		return this.engine.getSectionList().length > 1;
-	}
-
-	private needsSectionIntro(): boolean {
-		if (!this.hasMultipleSections()) {
-			return false;
-		}
-		const index = this.state?.currentSectionIndex ?? 0;
-		return this.sectionIntroShownForIndex !== index;
-	}
-
-	private markSectionIntroShown(): void {
-		this.sectionIntroShownForIndex = this.state?.currentSectionIndex ?? 0;
-	}
-
 	private toggleReaderPlayPause(): void {
 		if (this.state?.isPlaying) {
 			this.engine.togglePlayPause();
@@ -1171,20 +1127,6 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private startPlayback(): void {
-		if (this.skipNextSectionIntro) {
-			this.skipNextSectionIntro = false;
-			this.markSectionIntroShown();
-			this.engine.play();
-			return;
-		}
-		if (this.needsSectionIntro()) {
-			this.engine.pause();
-			this.showSectionIntroOverlay(() => {
-				this.markSectionIntroShown();
-				this.engine.play();
-			});
-			return;
-		}
 		this.engine.play();
 	}
 
@@ -1429,57 +1371,10 @@ export class SpeedReaderAiModal extends Modal {
 		const nextTitle = sections[nextIndex]?.title ?? nextLabel;
 		this.engine.pause();
 		this.showInterSectionOverlay(nextLabel, nextTitle, () => {
-			this.skipNextSectionIntro = true;
 			this.engine.nextSection();
 			this.notifySectionChange();
 			this.startPlayback();
 		});
-	}
-
-	private showSectionIntroOverlay(onStart: () => void) {
-		if (!this.interSectionOverlayEl) return;
-		this.clearInterSectionTimer();
-		this.interSectionOverlayEl.empty();
-		this.interSectionOverlayEl.removeClass('is-hidden');
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-label',
-			text: this.getSectionNavLabel()
-		});
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-title speed-reader-ai-section-intro-title',
-			text: this.getCurrentSectionTitle()
-		});
-		const countdownSeconds = Math.round(SECTION_INTRO_MS / 1000);
-		const countdownEl = this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-countdown'
-		});
-		const setCountdownText = (seconds: number) => {
-			countdownEl.setText(
-				seconds === 1 ? 'Starting in 1 second…' : `Starting in ${seconds} seconds…`
-			);
-		};
-		setCountdownText(countdownSeconds);
-		const startBtn = this.interSectionOverlayEl.createEl('button', {
-			cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
-			text: 'Start reading'
-		});
-		startBtn.addEventListener('click', () => this.dismissInterSectionOverlay(onStart), {
-			once: true
-		});
-
-		let remaining = countdownSeconds;
-		this.interSectionCountdownInterval = window.setInterval(() => {
-			remaining -= 1;
-			if (remaining <= 0) {
-				this.clearInterSectionCountdownInterval();
-				return;
-			}
-			setCountdownText(remaining);
-		}, 1000);
-
-		this.interSectionTimer = window.setTimeout(() => {
-			this.dismissInterSectionOverlay(onStart);
-		}, SECTION_INTRO_MS);
 	}
 
 	private showInterSectionOverlay(
@@ -1956,14 +1851,22 @@ export class SpeedReaderAiModal extends Modal {
 		this.refocusContent();
 	}
 
-	private adjustWpm(delta: number) {
+	private adjustWpm(delta: number, options?: { quiet?: boolean }) {
 		const newWpm = this.engine.adjustWpm(delta);
 		this.settings = {
 			...this.settings,
 			reader: { ...this.settings.reader, wpm: newWpm }
 		};
 		this.engine.setSettings(this.settings);
-		new Notice(`Speed: ${newWpm} WPM`);
+		if (!options?.quiet) {
+			new Notice(`Speed: ${newWpm} WPM`);
+		}
+		return newWpm;
+	}
+
+	private adjustWpmFromPlayingBand(delta: number) {
+		const newWpm = this.adjustWpm(delta, { quiet: true });
+		this.playingGestureBands?.showSpeedLabel(newWpm);
 	}
 
 	private setReaderWpm(wpm: number) {
@@ -2013,15 +1916,6 @@ export class SpeedReaderAiModal extends Modal {
 		);
 	}
 
-	private showBriefWpmNotice(wpm: number) {
-		new Notice(`${wpm} WPM`, 800);
-	}
-
-	private adjustWpmFromSwipe(delta: number) {
-		this.adjustWpm(delta);
-		this.showBriefWpmNotice(this.settings.reader.wpm);
-	}
-
 	private adjustFontSize(delta: number) {
 		const newSize = Math.max(
 			MIN_FONT_SIZE,
@@ -2069,6 +1963,14 @@ export class SpeedReaderAiModal extends Modal {
 		this.sectionNav?.updateFromState(state);
 		this.chapterNav?.updateFromState(state);
 		this.syncMobileChrome(state);
+		if (
+			this.mobileReader &&
+			state?.isPlaying &&
+			!state.finished &&
+			isMobileReadingRoot(this.mobileRoute)
+		) {
+			this.playingGestureBands?.updateLayout();
+		}
 		if (this.mobileReader ? this.mobileRoute === 'bookmarks' : this.activeTab === 'bookmarks') {
 			this.refreshBookmarksPaneContext(state);
 		}
@@ -2101,6 +2003,40 @@ export class SpeedReaderAiModal extends Modal {
 			this.mobileCompactBar.setVisible(!playing && isReadingRoot);
 		}
 		this.mobileActionBar?.setVisible(!playing && isReadingRoot);
+		this.playingGestureBands?.setActive(playing);
+	}
+
+	private mountPlayingGestureBandsIfNeeded() {
+		if (
+			!this.mobileReader ||
+			this.playingGestureBands ||
+			this.readerOpen.kind === 'preferences'
+		) {
+			return;
+		}
+		this.playingGestureBands = mountPlayingGestureBands(
+			this.shellEl,
+			this.wordDisplayEl,
+			() => this.settings.reader.fontSize,
+			{
+				onTapPlayPause: () => {
+					this.toggleReaderPlayPause();
+					this.refocusContent();
+				},
+				onScrubLeft: () => this.handleArrowLeft(),
+				onScrubRight: () => this.handleArrowRight(),
+				onWpmDelta: (delta) => this.adjustWpmFromPlayingBand(delta),
+				isBlocked: () => {
+					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
+						return true;
+					}
+					if (!this.prepareOverlayEl?.hasClass('is-hidden')) {
+						return true;
+					}
+					return this.mobileMenuOpen || this.mobileCoachOpen;
+				}
+			}
+		);
 	}
 
 	private mountMobileGesturesIfNeeded() {
@@ -2141,8 +2077,6 @@ export class SpeedReaderAiModal extends Modal {
 				onSwipeChapterRight: () => this.handleShiftArrowRight(),
 				onEdgeHoldStart: (side) => this.startEdgeScrub(side),
 				onEdgeHoldEnd: () => this.stopEdgeScrub(),
-				onSwipeUp: () => this.adjustWpmFromSwipe(25),
-				onSwipeDown: () => this.adjustWpmFromSwipe(-25),
 				isBlocked: () => {
 					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
 						return true;

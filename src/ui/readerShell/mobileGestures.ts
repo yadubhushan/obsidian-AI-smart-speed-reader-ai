@@ -184,6 +184,8 @@ export function mountMobileGestures(
 	const isGestureAllowed = () =>
 		enabled && callbacks.isHomeActive() && !callbacks.isBlocked();
 
+	const isWordGestureAllowed = () => isGestureAllowed() && !callbacks.isPlaying();
+
 	const clearLongPressTimer = () => {
 		if (longPressTimer !== null) {
 			clearTimeout(longPressTimer);
@@ -238,7 +240,7 @@ export function mountMobileGestures(
 	};
 
 	const onWordPointerDown = (event: PointerEvent) => {
-		if (!isGestureAllowed()) {
+		if (!isWordGestureAllowed()) {
 			return;
 		}
 		if (event.pointerType === 'mouse' && event.button !== 0) {
@@ -322,7 +324,7 @@ export function mountMobileGestures(
 		const savedStartTime = wordStartTime;
 		resetWordPointer();
 
-		if (!isGestureAllowed()) {
+		if (!isWordGestureAllowed()) {
 			return;
 		}
 

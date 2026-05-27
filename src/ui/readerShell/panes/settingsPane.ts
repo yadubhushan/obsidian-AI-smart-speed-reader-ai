@@ -1,7 +1,11 @@
 import { PLAYBACK_MODE_ORDER, getPlaybackModeLabel } from '../../../engine/playbackMode';
-import { DEFAULT_SETTINGS, READER_FONT_OPTIONS, type PlaybackMode, type SpeedReaderAiSettings } from '../../../types';
+import { DEFAULT_SETTINGS, READER_FONT_OPTIONS, type PlaybackMode, type ReaderThemePresetId, type SpeedReaderAiSettings } from '../../../types';
 import { MOBILE_ROUTE_LABELS } from '../mobileNavigation';
 import { mountMobileStackChrome, type MobileStackChromeHandle } from '../mobileStackChrome';
+import {
+	READER_THEME_PRESET_ORDER,
+	READER_THEME_PRESETS
+} from '../readerThemePresets';
 
 export interface SettingsPaneHandle {
 	destroy(): void;
@@ -41,17 +45,55 @@ export function mountSettingsPane(
 			guide.createEl('h4', { text: 'Mobile gestures' });
 			const list = guide.createEl('ul');
 			const items = [
-				'Tap center of word area to play or pause',
-				'Double-tap left or right to skip back or forward',
-				'Long-press word to look up definition',
-				'Tap 🔖 to bookmark; tap a context word to define',
-				'Swipe up or down while playing to adjust speed',
-				'Swipe left or right to skip; swipe chapter pill for prev/next chapter'
+				'While playing: tap center of word strip to play or pause',
+				'While playing: hold left or right of word strip to skip back or forward',
+				'While playing: hold above word strip to increase speed; hold below to decrease',
+				'While paused: double-tap left or right to skip back or forward',
+				'While paused: long-press word to look up definition',
+				'While paused: tap a context word to define; tap 🔖 to bookmark',
+				'While paused: swipe left or right to skip'
 			];
 			for (const text of items) {
 				list.createEl('li', { text });
 			}
 		}
+		const themeSection = bodyHost.createDiv({ cls: 'speed-reader-ai-theme-explorer' });
+		themeSection.createEl('h4', { text: 'Theme Explorer' });
+		const themeGrid = themeSection.createDiv({ cls: 'speed-reader-ai-theme-grid' });
+		let selectedThemePreset = draft.reader.themePreset;
+
+		for (const presetId of READER_THEME_PRESET_ORDER) {
+			const preset = READER_THEME_PRESETS[presetId];
+			const card = themeGrid.createEl('button', {
+				cls: `speed-reader-ai-theme-card speed-reader-ai-theme-${presetId}${selectedThemePreset === presetId ? ' is-selected' : ''}`,
+				attr: { type: 'button', 'data-theme-preset': presetId }
+			});
+			const swatch = card.createDiv({ cls: 'speed-reader-ai-theme-swatch' });
+			swatch.createSpan({
+				cls: 'speed-reader-ai-theme-swatch-primary',
+				attr: { style: `background:${preset.swatchPrimary}` }
+			});
+			swatch.createSpan({
+				cls: 'speed-reader-ai-theme-swatch-secondary',
+				attr: { style: `background:${preset.swatchSecondary}` }
+			});
+			card.createSpan({ cls: 'speed-reader-ai-theme-card-label', text: preset.label });
+			if (selectedThemePreset === presetId) {
+				card.createSpan({ cls: 'speed-reader-ai-theme-card-check', text: '✓' });
+			}
+			card.addEventListener('click', () => {
+				selectedThemePreset = presetId;
+				for (const btn of themeGrid.querySelectorAll<HTMLButtonElement>('.speed-reader-ai-theme-card')) {
+					const id = btn.dataset.themePreset as ReaderThemePresetId;
+					btn.toggleClass('is-selected', id === presetId);
+					btn.querySelector('.speed-reader-ai-theme-card-check')?.remove();
+					if (id === presetId) {
+						btn.createSpan({ cls: 'speed-reader-ai-theme-card-check', text: '✓' });
+					}
+				}
+			});
+		}
+
 		const grid = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-grid' });
 		const left = grid.createDiv({ cls: 'speed-reader-ai-settings-col' });
 		const right = grid.createDiv({ cls: 'speed-reader-ai-settings-col' });
@@ -182,6 +224,7 @@ export function mountSettingsPane(
 					defaultPlaybackMode: defaultModeSelect.value as PlaybackMode,
 					progressiveRsvpMaxWordLength: Number(progressiveRsvpInput.value),
 					colorScheme: schemeSelect.value as SpeedReaderAiSettings['reader']['colorScheme'],
+					themePreset: selectedThemePreset,
 					autoStart: {
 						enabled: autoStartCheck.checked,
 						seconds: Number(autoStartSeconds.value)

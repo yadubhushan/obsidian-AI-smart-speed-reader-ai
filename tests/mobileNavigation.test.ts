@@ -22,6 +22,6 @@ describe('mobileNavigation', () => {
 		expect(isMobileStackRoute('reading')).toBe(false);
 		expect(isMobileStackRoute('more')).toBe(true);
 		expect(isMobileStackRoute('bookmarks')).toBe(true);
-		expect(isMobileStackRoute('advanced')).toBe(true);
+		expect(isMobileStackRoute('shortcuts')).toBe(true);
 	});
 });

@@ -39,6 +39,11 @@ export type {
 export type PlaybackMode = 'rsvp' | 'progressiveRsvp' | 'lineByLine' | 'lineRepeat';
 
 export type ReaderColorScheme = 'dark' | 'light' | 'auto';
+export type ReaderThemePresetId =
+	| 'vintage-amber'
+	| 'cyber-mint'
+	| 'nova-violet'
+	| 'crimson-surge';
 export type LlmBackend = 'auto' | 'cursor-cli' | 'ai-providers' | 'openai-compatible';
 export type ApiProviderPreset = 'openai' | 'openrouter' | 'custom';
 
@@ -67,6 +72,7 @@ export interface ReaderSettings {
 	wpm: number;
 	chunkSize: number;
 	colorScheme: ReaderColorScheme;
+	themePreset: ReaderThemePresetId;
 	autoStart: ReaderAutoStartSettings;
 	autoCloseOnCompletion: boolean;
 	textOrientation: ReaderTextOrientationSettings;
@@ -179,6 +185,7 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		wpm: 200,
 		chunkSize: 1,
 		colorScheme: 'dark',
+		themePreset: 'vintage-amber',
 		autoStart: { enabled: false, seconds: 3 },
 		autoCloseOnCompletion: false,
 		textOrientation: { rtl: false, autoDetect: true },

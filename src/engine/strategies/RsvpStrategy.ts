@@ -41,7 +41,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 	private runManifestLoop(ctx: RSVPEngineContext) {
 		if (!ctx.isPlaying) return;
 
-		const stream = ctx.getActiveStream();
+		const stream = ctx.getPlaybackStream();
 
 		if (ctx.currentTokenIndex >= stream.length) {
 			if (ctx.processed && ctx.processed.kind === 'sections') {
@@ -75,7 +75,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 
 	getCurrentChunk(ctx: RSVPEngineContext): WordData[] {
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const stream = ctx.getPlaybackStream();
 			if (ctx.currentTokenIndex >= stream.length) {
 				return [];
 			}
@@ -93,7 +93,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 
 	getChunkSeekIndices(ctx: RSVPEngineContext): number[] {
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const stream = ctx.getPlaybackStream();
 			const { tokens, endIndex } = this.resolveManifestChunk(ctx, ctx.currentTokenIndex);
 			if (tokens.length === 0 && stream.length > 0) {
 				return [Math.min(ctx.currentTokenIndex, stream.length - 1)];
@@ -146,7 +146,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 
 	calculateRemainingMs(ctx: RSVPEngineContext): number {
 		if (ctx.playbackSource === 'manifest') {
-			const stream = ctx.getActiveStream();
+			const stream = ctx.getPlaybackStream();
 			let total = 0;
 			for (let i = ctx.currentTokenIndex; i < stream.length; ) {
 				const { tokens, endIndex } = this.resolveManifestChunk(ctx, i);
@@ -188,7 +188,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 			const stream = ctx.getActiveStream();
 			return wordIndicesForManifestChunk(
 				navWordsFromStream(stream),
-				ctx.currentTokenIndex,
+				ctx.getBaseTokenIndex(),
 				this.getEffectiveChunkSize(ctx),
 				stream.length
 			);
@@ -215,7 +215,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 	}
 
 	protected resolveManifestChunk(ctx: RSVPEngineContext, startIndex: number): { tokens: StreamToken[]; endIndex: number } {
-		const stream = ctx.getActiveStream();
+		const stream = ctx.getPlaybackStream();
 		return getWordTokensChunk(stream, startIndex, this.getEffectiveChunkSize(ctx));
 	}
 }

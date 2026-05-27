@@ -93,8 +93,8 @@ export function resolveAutoBackend(
 
 	throw new LlmClientError(
 		isDesktop
-			? 'No LLM backend configured. Open Speed Reader preferences and configure AI in the Advanced tab.'
-			: 'No LLM backend configured for mobile. Open Speed Reader preferences and configure AI in the Advanced tab.'
+			? 'No LLM backend configured. Open Settings → Community plugins → Speed Reader AI and configure AI.'
+			: 'No LLM backend configured for mobile. Open Settings → Community plugins → Speed Reader AI and configure AI.'
 	);
 }
 

@@ -6,16 +6,14 @@ export type MobileRoute =
 	| 'bookmarks'
 	| 'content'
 	| 'settings'
-	| 'shortcuts'
-	| 'advanced';
+	| 'shortcuts';
 
 export const MOBILE_STACK_ROUTES: ReadonlySet<MobileRoute> = new Set([
 	'more',
 	'bookmarks',
 	'content',
 	'settings',
-	'shortcuts',
-	'advanced'
+	'shortcuts'
 ]);
 
 export const MOBILE_ROUTE_LABELS: Record<MobileRoute, string> = {
@@ -24,8 +22,7 @@ export const MOBILE_ROUTE_LABELS: Record<MobileRoute, string> = {
 	bookmarks: 'Bookmarks',
 	content: 'Content',
 	settings: 'Settings',
-	shortcuts: 'Shortcuts',
-	advanced: 'Advanced'
+	shortcuts: 'Shortcuts'
 };
 
 export function readerTabToMobileRoute(tab: ReaderTabId): MobileRoute {

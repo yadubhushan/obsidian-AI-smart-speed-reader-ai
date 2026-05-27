@@ -6,8 +6,10 @@ import {
 	type ApiProviderPreset,
 	type LlmBackend,
 	type ReaderColorScheme,
-	type ReaderFontOption
+	type ReaderFontOption,
+	type ReaderThemePresetId
 } from '../types';
+import { isReaderThemePresetId } from '../ui/readerShell/readerThemePresets';
 import type { LlmModelCatalog } from '../llm/llmModelCatalog';
 import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 
@@ -42,6 +44,13 @@ function toString(value: unknown, fallback: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeThemePreset(value: unknown): ReaderThemePresetId {
+	if (isReaderThemePresetId(value)) {
+		return value;
+	}
+	return DEFAULT_SETTINGS.reader.themePreset;
 }
 
 function normalizeColorScheme(value: unknown): ReaderColorScheme {
@@ -174,6 +183,7 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			wpm: toNumber(raw.wpm, DEFAULT_SETTINGS.reader.wpm),
 			chunkSize: toNumber(raw.chunkSize, DEFAULT_SETTINGS.reader.chunkSize),
 			colorScheme: normalizeColorScheme(raw.colorScheme ?? 'dark'),
+			themePreset: normalizeThemePreset(raw.themePreset),
 			autoStart: isRecord(raw.autoStart)
 				? {
 						enabled: toBoolean(raw.autoStart.enabled, DEFAULT_SETTINGS.reader.autoStart.enabled),
@@ -293,6 +303,7 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			30
 		),
 		colorScheme: normalizeColorScheme(firstDefined(r.colorScheme, flat.colorScheme)),
+		themePreset: normalizeThemePreset(firstDefined(r.themePreset, flat.themePreset)),
 		autoStart: {
 			enabled: toBoolean(
 				firstDefined(autoStartRaw.enabled, flat.autoStartEnabled),
