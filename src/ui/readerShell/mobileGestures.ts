@@ -10,7 +10,7 @@ const SWIPE_DOWN_MIN_PX = 40;
 const SWIPE_DOWN_MAX_MS = 400;
 const DOUBLE_TAP_MAX_MS = 300;
 const LONG_PRESS_MS = 500;
-export const EDGE_ZONE_RATIO = 0.08;
+export const EDGE_ZONE_RATIO = 0.2;
 const EDGE_HOLD_START_MS = DOUBLE_TAP_MAX_MS;
 
 export type LateralZone = 'left' | 'center' | 'right';
@@ -239,13 +239,52 @@ export function mountMobileGestures(
 		return false;
 	};
 
+	const startEdgeHoldTimer = (edgeSide: EdgeSide) => {
+		edgeHoldSide = edgeSide;
+		edgeHoldStartTimer = setTimeout(() => {
+			edgeHoldStartTimer = null;
+			if (wordPointerId === null || edgeHoldSide === null) {
+				return;
+			}
+			edgeHoldScrubStarted = true;
+			lastTapZone = null;
+			lastTapTime = 0;
+			clearLongPressTimer();
+			callbacks.onEdgeHoldStart(edgeHoldSide);
+		}, EDGE_HOLD_START_MS);
+	};
+
 	const onWordPointerDown = (event: PointerEvent) => {
-		if (!isWordGestureAllowed()) {
+		if (!isGestureAllowed()) {
 			return;
 		}
 		if (event.pointerType === 'mouse' && event.button !== 0) {
 			return;
 		}
+
+		const rect = wordContainer.getBoundingClientRect();
+		const edgeSide = isEdgeZone(event.clientX, rect);
+
+		if (callbacks.isPlaying()) {
+			if (edgeSide === null) {
+				return;
+			}
+			wordPointerId = event.pointerId;
+			wordStartX = event.clientX;
+			wordStartY = event.clientY;
+			wordStartTime = Date.now();
+			longPressFired = false;
+			edgeHoldScrubStarted = false;
+			clearLongPressTimer();
+			clearEdgeHoldStartTimer();
+			startEdgeHoldTimer(edgeSide);
+			return;
+		}
+
+		if (!isWordGestureAllowed()) {
+			return;
+		}
+
 		onChapterPill =
 			chapterPillEl !== null &&
 			!chapterPillEl.hasClass('is-hidden') &&
@@ -265,21 +304,8 @@ export function mountMobileGestures(
 			return;
 		}
 
-		const rect = wordContainer.getBoundingClientRect();
-		const edgeSide = isEdgeZone(event.clientX, rect);
 		if (edgeSide !== null) {
-			edgeHoldSide = edgeSide;
-			edgeHoldStartTimer = setTimeout(() => {
-				edgeHoldStartTimer = null;
-				if (wordPointerId === null || edgeHoldSide === null) {
-					return;
-				}
-				edgeHoldScrubStarted = true;
-				lastTapZone = null;
-				lastTapTime = 0;
-				clearLongPressTimer();
-				callbacks.onEdgeHoldStart(edgeHoldSide);
-			}, EDGE_HOLD_START_MS);
+			startEdgeHoldTimer(edgeSide);
 			return;
 		}
 
@@ -324,11 +350,11 @@ export function mountMobileGestures(
 		const savedStartTime = wordStartTime;
 		resetWordPointer();
 
-		if (!isWordGestureAllowed()) {
+		if (callbacks.isPlaying() || wasEdgeHoldScrub) {
 			return;
 		}
 
-		if (wasEdgeHoldScrub) {
+		if (!isWordGestureAllowed()) {
 			return;
 		}
 

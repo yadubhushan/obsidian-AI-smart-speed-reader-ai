@@ -128,4 +128,8 @@ describe('migrateFlatSettings', () => {
 			).reader.progressiveRsvpMaxWordLength
 		).toBe(20);
 	});
+
+	it('defaults showCenterGuide to true for empty input', () => {
+		expect(validateSettings(null, defaultCatalog).reader.display.showCenterGuide).toBe(true);
+	});
 });

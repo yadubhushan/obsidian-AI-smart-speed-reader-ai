@@ -1048,6 +1048,11 @@
 	display: none;
 }
 
+.speed-reader-ai-word-container.is-center-guide-hidden::before,
+.speed-reader-ai-word-container.is-center-guide-hidden::after {
+	display: none;
+}
+
 .speed-reader-ai-word-container.is-line-by-line .speed-reader-ai-word {
 	justify-content: center;
 	text-align: center;
@@ -2432,11 +2437,11 @@
 	display: none;
 }
 
-/* Playing gesture bands (mobile immersive) */
+/* Playing gesture bands (mobile immersive) — center column only; edges use word-container hold */
 .speed-reader-ai-playing-gesture-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 5;
+	z-index: 25;
 	pointer-events: none;
 }
 
@@ -2449,19 +2454,6 @@
 	background: transparent;
 	touch-action: manipulation;
 	-webkit-tap-highlight-color: transparent;
-}
-
-.speed-reader-ai-playing-hit-strip {
-	position: fixed;
-	pointer-events: none;
-}
-
-.speed-reader-ai-playing-hit-strip .speed-reader-ai-playing-hit {
-	pointer-events: none;
-}
-
-.speed-reader-ai-playing-gesture-overlay.is-active .speed-reader-ai-playing-hit-strip .speed-reader-ai-playing-hit {
-	pointer-events: auto;
 }
 
 .speed-reader-ai-playing-speed-label {

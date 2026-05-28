@@ -2,8 +2,8 @@ export const MOBILE_COACH_MARKS_KEY = 'speed-reader-ai-mobile-coach-v3';
 
 const COACH_STEPS = [
 	'Tap center while playing to pause or resume',
-	'Hold left or right of the word strip to skip back or forward',
-	'Hold above the word strip to speed up; hold below to slow down',
+	'Hold left or right edge of the screen to skip back or forward',
+	'Hold above or below the word strip (center) to speed up or slow down',
 	'While paused: double-tap sides to skip, long-press word for definition'
 ];
 

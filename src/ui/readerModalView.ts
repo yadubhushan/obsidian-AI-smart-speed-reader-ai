@@ -84,6 +84,7 @@ import {
 	mountPlayingGestureBands,
 	type PlayingGestureBandsHandle
 } from './readerShell/playingGestureBands';
+import { getScrubHoldDelay, getScrubStepSize } from './readerShell/edgeScrub';
 import {
 	mountMobileBottomSheet,
 	type MobileBottomSheetHandle
@@ -186,6 +187,7 @@ export class SpeedReaderAiModal extends Modal {
 	private edgeHoldSide: EdgeSide | null = null;
 	private edgeScrubTimer: number | null = null;
 	private edgeScrubTickCount = 0;
+	private edgeScrubStartedAt = 0;
 	private skipFlashEl: HTMLElement | null = null;
 	private skipFlashTimer: number | null = null;
 	private readonly mobileReader = isMobileReader();
@@ -334,6 +336,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.wordContainer = this.homePaneEl.createDiv({ cls: 'speed-reader-ai-word-container' });
 		this.applyFontSize();
 		this.applyContextLineFontSize();
+		this.applyCenterGuideVisibility();
 
 		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
 		this.interSectionOverlayEl = this.wordContainer.createDiv({
@@ -915,6 +918,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.applyFontFamily();
 		this.applyFontSize();
 		this.applyContextLineFontSize();
+		this.applyCenterGuideVisibility();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
 		this.onSettingsChange(this.settings);
 		new Notice('Settings saved');
@@ -1702,6 +1706,15 @@ export class SpeedReaderAiModal extends Modal {
 		this.refocusContent();
 	}
 
+	/** Token/word steps — used for continuous edge scrub while holding. */
+	private handleScrubStepLeft(count = 1) {
+		this.engine.rewind(count);
+	}
+
+	private handleScrubStepRight(count = 1) {
+		this.engine.fastForward(count);
+	}
+
 	private handleShiftArrowLeft() {
 		this.navigateToAdjacentSection(-1);
 	}
@@ -1916,6 +1929,13 @@ export class SpeedReaderAiModal extends Modal {
 		);
 	}
 
+	private applyCenterGuideVisibility(): void {
+		this.wordContainer?.toggleClass(
+			'is-center-guide-hidden',
+			!this.settings.reader.display.showCenterGuide
+		);
+	}
+
 	private adjustFontSize(delta: number) {
 		const newSize = Math.max(
 			MIN_FONT_SIZE,
@@ -2015,7 +2035,7 @@ export class SpeedReaderAiModal extends Modal {
 			return;
 		}
 		this.playingGestureBands = mountPlayingGestureBands(
-			this.shellEl,
+			this.containerEl,
 			this.wordDisplayEl,
 			() => this.settings.reader.fontSize,
 			{
@@ -2023,8 +2043,6 @@ export class SpeedReaderAiModal extends Modal {
 					this.toggleReaderPlayPause();
 					this.refocusContent();
 				},
-				onScrubLeft: () => this.handleArrowLeft(),
-				onScrubRight: () => this.handleArrowRight(),
 				onWpmDelta: (delta) => this.adjustWpmFromPlayingBand(delta),
 				isBlocked: () => {
 					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
@@ -2117,6 +2135,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.stopEdgeScrub();
 		this.edgeHoldSide = side;
 		this.edgeScrubTickCount = 0;
+		this.edgeScrubStartedAt = Date.now();
 		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
 		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
 		this.shellEl.addClass(
@@ -2131,14 +2150,15 @@ export class SpeedReaderAiModal extends Modal {
 		if (this.edgeHoldSide === null) {
 			return;
 		}
+		const elapsedMs = Date.now() - this.edgeScrubStartedAt;
+		const step = getScrubStepSize(elapsedMs);
 		if (this.edgeHoldSide === 'left') {
-			this.handleArrowLeft();
+			this.handleScrubStepLeft(step);
 		} else {
-			this.handleArrowRight();
+			this.handleScrubStepRight(step);
 		}
 		this.edgeScrubTickCount += 1;
-		const delay =
-			this.edgeScrubTickCount <= 2 ? 150 : this.edgeScrubTickCount <= 5 ? 100 : 50;
+		const delay = getScrubHoldDelay(this.edgeScrubTickCount, elapsedMs);
 		this.edgeScrubTimer = window.setTimeout(() => this.runEdgeScrubTick(), delay);
 	}
 
@@ -2149,6 +2169,7 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		this.edgeHoldSide = null;
 		this.edgeScrubTickCount = 0;
+		this.edgeScrubStartedAt = 0;
 		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
 		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
 	}

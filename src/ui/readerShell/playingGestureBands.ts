@@ -19,18 +19,15 @@ export type PlayingZone =
 	| 'bottom';
 
 export interface BandLayout {
-	top: { top: number; left: number; width: number; height: number };
-	middle: { top: number; left: number; width: number; height: number };
-	bottom: { top: number; left: number; width: number; height: number };
-	middleLeft: { top: number; left: number; width: number; height: number };
-	middleCenter: { top: number; left: number; width: number; height: number };
-	middleRight: { top: number; left: number; width: number; height: number };
+	scrubLeft: { top: number; left: number; width: number; height: number };
+	scrubRight: { top: number; left: number; width: number; height: number };
+	centerTop: { top: number; left: number; width: number; height: number };
+	centerMiddle: { top: number; left: number; width: number; height: number };
+	centerBottom: { top: number; left: number; width: number; height: number };
 }
 
 export interface PlayingGestureBandsCallbacks {
 	onTapPlayPause: () => void;
-	onScrubLeft: () => void;
-	onScrubRight: () => void;
 	onWpmDelta: (delta: number) => void;
 	isBlocked: () => boolean;
 }
@@ -85,30 +82,26 @@ export function computeBandLayout(
 	const bottomHeight = Math.max(0, viewport.height - bottomTop);
 
 	const leftWidth = viewport.width * 0.3;
+	const centerLeft = leftWidth;
 	const centerWidth = viewport.width * 0.4;
+	const rightLeft = leftWidth + centerWidth;
 	const rightWidth = viewport.width * 0.3;
 
 	return {
-		top: { top: 0, left: 0, width: viewport.width, height: topHeight },
-		middle,
-		bottom: { top: bottomTop, left: 0, width: viewport.width, height: bottomHeight },
-		middleLeft: {
+		scrubLeft: { top: 0, left: 0, width: leftWidth, height: viewport.height },
+		scrubRight: { top: 0, left: rightLeft, width: rightWidth, height: viewport.height },
+		centerTop: { top: 0, left: centerLeft, width: centerWidth, height: topHeight },
+		centerMiddle: {
 			top: middle.top,
-			left: 0,
-			width: leftWidth,
-			height: middle.height
-		},
-		middleCenter: {
-			top: middle.top,
-			left: leftWidth,
+			left: centerLeft,
 			width: centerWidth,
 			height: middle.height
 		},
-		middleRight: {
-			top: middle.top,
-			left: leftWidth + centerWidth,
-			width: rightWidth,
-			height: middle.height
+		centerBottom: {
+			top: bottomTop,
+			left: centerLeft,
+			width: centerWidth,
+			height: bottomHeight
 		}
 	};
 }
@@ -121,19 +114,7 @@ export function classifyPlayingZone(
 	viewport: { width: number; height: number }
 ): PlayingZone | null {
 	const layout = computeBandLayout(wordRect, pad, viewport);
-	const { top, middle, bottom } = layout;
-
-	if (clientY < top.top + top.height) {
-		return 'top';
-	}
-	if (clientY >= bottom.top) {
-		return 'bottom';
-	}
-	if (clientY < middle.top || clientY > middle.top + middle.height) {
-		return null;
-	}
-
-	const lateral = classifyLateralZone(clientX, {
+	const viewportRect = {
 		left: 0,
 		width: viewport.width,
 		top: 0,
@@ -143,31 +124,33 @@ export function classifyPlayingZone(
 		x: 0,
 		y: 0,
 		toJSON: () => ({})
-	} as DOMRect);
+	} as DOMRect;
 
+	const lateral = classifyLateralZone(clientX, viewportRect);
 	if (lateral === 'left') {
 		return 'middleLeft';
 	}
 	if (lateral === 'right') {
 		return 'middleRight';
 	}
-	return 'middleCenter';
+
+	const { centerTop, centerMiddle, centerBottom } = layout;
+	if (clientY < centerTop.top + centerTop.height) {
+		return 'top';
+	}
+	if (clientY >= centerBottom.top) {
+		return 'bottom';
+	}
+	if (clientY >= centerMiddle.top && clientY <= centerMiddle.top + centerMiddle.height) {
+		return 'middleCenter';
+	}
+	return null;
 }
 
 export function getWpmHoldDelay(tickCount: number): number {
 	return tickCount >= WPM_HOLD_ACCELERATE_AFTER_TICKS
 		? WPM_HOLD_TICK_FAST_MS
 		: WPM_HOLD_TICK_SLOW_MS;
-}
-
-export function getScrubHoldDelay(tickCount: number): number {
-	if (tickCount <= 2) {
-		return 150;
-	}
-	if (tickCount <= 5) {
-		return 100;
-	}
-	return 50;
 }
 
 function applyRect(el: HTMLElement, rect: { top: number; left: number; width: number; height: number }) {
@@ -182,29 +165,26 @@ function exceedsTapMovement(dx: number, dy: number): boolean {
 }
 
 export function mountPlayingGestureBands(
-	shellEl: HTMLElement,
+	overlayHost: HTMLElement,
 	wordDisplayEl: HTMLElement,
 	getFontSize: () => number,
 	callbacks: PlayingGestureBandsCallbacks
 ): PlayingGestureBandsHandle {
-	const overlay = shellEl.createDiv({ cls: 'speed-reader-ai-playing-gesture-overlay' });
+	const overlay = overlayHost.createDiv({ cls: 'speed-reader-ai-playing-gesture-overlay' });
+	const speedLabel = overlay.createDiv({ cls: 'speed-reader-ai-playing-speed-label' });
 	const hitTop = overlay.createDiv({ cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-top' });
-	const hitStrip = overlay.createDiv({ cls: 'speed-reader-ai-playing-hit-strip' });
-	const hitLeft = hitStrip.createDiv({ cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-left' });
-	const hitCenter = hitStrip.createDiv({
+	const hitCenter = overlay.createDiv({
 		cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-center'
 	});
-	const hitRight = hitStrip.createDiv({ cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-right' });
 	const hitBottom = overlay.createDiv({
 		cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-bottom'
 	});
-	const speedLabel = overlay.createDiv({ cls: 'speed-reader-ai-playing-speed-label' });
 
 	let active = false;
 	let speedLabelTimer: ReturnType<typeof setTimeout> | null = null;
 	let repeatTimer: ReturnType<typeof setTimeout> | null = null;
 	let repeatTickCount = 0;
-	let repeatMode: 'wpmUp' | 'wpmDown' | 'scrubLeft' | 'scrubRight' | null = null;
+	let repeatMode: 'wpmUp' | 'wpmDown' | null = null;
 
 	const cleanups: Array<() => void> = [];
 
@@ -245,20 +225,12 @@ export function mountPlayingGestureBands(
 			callbacks.onWpmDelta(WPM_HOLD_DELTA);
 		} else if (repeatMode === 'wpmDown') {
 			callbacks.onWpmDelta(-WPM_HOLD_DELTA);
-		} else if (repeatMode === 'scrubLeft') {
-			callbacks.onScrubLeft();
-		} else if (repeatMode === 'scrubRight') {
-			callbacks.onScrubRight();
 		}
 
-		const delay =
-			repeatMode === 'wpmUp' || repeatMode === 'wpmDown'
-				? getWpmHoldDelay(repeatTickCount)
-				: getScrubHoldDelay(repeatTickCount);
-		repeatTimer = setTimeout(runRepeatTick, delay);
+		repeatTimer = setTimeout(runRepeatTick, getWpmHoldDelay(repeatTickCount));
 	};
 
-	const startRepeat = (mode: 'wpmUp' | 'wpmDown' | 'scrubLeft' | 'scrubRight') => {
+	const startRepeat = (mode: 'wpmUp' | 'wpmDown') => {
 		stopRepeat();
 		repeatMode = mode;
 		repeatTickCount = 0;
@@ -274,12 +246,9 @@ export function mountPlayingGestureBands(
 		const pad = computeBandPad(getFontSize());
 		const layout = computeBandLayout(wordRect, pad, viewport);
 
-		applyRect(hitTop, layout.top);
-		applyRect(hitStrip, layout.middle);
-		applyRect(hitLeft, layout.middleLeft);
-		applyRect(hitCenter, layout.middleCenter);
-		applyRect(hitRight, layout.middleRight);
-		applyRect(hitBottom, layout.bottom);
+		applyRect(hitTop, layout.centerTop);
+		applyRect(hitCenter, layout.centerMiddle);
+		applyRect(hitBottom, layout.centerBottom);
 	};
 
 	const setActive = (value: boolean) => {
@@ -300,12 +269,15 @@ export function mountPlayingGestureBands(
 		startTime: number;
 		longPressFired: boolean;
 		longPressTimer: ReturnType<typeof setTimeout> | null;
-		repeatMode: 'wpmUp' | 'wpmDown' | 'scrubLeft' | 'scrubRight' | null;
+		repeatMode: 'wpmUp' | 'wpmDown' | null;
 	}
 
 	const attachZone = (
 		el: HTMLElement,
-		options: { tap?: () => void; repeatMode?: PointerState['repeatMode'] }
+		options: {
+			tap?: () => void;
+			repeatMode?: PointerState['repeatMode'];
+		}
 	) => {
 		let state: PointerState | null = null;
 
@@ -319,11 +291,20 @@ export function mountPlayingGestureBands(
 		const reset = () => {
 			if (state !== null) {
 				clearLongPress(state);
-				if (state.longPressFired && state.repeatMode !== null) {
-					stopRepeat();
-				}
 			}
 			state = null;
+		};
+
+		const releaseCapture = (pointerId: number) => {
+			if (el.hasPointerCapture(pointerId)) {
+				el.releasePointerCapture(pointerId);
+			}
+		};
+
+		const finishHold = (saved: PointerState) => {
+			if (saved.longPressFired) {
+				stopRepeat();
+			}
 		};
 
 		const onPointerDown = (event: PointerEvent) => {
@@ -363,11 +344,8 @@ export function mountPlayingGestureBands(
 			}
 			const dx = event.clientX - state.startX;
 			const dy = event.clientY - state.startY;
-			if (exceedsTapMovement(dx, dy)) {
+			if (exceedsTapMovement(dx, dy) && !state.longPressFired) {
 				clearLongPress(state);
-				if (state.longPressFired) {
-					stopRepeat();
-				}
 			}
 		};
 
@@ -377,33 +355,33 @@ export function mountPlayingGestureBands(
 			}
 			const saved = state;
 			reset();
-			el.releasePointerCapture(event.pointerId);
+			releaseCapture(event.pointerId);
 
 			if (!active || callbacks.isBlocked()) {
 				return;
 			}
 
 			if (saved.longPressFired) {
-				stopRepeat();
+				finishHold(saved);
 				return;
 			}
 
 			const dx = event.clientX - saved.startX;
 			const dy = event.clientY - saved.startY;
 			const elapsed = Date.now() - saved.startTime;
-			if (
-				options.tap &&
-				!exceedsTapMovement(dx, dy) &&
-				elapsed <= TAP_MAX_MS
-			) {
+			if (options.tap && !exceedsTapMovement(dx, dy) && elapsed <= TAP_MAX_MS) {
 				options.tap();
 			}
 		};
 
 		const onPointerCancel = (event: PointerEvent) => {
-			if (state !== null && event.pointerId === state.pointerId) {
-				reset();
+			if (state === null || event.pointerId !== state.pointerId) {
+				return;
 			}
+			const saved = state;
+			reset();
+			releaseCapture(event.pointerId);
+			finishHold(saved);
 		};
 
 		el.addEventListener('pointerdown', onPointerDown);
@@ -418,13 +396,10 @@ export function mountPlayingGestureBands(
 		});
 	};
 
+	attachZone(hitTop, { repeatMode: 'wpmUp' });
 	attachZone(hitCenter, {
 		tap: () => callbacks.onTapPlayPause()
 	});
-
-	attachZone(hitLeft, { repeatMode: 'scrubLeft' });
-	attachZone(hitRight, { repeatMode: 'scrubRight' });
-	attachZone(hitTop, { repeatMode: 'wpmUp' });
 	attachZone(hitBottom, { repeatMode: 'wpmDown' });
 
 	const resizeObserver = new ResizeObserver(() => {

@@ -54,6 +54,7 @@ export interface ReaderDisplaySettings {
 	showRemainingTime: boolean;
 	showContext: boolean;
 	showProgress: boolean;
+	showCenterGuide: boolean;
 }
 
 export interface ReaderTextOrientationSettings {
@@ -192,7 +193,8 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		display: {
 			showRemainingTime: true,
 			showContext: true,
-			showProgress: true
+			showProgress: true,
+			showCenterGuide: true
 		},
 		defaultPlaybackMode: 'rsvp',
 		progressiveRsvpMaxWordLength: 4,

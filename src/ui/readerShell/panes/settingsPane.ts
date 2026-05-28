@@ -46,8 +46,8 @@ export function mountSettingsPane(
 			const list = guide.createEl('ul');
 			const items = [
 				'While playing: tap center of word strip to play or pause',
-				'While playing: hold left or right of word strip to skip back or forward',
-				'While playing: hold above word strip to increase speed; hold below to decrease',
+				'While playing: hold left or right edge of screen to skip back or forward',
+				'While playing: hold above or below word strip (center) to increase or decrease speed',
 				'While paused: double-tap left or right to skip back or forward',
 				'While paused: long-press word to look up definition',
 				'While paused: tap a context word to define; tap 🔖 to bookmark',
@@ -200,6 +200,11 @@ export function mountSettingsPane(
 		progressCheck.checked = draft.reader.display.showProgress;
 		progressRow.createSpan({ text: 'Show progress bar' });
 
+		const centerGuideRow = right.createDiv({ cls: 'speed-reader-ai-settings-check-row' });
+		const centerGuideCheck = centerGuideRow.createEl('input', { attr: { type: 'checkbox' } });
+		centerGuideCheck.checked = draft.reader.display.showCenterGuide;
+		centerGuideRow.createSpan({ text: 'Show center guide line' });
+
 		const actions = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-actions' });
 		const saveBtn = actions.createEl('button', { cls: 'speed-reader-ai-settings-action-btn', text: 'Save' });
 		const defaultsBtn = actions.createEl('button', {
@@ -237,7 +242,8 @@ export function mountSettingsPane(
 					display: {
 						showRemainingTime: remainingCheck.checked,
 						showContext: contextCheck.checked,
-						showProgress: progressCheck.checked
+						showProgress: progressCheck.checked,
+						showCenterGuide: centerGuideCheck.checked
 					}
 				}
 			};

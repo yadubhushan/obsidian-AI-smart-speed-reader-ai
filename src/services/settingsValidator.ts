@@ -209,7 +209,11 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 					DEFAULT_SETTINGS.reader.display.showRemainingTime
 				),
 				showContext: toBoolean(raw.showContext, DEFAULT_SETTINGS.reader.display.showContext),
-				showProgress: toBoolean(raw.showProgress, DEFAULT_SETTINGS.reader.display.showProgress)
+				showProgress: toBoolean(raw.showProgress, DEFAULT_SETTINGS.reader.display.showProgress),
+				showCenterGuide: toBoolean(
+					isRecord(raw.display) ? raw.display.showCenterGuide : undefined,
+					DEFAULT_SETTINGS.reader.display.showCenterGuide
+				)
 			},
 			defaultPlaybackMode: normalizePlaybackMode(raw.defaultPlaybackMode),
 			progressiveRsvpMaxWordLength: toNumber(
@@ -346,6 +350,10 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			showProgress: toBoolean(
 				firstDefined(displayRaw.showProgress, flat.showProgress),
 				DEFAULT_SETTINGS.reader.display.showProgress
+			),
+			showCenterGuide: toBoolean(
+				firstDefined(displayRaw.showCenterGuide, flat.showCenterGuide),
+				DEFAULT_SETTINGS.reader.display.showCenterGuide
 			)
 		},
 		defaultPlaybackMode: normalizePlaybackMode(

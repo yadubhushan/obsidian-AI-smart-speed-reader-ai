@@ -39,12 +39,14 @@ describe('mobileGestures helpers', () => {
 	});
 
 	describe('isEdgeZone', () => {
-		it('detects outer 8% left and right edges', () => {
+		it('detects outer 20% left and right edges', () => {
 			const r = rect(0, 100);
 			expect(isEdgeZone(5, r)).toBe('left');
-			expect(isEdgeZone(8, r, EDGE_ZONE_RATIO)).toBe('left');
+			expect(isEdgeZone(20, r, EDGE_ZONE_RATIO)).toBe('left');
+			expect(isEdgeZone(21, r)).toBe(null);
 			expect(isEdgeZone(50, r)).toBe(null);
-			expect(isEdgeZone(92, r)).toBe('right');
+			expect(isEdgeZone(79, r)).toBe(null);
+			expect(isEdgeZone(80, r)).toBe('right');
 			expect(isEdgeZone(95, r)).toBe('right');
 		});
 

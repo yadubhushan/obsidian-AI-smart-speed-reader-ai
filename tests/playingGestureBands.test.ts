@@ -4,7 +4,6 @@ import {
 	computeBandLayout,
 	computeBandPad,
 	computeMiddleBandRect,
-	getScrubHoldDelay,
 	getWpmHoldDelay
 } from '../src/ui/readerShell/playingGestureBands';
 
@@ -46,20 +45,17 @@ describe('playingGestureBands helpers', () => {
 	});
 
 	describe('computeBandLayout', () => {
-		it('splits middle strip into 30/40/30 columns', () => {
+		it('gives scrub columns full viewport height and 30% width', () => {
 			const layout = computeBandLayout(wordRect(300, 48), 20, viewport);
-			expect(layout.middleLeft.width).toBe(120);
-			expect(layout.middleCenter.width).toBe(160);
-			expect(layout.middleRight.width).toBe(120);
-			expect(layout.middleCenter.left).toBe(120);
-			expect(layout.middleRight.left).toBe(280);
+			expect(layout.scrubLeft).toEqual({ top: 0, left: 0, width: 120, height: 800 });
+			expect(layout.scrubRight).toEqual({ top: 0, left: 280, width: 120, height: 800 });
 		});
 
-		it('places top and bottom bands around the middle strip', () => {
+		it('narrows WPM and play/pause zones to center 40% column', () => {
 			const layout = computeBandLayout(wordRect(300, 48), 20, viewport);
-			expect(layout.top.height).toBe(280);
-			expect(layout.bottom.top).toBe(368);
-			expect(layout.bottom.height).toBe(432);
+			expect(layout.centerTop).toEqual({ top: 0, left: 120, width: 160, height: 280 });
+			expect(layout.centerMiddle).toEqual({ top: 280, left: 120, width: 160, height: 88 });
+			expect(layout.centerBottom).toEqual({ top: 368, left: 120, width: 160, height: 432 });
 		});
 	});
 
@@ -67,11 +63,16 @@ describe('playingGestureBands helpers', () => {
 		const rect = wordRect(300, 48);
 		const pad = 20;
 
-		it('classifies top, middle columns, and bottom', () => {
-			expect(classifyPlayingZone(200, 100, rect, pad, viewport)).toBe('top');
+		it('classifies left and right scrub at any vertical position', () => {
+			expect(classifyPlayingZone(50, 100, rect, pad, viewport)).toBe('middleLeft');
 			expect(classifyPlayingZone(50, 320, rect, pad, viewport)).toBe('middleLeft');
+			expect(classifyPlayingZone(350, 100, rect, pad, viewport)).toBe('middleRight');
+			expect(classifyPlayingZone(350, 500, rect, pad, viewport)).toBe('middleRight');
+		});
+
+		it('classifies center column by vertical band', () => {
+			expect(classifyPlayingZone(200, 100, rect, pad, viewport)).toBe('top');
 			expect(classifyPlayingZone(200, 320, rect, pad, viewport)).toBe('middleCenter');
-			expect(classifyPlayingZone(350, 320, rect, pad, viewport)).toBe('middleRight');
 			expect(classifyPlayingZone(200, 500, rect, pad, viewport)).toBe('bottom');
 		});
 
@@ -88,12 +89,6 @@ describe('playingGestureBands helpers', () => {
 			expect(getWpmHoldDelay(1)).toBe(250);
 			expect(getWpmHoldDelay(4)).toBe(250);
 			expect(getWpmHoldDelay(5)).toBe(120);
-		});
-
-		it('accelerates scrub hold like edge scrub', () => {
-			expect(getScrubHoldDelay(1)).toBe(150);
-			expect(getScrubHoldDelay(3)).toBe(100);
-			expect(getScrubHoldDelay(6)).toBe(50);
 		});
 	});
 });
