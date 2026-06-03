@@ -4,6 +4,8 @@ export const LEGACY_SPEED_READER_VAULT_ROOT = '.speedreader';
 export interface PluginDataPaths {
 	dataRoot: string;
 	readingStateFile: string;
+	dbDir: string;
+	dbFile: string;
 	readCacheBase: string;
 	bookCacheBase: string;
 }
@@ -24,9 +26,12 @@ function joinPath(...parts: string[]): string {
 /** Plugin-scoped data under `{configDir}/plugins/{pluginId}/data/`. */
 export function createPluginDataPaths(configDir: string, pluginId: string): PluginDataPaths {
 	const dataRoot = joinPath(configDir, 'plugins', pluginId, 'data');
+	const dbDir = 'db';
 	return {
 		dataRoot,
 		readingStateFile: joinPath(dataRoot, 'reading-state.json'),
+		dbDir,
+		dbFile: joinPath(dbDir, 'speed-reader.db'),
 		readCacheBase: joinPath(dataRoot, 'read-cache'),
 		bookCacheBase: joinPath(dataRoot, 'book-cache')
 	};

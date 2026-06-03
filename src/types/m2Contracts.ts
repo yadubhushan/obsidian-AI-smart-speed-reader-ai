@@ -99,6 +99,7 @@ export interface ReadingStateStore {
 	isDirty(): boolean;
 	get(sourcePath: string): ReadingState | undefined;
 	upsert(state: ReadingState): Promise<void>;
+	remove(sourcePath: string): Promise<void>;
 	setLastGlobal(sourcePath: string): Promise<void>;
 	flush(): Promise<void>;
 	onChanged(callback: () => void): () => void;

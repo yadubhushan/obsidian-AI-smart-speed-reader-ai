@@ -55,10 +55,10 @@ export class SpeedReaderAiSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Reading history')
-			.setDesc('Browse in-progress, pinned, and finished reads.')
+			.setName('Reading Dashboard')
+			.setDesc('Browse what to read next, what is pinned, and what you have finished.')
 			.addButton((btn) =>
-				btn.setButtonText('Open reading history').onClick(() => {
+				btn.setButtonText('Open reading dashboard').onClick(() => {
 					(this.app as App & { commands: { executeCommandById(id: string): void } }).commands.executeCommandById(
 						'speed-reader-ai:open-reading-history'
 					);

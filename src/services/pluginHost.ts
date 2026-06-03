@@ -7,6 +7,7 @@ import type { SpeedReaderAiSettings } from '../types';
 /** Minimal plugin surface for M2 service wiring (avoids main.ts circular import). */
 export interface SpeedReaderPluginHost {
 	app: App;
+	manifest: { id: string };
 	settings: SpeedReaderAiSettings;
 	llmModelCatalog: LlmModelCatalog;
 	preparePrompts: PreparePromptSet;

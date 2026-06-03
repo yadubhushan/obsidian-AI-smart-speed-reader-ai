@@ -46,6 +46,10 @@ function copyAssets() {
 	// Bundle artifacts only — never delete or overwrite plugin `data/` (settings cache, read-cache, user config).
 	copyFileSync(join(__dirname, "manifest.json"), join(outDir, "manifest.json"));
 	copyFileSync(join(__dirname, "styles.css"), join(outDir, "styles.css"));
+	copyFileSync(
+		join(__dirname, "node_modules/sql.js/dist/sql-wasm.wasm"),
+		join(outDir, "sql-wasm.wasm"),
+	);
 	copyFileIfMissing(
 		join(__dirname, "config/llm-models.json"),
 		join(outDir, "data/llm-models.json"),
@@ -81,6 +85,7 @@ const buildOptions = {
 		"@lezer/lr",
 		"child_process",
 		"node:child_process",
+		"node:crypto",
 		"node:fs",
 		"node:path",
 		...builtinModules,

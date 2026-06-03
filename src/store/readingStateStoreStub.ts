@@ -34,6 +34,10 @@ export class ReadingStateStoreStub implements ReadingStateStore {
 		// no-op
 	}
 
+	async remove(_sourcePath: string): Promise<void> {
+		// no-op
+	}
+
 	async setLastGlobal(_sourcePath: string): Promise<void> {
 		// no-op
 	}

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -48,107 +48,22 @@ describe('migratePluginData', () => {
 		expect(keys).toEqual(['doc-legacy']);
 	});
 
-	it('copies .speedreader reading-state.json when target is missing', async () => {
-		const adapter = createNodeDataAdapter(rootDir);
-		const vaultDir = join(rootDir, '.speedreader');
-		await mkdir(vaultDir, { recursive: true });
-		const payload = JSON.stringify({
-			lastGlobalSourcePath: 'notes/a.md',
-			sources: {
-				'notes/a.md': {
-					sourcePath: 'notes/a.md',
-					sourceKind: 'note',
-					title: 'A',
-					folder: 'notes',
-					sourceChecksum: 'abc',
-					lastOpenedAt: '2026-05-22T00:00:00.000Z',
-					pinned: false,
-					status: 'in_progress',
-					playbackMode: 'rsvp',
-					position: { sectionId: '00-document', wordIndex: 1 },
-					progressPercent: 1
-				}
-			}
-		});
-		await writeFile(join(vaultDir, 'reading-state.json'), payload);
-
-		const result = await migratePluginData(adapter, configDir(), PLUGIN_ID);
-		expect(result.readingState).toBe(true);
-
-		const raw = await readFile(join(rootDir, dataPaths().readingStateFile), 'utf8');
-		expect(JSON.parse(raw).lastGlobalSourcePath).toBe('notes/a.md');
-	});
-
-	it('copies .speedreader reading-state.json when plugin target exists but is empty', async () => {
-		const adapter = createNodeDataAdapter(rootDir);
-		const vaultDir = join(rootDir, '.speedreader');
-		await mkdir(vaultDir, { recursive: true });
-		const legacyPayload = JSON.stringify({
-			lastGlobalSourcePath: 'docs/Areas/social-skills/note.md',
-			sources: {
-				'docs/Areas/social-skills/note.md': {
-					sourcePath: 'docs/Areas/social-skills/note.md',
-					sourceKind: 'note',
-					title: 'Note',
-					folder: 'docs/Areas/social-skills',
-					sourceChecksum: 'abc',
-					lastOpenedAt: '2026-05-22T00:00:00.000Z',
-					pinned: false,
-					status: 'in_progress',
-					playbackMode: 'rsvp',
-					position: { sectionId: '00-document', wordIndex: 10 },
-					progressPercent: 5
-				}
-			}
-		});
-		await writeFile(join(vaultDir, 'reading-state.json'), legacyPayload);
-
-		const pluginStatePath = join(rootDir, dataPaths().readingStateFile);
-		await mkdir(join(pluginStatePath, '..'), { recursive: true });
-		await writeFile(
-			pluginStatePath,
-			JSON.stringify({ lastGlobalSourcePath: '', sources: {} })
-		);
-
-		const result = await migratePluginData(adapter, configDir(), PLUGIN_ID);
-		expect(result.readingState).toBe(true);
-
-		const raw = await readFile(pluginStatePath, 'utf8');
-		const parsed = JSON.parse(raw) as {
-			lastGlobalSourcePath: string;
-			sources: Record<string, unknown>;
-		};
-		expect(parsed.lastGlobalSourcePath).toBe('docs/Areas/social-skills/note.md');
-		expect(Object.keys(parsed.sources)).toHaveLength(1);
-	});
-
-	it('does not overwrite plugin reading-state when it already has sources', async () => {
+	it('does not copy legacy reading-state.json', async () => {
 		const adapter = createNodeDataAdapter(rootDir);
 		const vaultDir = join(rootDir, '.speedreader');
 		await mkdir(vaultDir, { recursive: true });
 		await writeFile(
 			join(vaultDir, 'reading-state.json'),
 			JSON.stringify({
-				lastGlobalSourcePath: 'legacy/note.md',
-				sources: { 'legacy/note.md': { sourceKind: 'note' } }
-			})
-		);
-
-		const pluginStatePath = join(rootDir, dataPaths().readingStateFile);
-		await mkdir(join(pluginStatePath, '..'), { recursive: true });
-		await writeFile(
-			pluginStatePath,
-			JSON.stringify({
-				lastGlobalSourcePath: 'plugin/note.md',
-				sources: { 'plugin/note.md': { sourceKind: 'note' } }
+				lastGlobalSourcePath: 'notes/a.md',
+				sources: { 'notes/a.md': { sourceKind: 'note' } }
 			})
 		);
 
 		const result = await migratePluginData(adapter, configDir(), PLUGIN_ID);
 		expect(result.readingState).toBe(false);
 
-		const raw = await readFile(pluginStatePath, 'utf8');
-		expect(JSON.parse(raw).lastGlobalSourcePath).toBe('plugin/note.md');
+		expect(await adapter.exists(dataPaths().readingStateFile)).toBe(false);
 	});
 
 	it('does not overwrite existing plugin read-cache', async () => {

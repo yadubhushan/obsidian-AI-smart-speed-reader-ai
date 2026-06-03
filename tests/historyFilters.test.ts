@@ -27,10 +27,10 @@ function noteState(sourcePath: string, overrides: Partial<ReadingState> = {}): R
 }
 
 describe('historyFilters', () => {
-	it('defaults to in progress only', () => {
+	it('defaults to pinned and in progress', () => {
 		expect(defaultHistoryFilters()).toEqual({
 			inProgress: true,
-			pinned: false,
+			pinned: true,
 			finished: false
 		});
 	});

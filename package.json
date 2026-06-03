@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-speed-reader-ai",
-	"version": "1.2.27",
+	"version": "1.2.28",
 	"description": "RSVP-based speed reading for your notes - flash one word at a time with optimal recognition point highlighting.",
 	"main": "main.js",
 	"type": "module",
@@ -17,6 +17,7 @@
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
 		"@types/node": "^22.15.0",
+		"@types/sql.js": "^1.4.11",
 		"esbuild": "^0.28.0",
 		"eslint-plugin-obsidianmd": "^0.2.4",
 		"globals": "^17.5.0",
@@ -30,6 +31,7 @@
 	"dependencies": {
 		"@obsidian-ai-providers/sdk": "^1.7.3",
 		"jszip": "^3.10.1",
-		"obsidian": "latest"
+		"obsidian": "latest",
+		"sql.js": "^1.14.1"
 	}
 }

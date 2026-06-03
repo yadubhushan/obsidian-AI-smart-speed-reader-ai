@@ -35,7 +35,8 @@ export function createPluginServices(
 	const readingStateStore = ReadingStateStoreImpl.create(
 		plugin.app,
 		eventBus,
-		dataPaths.readingStateFile
+		dataPaths.dbFile,
+		plugin.manifest.id
 	);
 	void readingStateStore.load();
 	const epubProcessor = createEpubSourceFormatProcessor(plugin.app);

@@ -32,4 +32,5 @@ jobs:
             main.js
             manifest.json
             styles.css
+            sql-wasm.wasm
           generate_release_notes: true

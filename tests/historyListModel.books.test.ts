@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildBookDashboardSections,
 	buildBookHistoryModel,
 	filterBookRowsBySearch,
 	groupBookRowsByFolder,
@@ -83,7 +84,13 @@ describe('historyListModel books', () => {
 				lastOpenedAt: '2026-05-01T00:00:00.000Z',
 				pinned: false,
 				docKey: 'a',
-				section: 'main'
+				section: 'main',
+				typeLabel: 'Book',
+				lengthLabel: '10 chapters',
+				lastReadLabel: 'Last read 2 days ago',
+				progressLabel: '10% complete',
+				surfaceKind: 'book',
+				isContinueTarget: false
 			},
 			{
 				sourcePath: 'b.epub',
@@ -94,7 +101,13 @@ describe('historyListModel books', () => {
 				lastOpenedAt: '2026-05-10T00:00:00.000Z',
 				pinned: false,
 				docKey: 'b',
-				section: 'main'
+				section: 'main',
+				typeLabel: 'Book',
+				lengthLabel: '12 chapters',
+				lastReadLabel: 'Last read yesterday',
+				progressLabel: '90% complete',
+				surfaceKind: 'book',
+				isContinueTarget: false
 			}
 		];
 
@@ -103,7 +116,7 @@ describe('historyListModel books', () => {
 		expect(sortBookRows(rows, 'lastRead').map((row) => row.title)).toEqual(['Alpha', 'Zebra']);
 	});
 
-	it('filters rows by search query on title or path', () => {
+	it('filters rows by search query on visible metadata only', () => {
 		const rows: BookHistoryRow[] = [
 			{
 				sourcePath: 'books/secret.epub',
@@ -113,7 +126,13 @@ describe('historyListModel books', () => {
 				progressPercent: 0,
 				pinned: false,
 				docKey: 'x',
-				section: 'unread'
+				section: 'unread',
+				typeLabel: 'Book',
+				lengthLabel: '12 chapters',
+				lastReadLabel: 'Not started yet',
+				progressLabel: '0% complete',
+				surfaceKind: 'book',
+				isContinueTarget: false
 			},
 			{
 				sourcePath: 'books/visible.epub',
@@ -123,16 +142,23 @@ describe('historyListModel books', () => {
 				progressPercent: 0,
 				pinned: false,
 				docKey: 'y',
-				section: 'unread'
+				section: 'unread',
+				typeLabel: 'Book',
+				lengthLabel: '5 chapters',
+				lastReadLabel: 'Not started yet',
+				progressLabel: '0% complete',
+				surfaceKind: 'book',
+				isContinueTarget: false
 			}
 		];
 
 		expect(filterBookRowsBySearch(rows, 'visible').map((row) => row.title)).toEqual([
 			'Visible Title'
 		]);
-		expect(filterBookRowsBySearch(rows, 'secret.epub').map((row) => row.title)).toEqual([
+		expect(filterBookRowsBySearch(rows, '12 chapters').map((row) => row.title)).toEqual([
 			'Hidden'
 		]);
+		expect(filterBookRowsBySearch(rows, 'secret.epub')).toEqual([]);
 	});
 
 	it('groups rows by vault folder', () => {
@@ -145,7 +171,13 @@ describe('historyListModel books', () => {
 				progressPercent: 0,
 				pinned: false,
 				docKey: 'a',
-				section: 'unread'
+				section: 'unread',
+				typeLabel: 'Book',
+				lengthLabel: '3 chapters',
+				lastReadLabel: 'Not started yet',
+				progressLabel: '0% complete',
+				surfaceKind: 'book',
+				isContinueTarget: false
 			},
 			{
 				sourcePath: 'b.epub',
@@ -155,7 +187,13 @@ describe('historyListModel books', () => {
 				progressPercent: 0,
 				pinned: false,
 				docKey: 'b',
-				section: 'unread'
+				section: 'unread',
+				typeLabel: 'Book',
+				lengthLabel: '1 chapter',
+				lastReadLabel: 'Not started yet',
+				progressLabel: '0% complete',
+				surfaceKind: 'book',
+				isContinueTarget: false
 			}
 		];
 
@@ -163,5 +201,45 @@ describe('historyListModel books', () => {
 		expect(groups).toHaveLength(2);
 		expect(groups[0]?.folder).toBe('archive');
 		expect(groups[1]?.folder).toBe('books');
+	});
+
+	it('builds pinned, in-progress, up-next, and finished dashboard shelves', async () => {
+		const states: Record<string, ReadingState> = {
+			'books/half.epub': bookState('books/half.epub', {
+				title: 'Half Read',
+				status: 'in_progress',
+				progressPercent: 42,
+				pinned: true,
+				lastOpenedAt: '2026-05-20T10:00:00.000Z'
+			}),
+			'archive/done.epub': bookState('archive/done.epub', {
+				title: 'Finished Book',
+				folder: 'archive',
+				status: 'finished',
+				progressPercent: 100,
+				lastOpenedAt: '2026-05-19T10:00:00.000Z'
+			})
+		};
+
+		const model = await buildBookHistoryModel({
+			entries,
+			getReadingState: (path) => states[path],
+			getCachedIndex: async () => null
+		});
+
+		const sections = buildBookDashboardSections(model, {
+			inProgress: true,
+			pinned: true,
+			finished: true
+		}, '');
+
+		expect(sections.map((section) => section.title)).toEqual([
+			'Pinned',
+			'Up Next',
+			'Finished'
+		]);
+		expect(sections[0]?.rows.map((row) => row.title)).toEqual(['Half Read']);
+		expect(sections[1]?.rows.map((row) => row.title)).toEqual(['unread']);
+		expect(sections[2]?.rows.map((row) => row.title)).toEqual(['Finished Book']);
 	});
 });

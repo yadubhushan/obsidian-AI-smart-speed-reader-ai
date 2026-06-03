@@ -1,7 +1,7 @@
 {
 	"id": "speed-reader-ai",
 	"name": "Speed Reader AI",
-	"version": "1.2.27",
+	"version": "1.2.28",
 	"minAppVersion": "0.15.0",
 	"description": "Read your notes faster, one word at a time.",
 	"author": "yadubhushan",

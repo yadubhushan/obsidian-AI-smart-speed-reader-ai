@@ -12,7 +12,7 @@ export interface HistoryFilterState {
 }
 
 export function defaultHistoryFilters(): HistoryFilterState {
-	return { inProgress: true, pinned: false, finished: false };
+	return { inProgress: true, pinned: true, finished: false };
 }
 
 export interface HistoryRowFilterable {

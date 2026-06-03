@@ -1,3 +1,4 @@
+import { Notice } from 'obsidian';
 import type { BookmarkContextLine } from '../../../bookmarks/bookmarkContextLines';
 import { mountMobileSwipeBack } from '../mobileSwipeBack';
 
@@ -242,8 +243,15 @@ export function mountBookmarksPane(
 			removeBookmarkHandler?.(lineIndex);
 			return;
 		}
+		const wasSelected = selected.has(lineIndex);
 		toggleLineSelected(lineIndex);
 		syncRowSelectionState(row, checkbox, lineIndex);
+		
+		if (!wasSelected) {
+			new Notice('Line selected. Click "Save bookmarks" to confirm.');
+		} else {
+			new Notice('Line removed from selection.');
+		}
 	}
 
 	function scrollCurrentLineIntoView() {

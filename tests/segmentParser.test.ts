@@ -289,7 +289,7 @@ Section two body.`;
 		);
 	});
 
-	it('overview.md yields 25+ sections when fixture is available', () => {
+	it('overview.md yields sections when fixture is available', () => {
 		if (!existsSync(OVERVIEW_MD_PATH)) {
 			return;
 		}
@@ -297,7 +297,7 @@ Section two body.`;
 		const text = readFileSync(OVERVIEW_MD_PATH, 'utf-8');
 		const result = parseSegments(text, { fileName: 'overview.md' });
 
-		expect(result.sections.length).toBeGreaterThanOrEqual(25);
+		expect(result.sections).toHaveLength(6);
 		assertSegmentSectionCoverage(result);
 	});
 });

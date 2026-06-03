@@ -20,7 +20,7 @@ import {
 } from './readingProgress';
 import type { SaveScheduler } from './saveScheduler';
 
-export const PERIODIC_FLUSH_MS = 30_000;
+export const PERIODIC_FLUSH_MS = 5_000;
 
 export interface ReaderSessionHooks {
 	onEngineStateChange?(state: ReaderState, previousIsPlaying: boolean | null): void;
@@ -68,7 +68,7 @@ export function createReadingProgressTracker(
 		}
 		periodicFlushTimer = setInterval(() => {
 			if (lastState?.isPlaying) {
-				void deps.scheduler.flushNow();
+				void persistState(lastState, true);
 			}
 		}, PERIODIC_FLUSH_MS);
 	};

@@ -4,7 +4,6 @@ import {
 	createPluginDataPaths,
 	legacySpeedReaderVaultBookCachePath,
 	legacySpeedReaderVaultReadCachePath,
-	legacySpeedReaderVaultReadingStatePath,
 	type PluginDataPaths
 } from './pluginDataPaths';
 import { ensureFolderPath, ensureParentFolderForFile } from '../utils/vaultAdapterDirs';
@@ -19,10 +18,6 @@ function legacyReadCachePath(configDir: string): string {
 
 function legacyBookCachePath(configDir: string): string {
 	return `${normalizeConfigDir(configDir)}/speed-reader-ai/data/book-cache`;
-}
-
-function legacyReadingStatePath(configDir: string): string {
-	return `${normalizeConfigDir(configDir)}/speed-reader-ai/data/reading-state.json`;
 }
 
 function entryName(entry: string): string {
@@ -96,64 +91,6 @@ async function migrateDirectoryFromSources(
 	return false;
 }
 
-async function migrateReadingStateFromSources(
-	adapter: DataAdapter,
-	toPath: string,
-	fromPaths: string[]
-): Promise<boolean> {
-	if (!(await isReadingStateFileEmptyOnDisk(adapter, toPath))) {
-		return false;
-	}
-
-	for (const fromPath of fromPaths) {
-		if (!(await legacyReadingStateHasSources(adapter, fromPath))) {
-			continue;
-		}
-		await copyFile(adapter, fromPath, toPath);
-		return true;
-	}
-
-	return false;
-}
-
-function isReadingStateFileEmpty(raw: unknown): boolean {
-	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-		return true;
-	}
-	const sources = (raw as Record<string, unknown>).sources;
-	if (typeof sources !== 'object' || sources === null || Array.isArray(sources)) {
-		return true;
-	}
-	return Object.keys(sources).length === 0;
-}
-
-async function isReadingStateFileEmptyOnDisk(
-	adapter: DataAdapter,
-	path: string
-): Promise<boolean> {
-	if (!(await adapter.exists(path))) {
-		return true;
-	}
-	try {
-		const raw = JSON.parse(await adapter.read(path));
-		return isReadingStateFileEmpty(raw);
-	} catch {
-		return true;
-	}
-}
-
-async function legacyReadingStateHasSources(adapter: DataAdapter, path: string): Promise<boolean> {
-	if (!(await adapter.exists(path))) {
-		return false;
-	}
-	try {
-		const raw = JSON.parse(await adapter.read(path));
-		return !isReadingStateFileEmpty(raw);
-	} catch {
-		return false;
-	}
-}
-
 export interface PluginDataMigrationResult {
 	readCache: boolean;
 	bookCache: boolean;
@@ -180,10 +117,6 @@ export async function migratePluginData(
 		legacySpeedReaderVaultBookCachePath(),
 		legacyBookCachePath(configDir)
 	];
-	const readingStateSources = [
-		legacySpeedReaderVaultReadingStatePath(),
-		legacyReadingStatePath(configDir)
-	];
 
 	const readCache = await migrateDirectoryFromSources(
 		adapter,
@@ -197,14 +130,9 @@ export async function migratePluginData(
 		vaultBookCacheSources,
 		listTopLevelFolders
 	);
-	const readingState = await migrateReadingStateFromSources(
-		adapter,
-		paths.readingStateFile,
-		readingStateSources
-	);
+	const readingState = false;
 
 	return { readCache, bookCache, readingState };
 }
 
 export type { PluginDataPaths };
-export { isReadingStateFileEmpty };

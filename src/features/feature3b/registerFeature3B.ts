@@ -13,11 +13,11 @@ export function registerFeature3B(plugin: SpeedReaderAiPlugin, services: PluginS
 		});
 	};
 
-	plugin.addRibbonIcon('library', 'Open reading history', openHistory);
+	plugin.addRibbonIcon('library', 'Open reading dashboard', openHistory);
 
 	plugin.addCommand({
 		id: 'open-reading-history',
-		name: 'Open reading history',
+		name: 'Open reading dashboard',
 		callback: openHistory
 	});
 

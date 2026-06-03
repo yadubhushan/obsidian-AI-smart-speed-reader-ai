@@ -5,8 +5,11 @@ import type { ReadingStateStore } from '../src/types/m2Contracts';
 function createMockStore(): ReadingStateStore {
 	return {
 		load: vi.fn(),
+		reloadFromDisk: vi.fn(),
+		isDirty: vi.fn(() => false),
 		get: vi.fn(),
 		upsert: vi.fn(),
+		remove: vi.fn(),
 		setLastGlobal: vi.fn(),
 		flush: vi.fn().mockResolvedValue(undefined),
 		onChanged: vi.fn(() => () => undefined)

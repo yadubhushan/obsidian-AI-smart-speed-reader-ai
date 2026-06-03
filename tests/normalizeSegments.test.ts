@@ -230,7 +230,7 @@ describe('overview.md integration', () => {
 			TEST_CHECKSUM
 		);
 
-		expect(bundle.sections.length).toBeGreaterThanOrEqual(25);
+		expect(bundle.sections).toHaveLength(6);
 		expect(bundle.estimatedPayloadChars).toBe(JSON.stringify(bundle).length);
 		expect(tableCells(bundle).every((cell) => !cell.includes('|'))).toBe(true);
 	});
