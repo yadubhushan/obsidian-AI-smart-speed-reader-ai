@@ -98,14 +98,6 @@ function renderCardMeta(parent: HTMLElement, row: DashboardRow): void {
 		cls: 'speed-reader-dashboard-card__support',
 		text: row.lengthLabel
 	});
-	meta.createDiv({
-		cls: 'speed-reader-dashboard-card__progress-copy',
-		text: row.progressLabel
-	});
-	meta.createDiv({
-		cls: 'speed-reader-dashboard-card__timestamp',
-		text: row.lastReadLabel
-	});
 }
 
 function renderPinButton(
@@ -244,10 +236,6 @@ export function renderContinueReadingCard(
 	content.createDiv({
 		cls: 'speed-reader-dashboard-hero__secondary',
 		text: 'author' in row && row.author ? row.author : row.lengthLabel
-	});
-	content.createDiv({
-		cls: 'speed-reader-dashboard-hero__timestamp',
-		text: row.lastReadLabel
 	});
 
 	const actions = hero.createDiv({ cls: 'speed-reader-dashboard-hero__actions' });

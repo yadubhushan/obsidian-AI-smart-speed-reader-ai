@@ -53,6 +53,22 @@ export function displayPluginReaderPacingSettings(
 					await plugin.saveSettings();
 				});
 		});
+
+	containerEl.createEl('h3', { text: 'Reading discipline' });
+
+	new Setting(containerEl)
+		.setName('Finish current book before opening another')
+		.setDesc(
+			'Block starting a different EPUB while another book is still in progress.'
+		)
+		.addToggle((toggle) => {
+			toggle
+				.setValue(plugin.settings.reader.requireCompletionBeforeNewBook)
+				.onChange(async (value) => {
+					plugin.settings.reader.requireCompletionBeforeNewBook = value;
+					await plugin.saveSettings();
+				});
+		});
 }
 
 export function displayPluginReaderBookmarkSettings(

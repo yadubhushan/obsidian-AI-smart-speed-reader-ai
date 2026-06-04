@@ -37,6 +37,8 @@ import type { DictionaryLookupOutcome } from '../dictionary/dictionaryTypes';
 import type { DictionarySaveButtonState } from './dictionaryFooter';
 import { mountDictionaryOverlay, type DictionaryOverlayHandle } from './dictionaryOverlay';
 import { applyReaderThemeToElement, readerFontFamily } from './readerShell/readerThemes';
+import { writeTextToClipboard } from '../services/clipboard';
+import { buildReaderContextPrompt } from './readerContextPrompt';
 import { mountReaderHeader, type ReaderHeaderHandle } from './readerShell/readerHeader';
 import { mountReaderControlBar, type ReaderControlBarHandle } from './readerShell/readerControlBar';
 import { mountContextLine, type ContextLineHandle } from './readerShell/contextLine';
@@ -456,6 +458,7 @@ export class SpeedReaderAiModal extends Modal {
 				onWpmDelta: (delta) => this.adjustWpm(delta),
 				onFontDelta: (delta) => this.adjustFontSize(delta),
 				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
+				onCopyContext: () => this.copyCurrentParagraphContextPrompt(),
 				onReadWithoutAi: () => this.onReadWithoutAi(),
 				onPrepare: () => this.onPrepareWithAi(),
 				onClearCache: () => this.onClearDocumentCache(),
@@ -476,6 +479,9 @@ export class SpeedReaderAiModal extends Modal {
 			});
 			this.mobileActionBar.onBookmarkExplorer(() => {
 				void this.bookmarkHandlers?.openBookmarksTab();
+			});
+			this.mobileActionBar.onCopyContext(() => {
+				void this.copyCurrentParagraphContextPrompt();
 			});
 			this.mobileActionBar.onDefine(() => {
 				void this.wordLookupHandlers?.lookupCurrentWord();
@@ -705,6 +711,123 @@ export class SpeedReaderAiModal extends Modal {
 			return this.readerOpen.sourcePath.split('/').pop()?.replace(/\.md$/i, '') || 'Note';
 		}
 		return 'Reading';
+	}
+
+	private buildContextPromptSourceTitle(): string {
+		if (this.readerOpen.kind === 'book') {
+			return this.readerOpen.bookIndex.title || this.readerOpen.sourcePath.split('/').pop() || 'Book';
+		}
+		if (this.readerOpen.kind === 'structured') {
+			return this.readerOpen.sourcePath.split('/').pop()?.replace(/\.md$/i, '') || 'Note';
+		}
+		if (this.readerOpen.kind === 'legacy') {
+			return 'Selected text';
+		}
+		return 'Reading';
+	}
+
+	private buildContextPromptMetadata(state: ReaderState | null): {
+		sourceKind: string;
+		chapterLabel?: string;
+		chapterTitle?: string;
+		sectionProgressLabel?: string;
+	} {
+		if (this.readerOpen.kind === 'book') {
+			const chapterNumber =
+				typeof state?.currentSectionIndex === 'number' ? state.currentSectionIndex + 1 : undefined;
+			const chapterCount = state?.sectionCount;
+			const chapterLabel =
+				typeof chapterNumber === 'number'
+					? `Chapter ${chapterNumber}${typeof chapterCount === 'number' && chapterCount > 0 ? ` of ${chapterCount}` : ''}`
+					: 'Book';
+			return {
+				sourceKind: 'Book',
+				chapterLabel,
+				chapterTitle: state?.sectionTitle?.trim() || undefined,
+				sectionProgressLabel:
+					typeof chapterNumber === 'number'
+						? `Chapter ${chapterNumber}${typeof chapterCount === 'number' && chapterCount > 0 ? ` of ${chapterCount}` : ''}`
+						: undefined
+			};
+		}
+
+		if (this.readerOpen.kind === 'structured') {
+			const sectionNumber =
+				typeof state?.currentSectionIndex === 'number' ? state.currentSectionIndex + 1 : undefined;
+			const sectionCount = state?.sectionCount;
+			return {
+				sourceKind: 'Note',
+				chapterLabel:
+					typeof sectionNumber === 'number'
+						? `Section ${sectionNumber}${typeof sectionCount === 'number' && sectionCount > 0 ? ` of ${sectionCount}` : ''}`
+						: undefined,
+				chapterTitle: state?.sectionTitle?.trim() || undefined,
+				sectionProgressLabel:
+					typeof sectionNumber === 'number'
+						? `Section ${sectionNumber}${typeof sectionCount === 'number' && sectionCount > 0 ? ` of ${sectionCount}` : ''}`
+						: undefined
+			};
+		}
+
+		if (this.readerOpen.kind === 'legacy') {
+			return {
+				sourceKind: 'Selected text'
+			};
+		}
+
+		return {
+			sourceKind: 'Reading'
+		};
+	}
+
+	private async copyCurrentParagraphContextPrompt(): Promise<void> {
+		if (this.readerOpen.kind === 'preferences') {
+			new Notice('Open a document before copying paragraph context.');
+			return;
+		}
+
+		const snapshot = this.engine.getBookmarkContextSnapshot();
+		const currentLine = snapshot.lines[snapshot.currentLineIndex];
+		if (!currentLine) {
+			new Notice('No paragraph context is available yet.');
+			return;
+		}
+
+		const currentParagraphIndex = currentLine.paragraphIndex;
+		const previousParagraphs: string[] = [];
+		for (let paragraphIndex = Math.max(0, currentParagraphIndex - 3); paragraphIndex < currentParagraphIndex; paragraphIndex++) {
+			const paragraphText = this.engine.getParagraphTextForParagraphIndex(paragraphIndex).trim();
+			if (paragraphText.length > 0) {
+				previousParagraphs.push(paragraphText);
+			}
+		}
+
+		const currentParagraph = this.engine
+			.getParagraphTextForParagraphIndex(currentParagraphIndex)
+			.trim();
+		if (!currentParagraph) {
+			new Notice('No paragraph context is available yet.');
+			return;
+		}
+		const metadata = this.buildContextPromptMetadata(this.state);
+
+		const prompt = buildReaderContextPrompt({
+			sourceTitle: this.buildContextPromptSourceTitle(),
+			sourceKind: metadata.sourceKind,
+			chapterLabel: metadata.chapterLabel,
+			chapterTitle: metadata.chapterTitle,
+			sectionProgressLabel: metadata.sectionProgressLabel,
+			currentParagraph,
+			previousParagraphs
+		});
+
+		try {
+			await writeTextToClipboard(prompt, this.ownerDoc);
+			new Notice('Paragraph context prompt copied to clipboard.');
+		} catch (error) {
+			console.error('speed-reader-ai: failed to copy paragraph context prompt', error);
+			new Notice('Could not copy paragraph context prompt.');
+		}
 	}
 
 	private buildBookmarksPaneSubtitle(state: ReaderState | null): string {

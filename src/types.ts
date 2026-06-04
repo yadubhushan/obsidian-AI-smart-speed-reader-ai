@@ -88,6 +88,7 @@ export interface ReaderSettings {
 	contextWords: number;
 	/** Font size (px) for paused context line subtitle */
 	contextLineFontSize: number;
+	requireCompletionBeforeNewBook: boolean;
 }
 
 export interface AiSettings {
@@ -202,7 +203,8 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		enableMicropause: true,
 		micropauseIntensity: 1.5,
 		contextWords: 8,
-		contextLineFontSize: 18
+		contextLineFontSize: 18,
+		requireCompletionBeforeNewBook: false
 	},
 	ai: {
 		llmBackend: 'auto',

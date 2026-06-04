@@ -230,6 +230,10 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			contextLineFontSize: toNumber(
 				raw.contextLineFontSize,
 				DEFAULT_SETTINGS.reader.contextLineFontSize
+			),
+			requireCompletionBeforeNewBook: toBoolean(
+				raw.requireCompletionBeforeNewBook,
+				DEFAULT_SETTINGS.reader.requireCompletionBeforeNewBook
 			)
 		},
 		ai: {
@@ -399,6 +403,13 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			),
 			12,
 			32
+		),
+		requireCompletionBeforeNewBook: toBoolean(
+			firstDefined(
+				r.requireCompletionBeforeNewBook,
+				flat.requireCompletionBeforeNewBook
+			),
+			DEFAULT_SETTINGS.reader.requireCompletionBeforeNewBook
 		)
 	};
 }

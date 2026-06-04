@@ -14,6 +14,7 @@ export interface ReaderControlBarHandlers {
 	onWpmDelta: (delta: number) => void;
 	onFontDelta: (delta: number) => void;
 	onPlaybackModeChange: (mode: PlaybackMode) => void;
+	onCopyContext: () => void | Promise<void>;
 	onReadWithoutAi: () => void;
 	onPrepare: () => void | Promise<void>;
 	onClearCache: () => void | Promise<void>;
@@ -64,6 +65,14 @@ export function mountReaderControlBar(
 				}
 			})
 		: null;
+	const copyContextBtn = row.createEl('button', {
+		cls: 'speed-reader-ai-control-btn',
+		text: 'Copy context',
+		attr: {
+			type: 'button',
+			'aria-label': 'Copy paragraph context prompt'
+		}
+	});
 
 	const navGroup = row.createDiv({ cls: 'speed-reader-ai-control-nav-group' });
 	const prevBtn = navGroup.createEl('button', {
@@ -85,6 +94,9 @@ export function mountReaderControlBar(
 	fontInc.addEventListener('click', () => handlers.onFontDelta(3));
 	wpmDec.addEventListener('click', () => handlers.onWpmDelta(-25));
 	wpmInc.addEventListener('click', () => handlers.onWpmDelta(25));
+	copyContextBtn.addEventListener('click', () => {
+		void handlers.onCopyContext();
+	});
 	prevBtn.addEventListener('click', () => handlers.onPrevSection?.());
 	nextBtn.addEventListener('click', () => handlers.onNextSection?.());
 

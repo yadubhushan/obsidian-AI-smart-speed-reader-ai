@@ -1,5 +1,6 @@
 /**
- * Must stay in sync with plato-the-ai-tutor/src/study-loop/docKey.ts
+ * Must stay in sync with the archived tutor reference at
+ * vault/code/my-obsidian-plugins/_archived/plato-the-ai-tutor/src/study-loop/docKey.ts
  */
 export function studyLoopDocKey(sourcePath: string): string {
 	const normalized = sourcePath.replace(/\\/g, '/').replace(/^\/+/, '').trim();

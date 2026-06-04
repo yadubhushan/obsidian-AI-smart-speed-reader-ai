@@ -132,4 +132,19 @@ describe('migrateFlatSettings', () => {
 	it('defaults showCenterGuide to true for empty input', () => {
 		expect(validateSettings(null, defaultCatalog).reader.display.showCenterGuide).toBe(true);
 	});
+
+	it('defaults requireCompletionBeforeNewBook to false and preserves explicit true', () => {
+		expect(validateSettings(null, defaultCatalog).reader.requireCompletionBeforeNewBook).toBe(false);
+		expect(
+			validateSettings(
+				{
+					reader: {
+						...DEFAULT_SETTINGS.reader,
+						requireCompletionBeforeNewBook: true
+					}
+				},
+				defaultCatalog
+			).reader.requireCompletionBeforeNewBook
+		).toBe(true);
+	});
 });

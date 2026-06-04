@@ -1,4 +1,4 @@
-import type { App } from 'obsidian';
+import { Notice, type App } from 'obsidian';
 import type { EventBus } from '../services/eventBus';
 import { openBookReader } from './openBookReader';
 import { openNoteReader } from './openNoteReader';
@@ -41,6 +41,19 @@ export class ReaderGateImpl implements ReaderGate {
 
 		if (this.activeModal && this.activeSourcePath === request.sourcePath) {
 			this.activeModal.contentEl.focus();
+			return;
+		}
+
+		const blockedBook = await this.resolveBlockingBook(request);
+		if (blockedBook) {
+			if (this.activeSourcePath === blockedBook.sourcePath && this.activeModal) {
+				this.activeModal.contentEl.focus();
+			}
+			new Notice(
+				`Finish "${blockedBook.title}" first (${Math.round(
+					blockedBook.progressPercent
+				)}%) or disable the setting in Speed Reader AI.`
+			);
 			return;
 		}
 
@@ -145,6 +158,28 @@ export class ReaderGateImpl implements ReaderGate {
 			this.activeSourcePath = null;
 		}
 		this.deps.eventBus.emit('reader-closed', { sourcePath });
+	}
+
+	private async resolveBlockingBook(request: OpenReaderRequest) {
+		if (
+			request.sourceKind !== 'book' ||
+			!this.deps.getSettings().reader.requireCompletionBeforeNewBook
+		) {
+			return null;
+		}
+
+		await this.deps.readingStateStore.reloadFromDisk();
+		const file = await this.deps.readingStateStore.load();
+		const blockingStates = Object.values(file.sources)
+			.filter(
+				(state) =>
+					state.sourceKind === 'book' &&
+					state.sourcePath !== request.sourcePath &&
+					state.status === 'in_progress'
+			)
+			.sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt));
+
+		return blockingStates[0] ?? null;
 	}
 }
 
