@@ -1069,6 +1069,9 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private applyReaderTheme(): void {
+		applyReaderThemeToElement(this.containerEl, this.settings.reader.colorScheme, {
+			themePreset: this.settings.reader.themePreset
+		});
 		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme, {
 			themePreset: this.settings.reader.themePreset
 		});
@@ -2003,6 +2006,18 @@ export class SpeedReaderAiModal extends Modal {
 	private adjustWpmFromPlayingBand(delta: number) {
 		const newWpm = this.adjustWpm(delta, { quiet: true });
 		this.playingGestureBands?.showSpeedLabel(newWpm);
+	}
+
+	showContinuousReadingMilestone(elapsedMs: number): void {
+		const minutes = Math.max(1, Math.floor(elapsedMs / 60_000));
+		this.playingGestureBands?.showBannerMessage(
+			`Nice. You have read continuously for ${minutes} min.`,
+			'milestone'
+		);
+	}
+
+	showReadingHabitLogged(): void {
+		this.playingGestureBands?.showBannerMessage('Logged reading', 'milestone');
 	}
 
 	private setReaderWpm(wpm: number) {

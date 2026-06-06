@@ -17,9 +17,12 @@ import {
 } from '../../reader/readingProgressTracker';
 import type { ReaderSessionHooks } from '../../reader/readingProgressTracker';
 
+import { hasReadingHabitLoggedToday, logReadingSessionToJournal } from '../../services/journalLogger';
+
 export interface ActiveReadingSession {
 	modal: SpeedReaderAiModal;
 	tracker: ReadingProgressTracker;
+	title: string;
 }
 
 let activeSession: ActiveReadingSession | null = null;
@@ -109,10 +112,21 @@ function attachSession(deps: {
 		engine: deps.engine,
 		readingStateStore: deps.services.readingStateStore,
 		scheduler,
-		existingState: deps.existingState
+		existingState: deps.existingState,
+		onReadingHabitThreshold: async (playedMs) => {
+			const logged = await logReadingSessionToJournal(deps.modal.app, playedMs, deps.title, playedMs);
+			if (logged) {
+				deps.modal.showReadingHabitLogged();
+			}
+		},
+		onContinuousReadingMilestone: async (elapsedMs) => {
+			if (!(await hasReadingHabitLoggedToday(deps.modal.app))) {
+				deps.modal.showContinuousReadingMilestone(elapsedMs);
+			}
+		}
 	});
 
-	activeSession = { modal: deps.modal, tracker };
+	activeSession = { modal: deps.modal, tracker, title: deps.title };
 	return tracker.getHooks();
 }
 

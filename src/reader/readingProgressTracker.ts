@@ -21,6 +21,9 @@ import {
 import type { SaveScheduler } from './saveScheduler';
 
 export const PERIODIC_FLUSH_MS = 5_000;
+export const READING_HABIT_THRESHOLD_MS = 2 * 60 * 1000;
+export const PAUSED_READING_SESSION_INVALIDATION_MS = 5 * 60 * 1000;
+export const CONTINUOUS_READING_MILESTONE_MS = PAUSED_READING_SESSION_INVALIDATION_MS;
 
 export interface ReaderSessionHooks {
 	onEngineStateChange?(state: ReaderState, previousIsPlaying: boolean | null): void;
@@ -40,10 +43,12 @@ export interface ReadingProgressTrackerDeps {
 	readingStateStore: ReadingStateStore;
 	scheduler: SaveScheduler;
 	existingState?: ReadingState;
+	onContinuousReadingMilestone?: (elapsedMs: number) => void;
+	onReadingHabitThreshold?: (playedMs: number) => void;
 }
 
 export interface ReadingProgressTracker {
-	destroy(): Promise<void>;
+	destroy(): Promise<{ playedMs: number; longestContinuousPlayedMs: number }>;
 	getHooks(): ReaderSessionHooks;
 }
 
@@ -54,12 +59,114 @@ export function createReadingProgressTracker(
 	let lastSectionId: string | null = null;
 	let lastState: ReaderState | null = null;
 	let periodicFlushTimer: ReturnType<typeof setInterval> | null = null;
+	let continuousMilestoneTimer: ReturnType<typeof setTimeout> | null = null;
+	let readingHabitThresholdTimer: ReturnType<typeof setTimeout> | null = null;
+	let pausedInvalidationTimer: ReturnType<typeof setTimeout> | null = null;
+	let playedMs = 0;
+	let activeSessionPlayedMs = 0;
+	let longestContinuousPlayedMs = 0;
+	let playStartedAt: number | null = null;
+	let continuousMilestoneShown = false;
+	let readingHabitThresholdLogged = false;
+
+	const maybeEmitReadingHabitThreshold = () => {
+		if (readingHabitThresholdLogged || activeSessionPlayedMs < READING_HABIT_THRESHOLD_MS) {
+			return;
+		}
+		readingHabitThresholdLogged = true;
+		deps.onReadingHabitThreshold?.(activeSessionPlayedMs);
+	};
+
+	const finalizeCurrentPlayStretch = (endedAt: number) => {
+		if (playStartedAt === null) {
+			return;
+		}
+		const stretchMs = Math.max(0, endedAt - playStartedAt);
+		playedMs += stretchMs;
+		activeSessionPlayedMs += stretchMs;
+		longestContinuousPlayedMs = Math.max(longestContinuousPlayedMs, stretchMs);
+		playStartedAt = null;
+		maybeEmitReadingHabitThreshold();
+	};
 
 	const clearPeriodicFlush = () => {
 		if (periodicFlushTimer !== null) {
 			clearInterval(periodicFlushTimer);
 			periodicFlushTimer = null;
 		}
+	};
+
+	const clearContinuousMilestoneTimer = () => {
+		if (continuousMilestoneTimer !== null) {
+			clearTimeout(continuousMilestoneTimer);
+			continuousMilestoneTimer = null;
+		}
+	};
+
+	const clearReadingHabitThresholdTimer = () => {
+		if (readingHabitThresholdTimer !== null) {
+			clearTimeout(readingHabitThresholdTimer);
+			readingHabitThresholdTimer = null;
+		}
+	};
+
+	const clearPausedInvalidationTimer = () => {
+		if (pausedInvalidationTimer !== null) {
+			clearTimeout(pausedInvalidationTimer);
+			pausedInvalidationTimer = null;
+		}
+	};
+
+	const schedulePausedInvalidation = () => {
+		clearPausedInvalidationTimer();
+		pausedInvalidationTimer = setTimeout(() => {
+			activeSessionPlayedMs = 0;
+			pausedInvalidationTimer = null;
+		}, PAUSED_READING_SESSION_INVALIDATION_MS);
+	};
+
+	const resetContinuousStretchMilestone = () => {
+		clearContinuousMilestoneTimer();
+		continuousMilestoneShown = false;
+	};
+
+	const emitContinuousMilestone = () => {
+		if (continuousMilestoneShown || playStartedAt === null) {
+			return;
+		}
+		continuousMilestoneShown = true;
+		clearContinuousMilestoneTimer();
+		deps.onContinuousReadingMilestone?.(Date.now() - playStartedAt);
+	};
+
+	const scheduleContinuousMilestone = () => {
+		if (playStartedAt === null || continuousMilestoneShown) {
+			return;
+		}
+		clearContinuousMilestoneTimer();
+		continuousMilestoneTimer = setTimeout(() => {
+			emitContinuousMilestone();
+		}, CONTINUOUS_READING_MILESTONE_MS);
+	};
+
+	const scheduleReadingHabitThreshold = () => {
+		clearReadingHabitThresholdTimer();
+		if (playStartedAt === null || readingHabitThresholdLogged) {
+			return;
+		}
+		const remainingMs = READING_HABIT_THRESHOLD_MS - activeSessionPlayedMs;
+		if (remainingMs <= 0) {
+			maybeEmitReadingHabitThreshold();
+			return;
+		}
+		readingHabitThresholdTimer = setTimeout(() => {
+			readingHabitThresholdTimer = null;
+			if (playStartedAt === null || readingHabitThresholdLogged) {
+				return;
+			}
+			finalizeCurrentPlayStretch(Date.now());
+			playStartedAt = Date.now();
+		}, remainingMs);
 	};
 
 	const startPeriodicFlush = () => {
@@ -147,6 +254,20 @@ export function createReadingProgressTracker(
 	const hooks: ReaderSessionHooks = {
 		onEngineStateChange(state, previousIsPlaying) {
 			lastState = state;
+
+			if (state.isPlaying && playStartedAt === null) {
+				clearPausedInvalidationTimer();
+				playStartedAt = Date.now();
+				resetContinuousStretchMilestone();
+				scheduleContinuousMilestone();
+				scheduleReadingHabitThreshold();
+			} else if (!state.isPlaying && playStartedAt !== null) {
+				finalizeCurrentPlayStretch(Date.now());
+				clearReadingHabitThresholdTimer();
+				resetContinuousStretchMilestone();
+				schedulePausedInvalidation();
+			}
+
 			const sectionId = resolveSectionId(state);
 			if (sectionId && lastSectionId !== null && sectionId !== lastSectionId) {
 				void persistState(state, true);
@@ -182,11 +303,18 @@ export function createReadingProgressTracker(
 		},
 
 		async destroy() {
+			if (playStartedAt !== null) {
+				finalizeCurrentPlayStretch(Date.now());
+			}
 			clearPeriodicFlush();
+			clearContinuousMilestoneTimer();
+			clearReadingHabitThresholdTimer();
+			clearPausedInvalidationTimer();
 			deps.scheduler.destroy();
 			if (lastState) {
 				await persistState(lastState, true);
 			}
+			return { playedMs, longestContinuousPlayedMs };
 		}
 	};
 }

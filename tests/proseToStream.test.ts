@@ -43,4 +43,9 @@ describe('proseToStream', () => {
 		const tokens = proseToWordTokens("charming.''That");
 		expect(tokens.map((token) => token.text)).toEqual(['charming.', "''That"]);
 	});
+
+	it('proseToWordTokens strips numeric footnote markers glued after sentence punctuation', () => {
+		const tokens = proseToWordTokens('asphodel.3 She dragged');
+		expect(tokens.map((token) => token.text)).toEqual(['asphodel.', 'She', 'dragged']);
+	});
 });

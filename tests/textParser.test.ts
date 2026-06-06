@@ -237,6 +237,21 @@ describe('parseDocument', () => {
 		]);
 	});
 
+	it('strips numeric footnote markers glued after sentence punctuation', () => {
+		expect(splitGluedWordToken('asphodel.3')).toEqual(['asphodel.']);
+		const doc = parseDocument('I had buried my romance in a bed of asphodel.3 She dragged it out.');
+		const asphodel = doc.words.find(w => w.word === 'asphodel');
+		expect(asphodel).toBeDefined();
+		expect(asphodel!.punctuation).toBe('.');
+		expect(doc.words.map(w => w.word)).not.toContain('asphodel.3');
+		expect(doc.words.map(w => w.word)).not.toContain('3');
+	});
+
+	it('does not strip decimals or version-like tokens as footnotes', () => {
+		expect(splitGluedWordToken('3.14')).toEqual(['3.14']);
+		expect(splitGluedWordToken('v1.2')).toEqual(['v1.2']);
+	});
+
 	it('preserves comma punctuation', () => {
 		const doc = parseDocument('Hello, world');
 		expect(doc.words[0]!.word).toBe('Hello');

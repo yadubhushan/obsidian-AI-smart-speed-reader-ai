@@ -2485,27 +2485,42 @@
 	-webkit-tap-highlight-color: transparent;
 }
 
-.speed-reader-ai-playing-speed-label {
+.speed-reader-ai-playing-top-banner {
 	position: fixed;
-	top: calc(50% + env(safe-area-inset-top, 0px) * 0.5);
+	top: max(calc(env(safe-area-inset-top, 0px) + 1rem), 25vh);
 	left: 50%;
-	transform: translate(-50%, -50%);
+	transform: translateX(-50%);
 	padding: 0.45rem 0.85rem;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--background-primary) 88%, transparent);
-	border: 1px solid var(--background-modifier-border);
-	color: var(--interactive-accent);
+	border-radius: 0.75rem;
+	background: color-mix(in srgb, var(--sr-reading-surface, var(--background-primary)) 88%, transparent);
+	border: 1px solid var(--sr-reading-line, var(--background-modifier-border));
+	color: var(--sr-text, var(--text-normal));
 	font-size: 1.05rem;
 	font-weight: 600;
-	letter-spacing: 0.02em;
+	letter-spacing: 0;
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity 0.15s ease;
-	z-index: 6;
+	z-index: 30;
+	width: max-content;
+	max-width: min(88vw, 24rem);
+	text-align: center;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: normal;
+	line-height: 1.25;
 }
 
-.speed-reader-ai-playing-speed-label.is-visible {
+.speed-reader-ai-playing-top-banner.is-visible {
 	opacity: 1;
+}
+
+.speed-reader-theme-dark .speed-reader-ai-playing-top-banner {
+	color: #ffffff;
+}
+
+.speed-reader-theme-light .speed-reader-ai-playing-top-banner {
+	color: #000000;
 }
 
 .speed-reader-ai-shell.is-preferences-only.speed-reader-ai-mobile .speed-reader-ai-mobile-top-bar,

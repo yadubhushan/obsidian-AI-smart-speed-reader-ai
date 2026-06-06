@@ -107,7 +107,7 @@ function stripMarkdown(text: string): string {
 
 export function splitGluedWordToken(raw: string): string[] {
 	const result: string[] = [];
-	let remaining = raw;
+	let remaining = stripTerminalFootnoteMarker(raw);
 	const gluedBoundary =
 		/^(.+?[.!?])(['"\u2019\u201d\u201c]*(?:['\u2018"]?[A-Z]|['\u2018"\u201c']).*)$/;
 
@@ -122,6 +122,14 @@ export function splitGluedWordToken(raw: string): string[] {
 	}
 
 	return result.filter((part) => part.length > 0);
+}
+
+function stripTerminalFootnoteMarker(raw: string): string {
+	const match = raw.match(/^([A-Za-z][A-Za-z'\u2019-]*[.!?](?:["'\u2019\u201d)\]]?)?)(\d{1,3})$/);
+	if (!match?.[1]) {
+		return raw;
+	}
+	return match[1];
 }
 
 function tokenize(text: string): { raw: string; start: number }[] {

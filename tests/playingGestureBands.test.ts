@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	classifyPlayingZone,
 	computeBandLayout,
 	computeBandPad,
 	computeMiddleBandRect,
+	createTopBannerController,
 	getWpmHoldDelay
 } from '../src/ui/readerShell/playingGestureBands';
 
@@ -24,6 +25,14 @@ function wordRect(top: number, height: number, left = 0, width = 200): DOMRect {
 const viewport = { width: 400, height: 800 };
 
 describe('playingGestureBands helpers', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	describe('computeBandPad', () => {
 		it('scales with font size and respects minimum', () => {
 			expect(computeBandPad(24)).toBe(16);
@@ -89,6 +98,48 @@ describe('playingGestureBands helpers', () => {
 			expect(getWpmHoldDelay(1)).toBe(250);
 			expect(getWpmHoldDelay(4)).toBe(250);
 			expect(getWpmHoldDelay(5)).toBe(120);
+		});
+	});
+
+	describe('top banner controller', () => {
+		it('queues milestone messages until the current WPM banner hides', () => {
+			const visible: Array<string | null> = [];
+			const controller = createTopBannerController({
+				render: (message) => visible.push(message?.text ?? null),
+				scheduleHide: (callback, delayMs) => setTimeout(callback, delayMs),
+				clearHide: (timer) => clearTimeout(timer)
+			});
+
+			controller.showSpeedLabel(250);
+			controller.showMessage('Nice. You have read continuously for 5 min.', 'milestone');
+
+			expect(visible).toEqual(['250 WPM']);
+
+			vi.advanceTimersByTime(2000);
+			expect(visible).toEqual([
+				'250 WPM',
+				null,
+				'Nice. You have read continuously for 5 min.'
+			]);
+		});
+
+		it('updates WPM immediately while keeping the shared banner path', () => {
+			const visible: Array<string | null> = [];
+			const controller = createTopBannerController({
+				render: (message) => visible.push(message?.text ?? null),
+				scheduleHide: (callback, delayMs) => setTimeout(callback, delayMs),
+				clearHide: (timer) => clearTimeout(timer)
+			});
+
+			controller.showMessage('Nice. You have read continuously for 5 min.', 'milestone');
+			controller.showSpeedLabel(200);
+			controller.showSpeedLabel(205);
+
+			expect(visible).toEqual([
+				'Nice. You have read continuously for 5 min.',
+				'200 WPM',
+				'205 WPM'
+			]);
 		});
 	});
 });

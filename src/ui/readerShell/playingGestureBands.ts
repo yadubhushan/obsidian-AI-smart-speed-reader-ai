@@ -9,7 +9,8 @@ export const WPM_HOLD_TICK_SLOW_MS = 250;
 export const WPM_HOLD_TICK_FAST_MS = 120;
 export const WPM_HOLD_ACCELERATE_AFTER_TICKS = 5;
 export const WPM_HOLD_DELTA = 5;
-export const SPEED_LABEL_HIDE_MS = 1200;
+export const SPEED_LABEL_HIDE_MS = 2000;
+export type TopBannerKind = 'wpm' | 'milestone';
 
 export type PlayingZone =
 	| 'top'
@@ -37,6 +38,82 @@ export interface PlayingGestureBandsHandle {
 	setActive(active: boolean): void;
 	updateLayout(): void;
 	showSpeedLabel(wpm: number): void;
+	showBannerMessage(message: string, kind?: TopBannerKind): void;
+}
+
+interface TopBannerMessage {
+	kind: TopBannerKind;
+	text: string;
+}
+
+interface TopBannerControllerDeps {
+	render: (message: TopBannerMessage | null) => void;
+	scheduleHide: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+	clearHide: (timer: ReturnType<typeof setTimeout>) => void;
+	hideMs?: number;
+}
+
+export interface TopBannerController {
+	clear(): void;
+	showMessage(text: string, kind?: TopBannerKind): void;
+	showSpeedLabel(wpm: number): void;
+}
+
+export function createTopBannerController(deps: TopBannerControllerDeps): TopBannerController {
+	const hideMs = deps.hideMs ?? SPEED_LABEL_HIDE_MS;
+	let current: TopBannerMessage | null = null;
+	let hideTimer: ReturnType<typeof setTimeout> | null = null;
+	const queue: TopBannerMessage[] = [];
+
+	const clearHideTimer = () => {
+		if (hideTimer !== null) {
+			deps.clearHide(hideTimer);
+			hideTimer = null;
+		}
+	};
+
+	const showNow = (message: TopBannerMessage) => {
+		current = message;
+		deps.render(message);
+		clearHideTimer();
+		hideTimer = deps.scheduleHide(() => {
+			current = null;
+			deps.render(null);
+			const next = queue.shift();
+			if (next) {
+				showNow(next);
+			}
+		}, hideMs);
+	};
+
+	return {
+		clear() {
+			clearHideTimer();
+			current = null;
+			queue.length = 0;
+			deps.render(null);
+		},
+		showMessage(text: string, kind: TopBannerKind = 'milestone') {
+			const nextMessage: TopBannerMessage = { text, kind };
+			if (!current) {
+				showNow(nextMessage);
+				return;
+			}
+
+			if (kind === 'wpm') {
+				if (current.kind === 'milestone') {
+					queue.unshift(current);
+				}
+				showNow(nextMessage);
+				return;
+			}
+
+			queue.push(nextMessage);
+		},
+		showSpeedLabel(wpm: number) {
+			this.showMessage(`${Math.round(wpm)} WPM`, 'wpm');
+		}
+	};
 }
 
 export function computeBandPad(fontSize: number): number {
@@ -171,7 +248,7 @@ export function mountPlayingGestureBands(
 	callbacks: PlayingGestureBandsCallbacks
 ): PlayingGestureBandsHandle {
 	const overlay = overlayHost.createDiv({ cls: 'speed-reader-ai-playing-gesture-overlay' });
-	const speedLabel = overlay.createDiv({ cls: 'speed-reader-ai-playing-speed-label' });
+	const topBanner = overlay.createDiv({ cls: 'speed-reader-ai-playing-top-banner' });
 	const hitTop = overlay.createDiv({ cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-top' });
 	const hitCenter = overlay.createDiv({
 		cls: 'speed-reader-ai-playing-hit speed-reader-ai-playing-hit-center'
@@ -181,31 +258,28 @@ export function mountPlayingGestureBands(
 	});
 
 	let active = false;
-	let speedLabelTimer: ReturnType<typeof setTimeout> | null = null;
 	let repeatTimer: ReturnType<typeof setTimeout> | null = null;
 	let repeatTickCount = 0;
 	let repeatMode: 'wpmUp' | 'wpmDown' | null = null;
 
 	const cleanups: Array<() => void> = [];
-
-	const clearSpeedLabelTimer = () => {
-		if (speedLabelTimer !== null) {
-			clearTimeout(speedLabelTimer);
-			speedLabelTimer = null;
-		}
-	};
-
-	const hideSpeedLabel = () => {
-		clearSpeedLabelTimer();
-		speedLabel.removeClass('is-visible');
-	};
-
-	const showSpeedLabel = (wpm: number) => {
-		speedLabel.setText(`${Math.round(wpm)} WPM`);
-		speedLabel.addClass('is-visible');
-		clearSpeedLabelTimer();
-		speedLabelTimer = setTimeout(() => hideSpeedLabel(), SPEED_LABEL_HIDE_MS);
-	};
+	const topBannerController = createTopBannerController({
+		render: (message) => {
+			if (!message) {
+				topBanner.setText('');
+				topBanner.removeClass('is-visible');
+				topBanner.removeClass('is-wpm');
+				topBanner.removeClass('is-milestone');
+				return;
+			}
+			topBanner.setText(message.text);
+			topBanner.toggleClass('is-wpm', message.kind === 'wpm');
+			topBanner.toggleClass('is-milestone', message.kind === 'milestone');
+			topBanner.addClass('is-visible');
+		},
+		scheduleHide: (callback, delayMs) => setTimeout(callback, delayMs),
+		clearHide: (timer) => clearTimeout(timer)
+	});
 
 	const stopRepeat = () => {
 		if (repeatTimer !== null) {
@@ -256,7 +330,7 @@ export function mountPlayingGestureBands(
 		overlay.toggleClass('is-active', value);
 		if (!value) {
 			stopRepeat();
-			hideSpeedLabel();
+			topBannerController.clear();
 		} else {
 			updateLayout();
 		}
@@ -421,7 +495,7 @@ export function mountPlayingGestureBands(
 	return {
 		destroy() {
 			stopRepeat();
-			hideSpeedLabel();
+			topBannerController.clear();
 			for (const cleanup of cleanups) {
 				cleanup();
 			}
@@ -429,6 +503,8 @@ export function mountPlayingGestureBands(
 		},
 		setActive,
 		updateLayout,
-		showSpeedLabel
+		showSpeedLabel: (wpm: number) => topBannerController.showSpeedLabel(wpm),
+		showBannerMessage: (message: string, kind: TopBannerKind = 'milestone') =>
+			topBannerController.showMessage(message, kind)
 	};
 }
