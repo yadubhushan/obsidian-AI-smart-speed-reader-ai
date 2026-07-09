@@ -47,6 +47,7 @@ import {
 	type ReaderTabDockHandle,
 	type ReaderTabId
 } from './readerShell/readerTabDock';
+import { mountPrepareOverlay, type PrepareOverlayHandle } from './readerShell/prepareOverlay';
 import { mountContentPane, type ContentPaneHandle } from './readerShell/panes/contentPane';
 import { mountSettingsPane, type SettingsPaneHandle } from './readerShell/panes/settingsPane';
 import { mountShortcutsPane, type ShortcutsPaneHandle } from './readerShell/panes/shortcutsPane';
@@ -116,7 +117,6 @@ const INTER_SECTION_MS = 5000;
 const FONT_SIZE_STEP = 3;
 const MIN_FONT_SIZE = 24;
 const MAX_FONT_SIZE = 200;
-const PREPARE_OVERLAY_PRIMARY = 'Preparing with AI…';
 
 function formatRemainingTime(milliseconds: number): string {
 	const totalSeconds = Math.ceil(milliseconds / 1000);
@@ -219,8 +219,7 @@ export class SpeedReaderAiModal extends Modal {
 	private headingSelectWrapper!: HTMLElement;
 	private sectionSelect!: HTMLSelectElement;
 	private interSectionOverlayEl: HTMLElement | null = null;
-	private prepareOverlayEl: HTMLElement | null = null;
-	private prepareOverlaySublineEl: HTMLElement | null = null;
+	private prepareOverlay: PrepareOverlayHandle | null = null;
 	private interSectionTimer: number | null = null;
 	private interSectionCountdownInterval: number | null = null;
 
@@ -356,17 +355,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.interSectionOverlayEl = this.wordContainer.createDiv({
 			cls: 'speed-reader-ai-inter-section-overlay is-hidden'
 		});
-		this.prepareOverlayEl = this.wordContainer.createDiv({
-			cls: 'speed-reader-ai-prepare-overlay is-hidden'
-		});
-		this.prepareOverlayEl.createDiv({ cls: 'speed-reader-ai-prepare-spinner' });
-		this.prepareOverlayEl.createSpan({
-			cls: 'speed-reader-ai-prepare-title',
-			text: PREPARE_OVERLAY_PRIMARY
-		});
-		this.prepareOverlaySublineEl = this.prepareOverlayEl.createSpan({
-			cls: 'speed-reader-ai-prepare-subline is-hidden'
-		});
+		this.prepareOverlay = mountPrepareOverlay(this.wordContainer);
 		this.contextLine = mountContextLine(this.homePaneEl, {
 			enableClickActivation: !this.mobileReader,
 			lineOnlyContext: this.mobileReader,
@@ -626,7 +615,8 @@ export class SpeedReaderAiModal extends Modal {
 		this.mobileDictionarySheet?.destroy();
 		this.mobileDictionarySheet = null;
 		this.clearInterSectionTimer();
-		this.hidePrepareOverlay();
+		this.prepareOverlay?.destroy();
+		this.prepareOverlay = null;
 		this.modePicker?.destroy();
 		this.versionPicker?.destroy();
 		this.prepareControls?.destroy();
@@ -1421,7 +1411,7 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.engine.pause();
 		this.prepareControls?.setPreparing(true);
-		this.showPrepareOverlay();
+		this.prepareOverlay?.show();
 		const llm = new SettingsBackedLlmClient({
 			getSettings: () => this.settings,
 			getAiProviders: () => getAiProvidersApi(this.app)
@@ -1438,7 +1428,7 @@ export class SpeedReaderAiModal extends Modal {
 						llmModel: this.settings.ai.llmModel
 					},
 					onPrepareProgress: (info) => {
-						this.updatePrepareOverlay(
+						this.prepareOverlay?.update(
 							`Batch ${info.current} of ${info.total}`
 						);
 					}
@@ -1461,7 +1451,7 @@ export class SpeedReaderAiModal extends Modal {
 			);
 		} finally {
 			this.prepareControls?.setPreparing(false);
-			this.hidePrepareOverlay();
+			this.prepareOverlay?.hide();
 		}
 	}
 
@@ -1619,7 +1609,7 @@ export class SpeedReaderAiModal extends Modal {
 		if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
 			return true;
 		}
-		if (!this.prepareOverlayEl?.hasClass('is-hidden')) {
+		if (this.prepareOverlay?.isVisible() ?? true) {
 			return true;
 		}
 		if (this.isDictionaryOverlayVisible()) {
@@ -1693,29 +1683,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.dismissDictionaryUi(true);
 		this.refocusContent();
 		return true;
-	}
-
-	private showPrepareOverlay() {
-		if (!this.prepareOverlayEl) return;
-		this.updatePrepareOverlay();
-		this.prepareOverlayEl.removeClass('is-hidden');
-	}
-
-	private hidePrepareOverlay() {
-		if (!this.prepareOverlayEl) return;
-		this.prepareOverlayEl.addClass('is-hidden');
-		this.updatePrepareOverlay();
-	}
-
-	private updatePrepareOverlay(subline?: string) {
-		if (!this.prepareOverlaySublineEl) return;
-		if (subline) {
-			this.prepareOverlaySublineEl.removeClass('is-hidden');
-			this.prepareOverlaySublineEl.setText(subline);
-		} else {
-			this.prepareOverlaySublineEl.addClass('is-hidden');
-			this.prepareOverlaySublineEl.setText('');
-		}
 	}
 
 	private registerKeyboardHandlers() {
@@ -2214,7 +2181,7 @@ export class SpeedReaderAiModal extends Modal {
 					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
 						return true;
 					}
-					if (!this.prepareOverlayEl?.hasClass('is-hidden')) {
+					if (this.prepareOverlay?.isVisible() ?? true) {
 						return true;
 					}
 					return this.mobileMenuOpen || this.mobileCoachOpen;
@@ -2265,7 +2232,7 @@ export class SpeedReaderAiModal extends Modal {
 					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
 						return true;
 					}
-					if (!this.prepareOverlayEl?.hasClass('is-hidden')) {
+					if (this.prepareOverlay?.isVisible() ?? true) {
 						return true;
 					}
 					return (
