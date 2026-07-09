@@ -1,8 +1,8 @@
-import type { DataAdapter } from 'obsidian';
 import {
 	ensureLlmModelsConfigFile,
 	loadLlmModelCatalogFromPath,
 	migrateLlmModelsConfigIfNeeded,
+	type DataAdapterLike,
 	type LlmModelCatalog
 } from '../llm/llmModelCatalog';
 import {
@@ -21,7 +21,7 @@ export interface LlmConfigState {
 
 /** Migrates, ensures, and loads the on-disk LLM model catalog and prepare prompt files. */
 export async function bootstrapLlmConfig(
-	adapter: DataAdapter,
+	adapter: DataAdapterLike,
 	configDir: string,
 	pluginId: string
 ): Promise<LlmConfigState> {
