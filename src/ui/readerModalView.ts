@@ -48,6 +48,10 @@ import {
 	type ReaderTabId
 } from './readerShell/readerTabDock';
 import { mountPrepareOverlay, type PrepareOverlayHandle } from './readerShell/prepareOverlay';
+import {
+	mountInterSectionOverlay,
+	type InterSectionOverlayHandle
+} from './readerShell/interSectionOverlay';
 import { mountContentPane, type ContentPaneHandle } from './readerShell/panes/contentPane';
 import { mountSettingsPane, type SettingsPaneHandle } from './readerShell/panes/settingsPane';
 import { mountShortcutsPane, type ShortcutsPaneHandle } from './readerShell/panes/shortcutsPane';
@@ -113,7 +117,6 @@ import {
 	type SidebarSnapshot
 } from './readerShell/desktopFocusChrome';
 
-const INTER_SECTION_MS = 5000;
 const FONT_SIZE_STEP = 3;
 const MIN_FONT_SIZE = 24;
 const MAX_FONT_SIZE = 200;
@@ -218,10 +221,8 @@ export class SpeedReaderAiModal extends Modal {
 	private structuredBarEl!: HTMLElement;
 	private headingSelectWrapper!: HTMLElement;
 	private sectionSelect!: HTMLSelectElement;
-	private interSectionOverlayEl: HTMLElement | null = null;
+	private interSectionOverlay: InterSectionOverlayHandle | null = null;
 	private prepareOverlay: PrepareOverlayHandle | null = null;
-	private interSectionTimer: number | null = null;
-	private interSectionCountdownInterval: number | null = null;
 
 	private modePicker: ModePickerHandle | null = null;
 	private versionPicker: VersionPickerHandle | null = null;
@@ -352,9 +353,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.applyCenterGuideVisibility();
 
 		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
-		this.interSectionOverlayEl = this.wordContainer.createDiv({
-			cls: 'speed-reader-ai-inter-section-overlay is-hidden'
-		});
+		this.interSectionOverlay = mountInterSectionOverlay(this.wordContainer);
 		this.prepareOverlay = mountPrepareOverlay(this.wordContainer);
 		this.contextLine = mountContextLine(this.homePaneEl, {
 			enableClickActivation: !this.mobileReader,
@@ -614,7 +613,8 @@ export class SpeedReaderAiModal extends Modal {
 		this.dictionaryOverlay = null;
 		this.mobileDictionarySheet?.destroy();
 		this.mobileDictionarySheet = null;
-		this.clearInterSectionTimer();
+		this.interSectionOverlay?.destroy();
+		this.interSectionOverlay = null;
 		this.prepareOverlay?.destroy();
 		this.prepareOverlay = null;
 		this.modePicker?.destroy();
@@ -1518,95 +1518,15 @@ export class SpeedReaderAiModal extends Modal {
 		const nextLabel = isBook ? 'Next chapter' : 'Next section';
 		const nextTitle = sections[nextIndex]?.title ?? nextLabel;
 		this.engine.pause();
-		this.showInterSectionOverlay(nextLabel, nextTitle, () => {
+		this.interSectionOverlay?.show(nextLabel, nextTitle, () => {
 			this.engine.nextSection();
 			this.notifySectionChange();
 			this.startPlayback();
 		});
 	}
 
-	private showInterSectionOverlay(
-		nextLabel: string,
-		nextTitle: string,
-		onContinue: () => void
-	) {
-		if (!this.interSectionOverlayEl) return;
-		this.clearInterSectionTimer();
-		this.interSectionOverlayEl.empty();
-		this.interSectionOverlayEl.removeClass('is-hidden');
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-label',
-			text: nextLabel
-		});
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-title',
-			text: nextTitle
-		});
-		this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-done',
-			text: 'Finished'
-		});
-		const countdownSeconds = Math.round(INTER_SECTION_MS / 1000);
-		const countdownEl = this.interSectionOverlayEl.createSpan({
-			cls: 'speed-reader-ai-inter-section-countdown'
-		});
-		const setCountdownText = (seconds: number) => {
-			countdownEl.setText(
-				seconds === 1
-					? 'Starting next in 1 second…'
-					: `Starting next in ${seconds} seconds…`
-			);
-		};
-		setCountdownText(countdownSeconds);
-		const skip = this.interSectionOverlayEl.createEl('button', {
-			cls: 'speed-reader-ai-btn speed-reader-ai-btn-secondary',
-			text: 'Continue now'
-		});
-		skip.addEventListener('click', () => this.dismissInterSectionOverlay(onContinue), {
-			once: true
-		});
-
-		let remaining = countdownSeconds;
-		this.interSectionCountdownInterval = window.setInterval(() => {
-			remaining -= 1;
-			if (remaining <= 0) {
-				this.clearInterSectionCountdownInterval();
-				return;
-			}
-			setCountdownText(remaining);
-		}, 1000);
-
-		this.interSectionTimer = window.setTimeout(() => {
-			this.dismissInterSectionOverlay(onContinue);
-		}, INTER_SECTION_MS);
-	}
-
-	private dismissInterSectionOverlay(onContinue: () => void) {
-		if (this.interSectionOverlayEl?.hasClass('is-hidden')) {
-			return;
-		}
-		this.clearInterSectionTimer();
-		this.interSectionOverlayEl?.addClass('is-hidden');
-		onContinue();
-	}
-
-	private clearInterSectionCountdownInterval() {
-		if (this.interSectionCountdownInterval !== null) {
-			window.clearInterval(this.interSectionCountdownInterval);
-			this.interSectionCountdownInterval = null;
-		}
-	}
-
-	private clearInterSectionTimer() {
-		this.clearInterSectionCountdownInterval();
-		if (this.interSectionTimer !== null) {
-			window.clearTimeout(this.interSectionTimer);
-			this.interSectionTimer = null;
-		}
-	}
-
 	private isInputBlockedByOverlay(): boolean {
-		if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
+		if (this.interSectionOverlay?.isVisible() ?? true) {
 			return true;
 		}
 		if (this.prepareOverlay?.isVisible() ?? true) {
@@ -2178,7 +2098,7 @@ export class SpeedReaderAiModal extends Modal {
 				},
 				onWpmDelta: (delta) => this.adjustWpmFromPlayingBand(delta),
 				isBlocked: () => {
-					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
+					if (this.interSectionOverlay?.isVisible() ?? true) {
 						return true;
 					}
 					if (this.prepareOverlay?.isVisible() ?? true) {
@@ -2229,7 +2149,7 @@ export class SpeedReaderAiModal extends Modal {
 				onEdgeHoldStart: (side) => this.startEdgeScrub(side),
 				onEdgeHoldEnd: () => this.stopEdgeScrub(),
 				isBlocked: () => {
-					if (!this.interSectionOverlayEl?.hasClass('is-hidden')) {
+					if (this.interSectionOverlay?.isVisible() ?? true) {
 						return true;
 					}
 					if (this.prepareOverlay?.isVisible() ?? true) {
