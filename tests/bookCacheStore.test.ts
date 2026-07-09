@@ -110,4 +110,31 @@ describe('BookCacheStore', () => {
 		expect(second.title).toBe('Version Two');
 		expect(second.sourceChecksum).not.toBe(first.sourceChecksum);
 	});
+
+	it('returns captured cache when the source EPUB has been deleted', async () => {
+		const bytes = await buildMinimalEpubBytes({ title: 'Captured Book' });
+		const adapter = createNodeDataAdapter(rootDir);
+		await adapter.writeBinary(sourcePath, bytes);
+
+		const app = createMockApp(rootDir, sourcePath, bytes);
+
+		const eventBus = new EventBus();
+		const onUpdated = vi.fn();
+		eventBus.on('book-cache-updated', onUpdated);
+		const paths = createPluginDataPaths(app.vault.configDir, 'speed-reader-ai');
+		const store = new BookCacheStoreImpl(
+			app,
+			createEpubSourceFormatProcessor(app),
+			eventBus,
+			paths.bookCacheBase
+		);
+
+		const captured = await store.ensureParsed(sourcePath);
+		await adapter.remove(sourcePath);
+		const reopened = await store.ensureParsed(sourcePath);
+
+		expect(reopened.title).toBe('Captured Book');
+		expect(reopened.sourceChecksum).toBe(captured.sourceChecksum);
+		expect(onUpdated).toHaveBeenCalledTimes(1);
+	});
 });

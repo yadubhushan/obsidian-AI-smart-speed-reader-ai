@@ -34,6 +34,9 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 	private loaded = false;
 	private changedCallbacks = new Set<() => void>();
 	private pendingChangedPaths = new Set<string>();
+	private pendingDeletedPaths = new Set<string>();
+	private lastGlobalDirty = false;
+	private flushQueue = Promise.resolve();
 
 	constructor(
 		private readonly app: App,
@@ -126,6 +129,7 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 
 	async upsert(state: ReadingState): Promise<void> {
 		this.file.sources[state.sourcePath] = state;
+		this.pendingDeletedPaths.delete(state.sourcePath);
 		this.markDirty(state.sourcePath);
 	}
 
@@ -135,14 +139,17 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 			return;
 		}
 		delete this.file.sources[sourcePath];
+		this.pendingDeletedPaths.add(sourcePath);
 		if (this.file.lastGlobalSourcePath === sourcePath) {
 			this.file.lastGlobalSourcePath = '';
+			this.lastGlobalDirty = true;
 		}
 		this.markDirty(sourcePath);
 	}
 
 	async setLastGlobal(sourcePath: string): Promise<void> {
 		this.file.lastGlobalSourcePath = sourcePath;
+		this.lastGlobalDirty = true;
 		this.markDirty(sourcePath);
 	}
 
@@ -151,29 +158,46 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 			return;
 		}
 
-		const adapter = this.app.vault.adapter;
-		const { db } = await this.openDatabase();
-		try {
-			writeFileToDatabase(db, this.file);
-			await ensureParentFolderForFile(adapter, this.dbPath);
-			await adapter.writeBinary(this.dbPath, databaseToArrayBuffer(db));
-		} finally {
-			db.close();
-		}
+		await this.enqueueFlush(async () => {
+			if (!this.dirty) {
+				return;
+			}
 
-		const changedPaths = [...this.pendingChangedPaths];
-		this.pendingChangedPaths.clear();
-		this.dirty = false;
+			const adapter = this.app.vault.adapter;
+			const changedPaths = [...this.pendingChangedPaths];
+			const deletedPaths = new Set(this.pendingDeletedPaths);
+			const preferLocalLastGlobal = this.lastGlobalDirty;
+			const localFile = normalizeFile(this.file);
+			const { db } = await this.openDatabase();
+			try {
+				const diskFile = readFileFromDatabase(db);
+				const { merged } = mergeReadingStateFiles(localFile, diskFile, {
+					deletedSourcePaths: deletedPaths,
+					preferLocalLastGlobal
+				});
+				writeFileToDatabase(db, merged);
+				await ensureParentFolderForFile(adapter, this.dbPath);
+				await adapter.writeBinary(this.dbPath, databaseToArrayBuffer(db));
+				this.file = merged;
+			} finally {
+				db.close();
+			}
 
-		for (const callback of this.changedCallbacks) {
-			callback();
-		}
+			this.pendingChangedPaths.clear();
+			this.pendingDeletedPaths.clear();
+			this.lastGlobalDirty = false;
+			this.dirty = false;
 
-		for (const sourcePath of changedPaths) {
-			this.eventBus.emit('reading-state-changed', { sourcePath });
-		}
+			for (const callback of this.changedCallbacks) {
+				callback();
+			}
 
-		this.eventBus.emit('reading-state-flushed', {});
+			for (const sourcePath of changedPaths) {
+				this.eventBus.emit('reading-state-changed', { sourcePath });
+			}
+
+			this.eventBus.emit('reading-state-flushed', {});
+		});
 	}
 
 	onChanged(callback: () => void): () => void {
@@ -186,6 +210,15 @@ export class ReadingStateStoreImpl implements ReadingStateStore {
 	private markDirty(sourcePath: string): void {
 		this.dirty = true;
 		this.pendingChangedPaths.add(sourcePath);
+	}
+
+	private enqueueFlush<T>(flush: () => Promise<T>): Promise<T> {
+		const next = this.flushQueue.then(flush, flush);
+		this.flushQueue = next.then(
+			() => undefined,
+			() => undefined
+		);
+		return next;
 	}
 
 	private async openDatabase(): Promise<{ db: SqliteDatabase; existed: boolean }> {

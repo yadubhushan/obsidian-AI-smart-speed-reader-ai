@@ -328,6 +328,126 @@ describe('ReadingStateStore', () => {
 		expect(store.isDirty()).toBe(true);
 	});
 
+
+	it('flush merges synced disk writes instead of overwriting them', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(
+			app,
+			eventBus,
+			paths.dbFile,
+		);
+		await store.load();
+		await store.upsert(sampleState('books/a.epub', '2026-05-21T00:00:00.000Z', 12));
+
+		await writeSqliteReadingState(app, paths.dbFile, {
+			lastGlobalSourcePath: 'books/b.epub',
+			sources: {
+				'books/b.epub': sampleState('books/b.epub', '2026-05-22T00:00:00.000Z', 99)
+			}
+		});
+
+		await store.flush();
+
+		const parsed = await readSqliteReadingState(app, paths.dbFile);
+		expect(parsed.sources['books/a.epub']?.position.wordIndex).toBe(12);
+		expect(parsed.sources['books/b.epub']?.position.wordIndex).toBe(99);
+	});
+
+	it('flush keeps newer synced state over stale local state for the same source', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		await writeSqliteReadingState(app, paths.dbFile, {
+			lastGlobalSourcePath: 'books/a.epub',
+			sources: {
+				'books/a.epub': sampleState('books/a.epub', '2026-05-21T00:00:00.000Z', 12)
+			}
+		});
+
+		const store = ReadingStateStoreImpl.create(
+			app,
+			eventBus,
+			paths.dbFile,
+		);
+		await store.load();
+		await store.upsert(sampleState('books/a.epub', '2026-05-21T12:00:00.000Z', 24));
+
+		await writeSqliteReadingState(app, paths.dbFile, {
+			lastGlobalSourcePath: 'books/a.epub',
+			sources: {
+				'books/a.epub': sampleState('books/a.epub', '2026-05-22T00:00:00.000Z', 99)
+			}
+		});
+
+		await store.flush();
+
+		const parsed = await readSqliteReadingState(app, paths.dbFile);
+		expect(parsed.sources['books/a.epub']?.position.wordIndex).toBe(99);
+		expect(store.get('books/a.epub')?.position.wordIndex).toBe(99);
+	});
+
+	it('flush honors explicit local deletes while preserving other synced entries', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		await writeSqliteReadingState(app, paths.dbFile, {
+			lastGlobalSourcePath: 'books/a.epub',
+			sources: {
+				'books/a.epub': sampleState('books/a.epub', '2026-05-21T00:00:00.000Z', 12)
+			}
+		});
+
+		const store = ReadingStateStoreImpl.create(
+			app,
+			eventBus,
+			paths.dbFile,
+		);
+		await store.load();
+		await store.remove('books/a.epub');
+
+		await writeSqliteReadingState(app, paths.dbFile, {
+			lastGlobalSourcePath: 'books/b.epub',
+			sources: {
+				'books/a.epub': sampleState('books/a.epub', '2026-05-22T00:00:00.000Z', 99),
+				'books/b.epub': sampleState('books/b.epub', '2026-05-22T00:00:00.000Z', 50)
+			}
+		});
+
+		await store.flush();
+
+		const parsed = await readSqliteReadingState(app, paths.dbFile);
+		expect(parsed.sources['books/a.epub']).toBeUndefined();
+		expect(parsed.sources['books/b.epub']?.position.wordIndex).toBe(50);
+	});
+
+	it('flush preserves explicit local lastGlobalSourcePath during synced source merges', async () => {
+		const app = createMockApp(rootDir);
+		const eventBus = new EventBus();
+		const paths = createPluginDataPaths(app.vault.configDir, PLUGIN_ID);
+		const store = ReadingStateStoreImpl.create(
+			app,
+			eventBus,
+			paths.dbFile,
+		);
+		await store.load();
+		await store.setLastGlobal('notes/current.md');
+
+		await writeSqliteReadingState(app, paths.dbFile, {
+			lastGlobalSourcePath: 'books/b.epub',
+			sources: {
+				'books/b.epub': sampleState('books/b.epub', '2026-05-22T00:00:00.000Z', 99)
+			}
+		});
+
+		await store.flush();
+
+		const parsed = await readSqliteReadingState(app, paths.dbFile);
+		expect(parsed.lastGlobalSourcePath).toBe('notes/current.md');
+		expect(parsed.sources['books/b.epub']?.position.wordIndex).toBe(99);
+	});
+
 	it('ignores legacy JSON when sqlite is missing', async () => {
 		const app = createMockApp(rootDir);
 		const eventBus = new EventBus();

@@ -67,6 +67,11 @@ export interface ReaderAutoStartSettings {
 	seconds: number;
 }
 
+export interface ReaderColorOverrides {
+	focusWord: string;
+	centerCharacter: string;
+}
+
 export interface ReaderSettings {
 	font: ReaderFontOption;
 	fontSize: number;
@@ -74,6 +79,7 @@ export interface ReaderSettings {
 	chunkSize: number;
 	colorScheme: ReaderColorScheme;
 	themePreset: ReaderThemePresetId;
+	colors: ReaderColorOverrides;
 	autoStart: ReaderAutoStartSettings;
 	autoCloseOnCompletion: boolean;
 	textOrientation: ReaderTextOrientationSettings;
@@ -188,6 +194,10 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		chunkSize: 1,
 		colorScheme: 'dark',
 		themePreset: 'vintage-amber',
+		colors: {
+			focusWord: '',
+			centerCharacter: ''
+		},
 		autoStart: { enabled: false, seconds: 3 },
 		autoCloseOnCompletion: false,
 		textOrientation: { rtl: false, autoDetect: true },

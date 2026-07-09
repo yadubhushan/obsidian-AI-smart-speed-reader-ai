@@ -68,6 +68,39 @@ export function displayPluginReaderPacingSettings(
 					plugin.settings.reader.requireCompletionBeforeNewBook = value;
 					await plugin.saveSettings();
 				});
+	});
+}
+
+export function displayPluginReaderAppearanceSettings(
+	host: PluginReaderSettingsHost,
+	containerEl: HTMLElement
+): void {
+	const { plugin } = host;
+
+	containerEl.createEl('h3', { text: 'Appearance' });
+
+	new Setting(containerEl)
+		.setName('Focus word color')
+		.setDesc('Color for the non-center letters of the active word.')
+		.addColorPicker((picker) => {
+			picker
+				.setValue(plugin.settings.reader.colors.focusWord || '#ffffff')
+				.onChange(async (value) => {
+					plugin.settings.reader.colors.focusWord = value;
+					await plugin.saveSettings();
+				});
+		});
+
+	new Setting(containerEl)
+		.setName('Center character color')
+		.setDesc('Color for the central highlighted character in the active word.')
+		.addColorPicker((picker) => {
+			picker
+				.setValue(plugin.settings.reader.colors.centerCharacter || '#ff8c00')
+				.onChange(async (value) => {
+					plugin.settings.reader.colors.centerCharacter = value;
+					await plugin.saveSettings();
+				});
 		});
 }
 

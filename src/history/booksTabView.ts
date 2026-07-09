@@ -14,6 +14,7 @@ import {
 	renderReadingShelf
 } from './dashboardCards';
 import { deleteHistoryItem } from './historyDeleteActions';
+import type { EpubVaultEntry, ReadingStateFile } from '../types/m2Contracts';
 
 export interface BooksTabViewHandle {
 	destroy(): void;
@@ -24,6 +25,24 @@ export interface BooksTabViewDeps {
 	app: App;
 	services: PluginServices;
 	context: HistoryModalContext;
+}
+
+function buildBookEntriesWithCachedState(
+	entries: EpubVaultEntry[],
+	stateFile: ReadingStateFile
+): EpubVaultEntry[] {
+	const bySourcePath = new Map(entries.map((entry) => [entry.sourcePath, entry]));
+	for (const state of Object.values(stateFile.sources)) {
+		if (state.sourceKind !== 'book' || bySourcePath.has(state.sourcePath)) {
+			continue;
+		}
+		bySourcePath.set(state.sourcePath, {
+			sourcePath: state.sourcePath,
+			title: state.title,
+			folder: state.folder
+		});
+	}
+	return Array.from(bySourcePath.values());
 }
 
 export function renderBooksTab(
@@ -73,7 +92,11 @@ export function renderBooksTab(
 		listHost.empty();
 		renderLoadingSkeletonCards(listHost, 3);
 
-		const entries = services.epubVaultIndex.getAll();
+		const stateFile = await services.readingStateStore.load();
+		const entries = buildBookEntriesWithCachedState(
+			services.epubVaultIndex.getAll(),
+			stateFile
+		);
 		if (entries.length === 0) {
 			listHost.empty();
 			renderEmptyStateCard(

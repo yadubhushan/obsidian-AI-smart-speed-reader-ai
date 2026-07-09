@@ -158,6 +158,20 @@ export function mountSettingsPane(
 		}
 		schemeSelect.value = draft.reader.colorScheme;
 
+		left.createEl('label', { text: 'Focus word color' });
+		const focusWordColorInput = left.createEl('input', {
+			cls: 'speed-reader-ai-settings-input',
+			attr: { type: 'color' }
+		});
+		focusWordColorInput.value = draft.reader.colors.focusWord || '#ffffff';
+
+		left.createEl('label', { text: 'Center character color' });
+		const centerCharacterColorInput = left.createEl('input', {
+			cls: 'speed-reader-ai-settings-input',
+			attr: { type: 'color' }
+		});
+		centerCharacterColorInput.value = draft.reader.colors.centerCharacter || '#ff8c00';
+
 		right.createEl('h4', { text: 'Auto start (seconds)' });
 		const autoStartRow = right.createDiv({ cls: 'speed-reader-ai-settings-check-row' });
 		const autoStartCheck = autoStartRow.createEl('input', { attr: { type: 'checkbox' } });
@@ -230,6 +244,10 @@ export function mountSettingsPane(
 					progressiveRsvpMaxWordLength: Number(progressiveRsvpInput.value),
 					colorScheme: schemeSelect.value as SpeedReaderAiSettings['reader']['colorScheme'],
 					themePreset: selectedThemePreset,
+					colors: {
+						focusWord: focusWordColorInput.value,
+						centerCharacter: centerCharacterColorInput.value
+					},
 					autoStart: {
 						enabled: autoStartCheck.checked,
 						seconds: Number(autoStartSeconds.value)

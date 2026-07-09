@@ -1,5 +1,6 @@
 import { Notice } from 'obsidian';
 import type { BookmarkContextLine } from '../../../bookmarks/bookmarkContextLines';
+import { MOBILE_ROUTE_LABELS } from '../mobileNavigation';
 import { mountMobileSwipeBack } from '../mobileSwipeBack';
 
 export interface BookmarksPaneContext {
@@ -115,35 +116,54 @@ export function mountBookmarksPane(
 		cls: 'speed-reader-ai-pane speed-reader-ai-pane-bookmarks is-hidden'
 	});
 
-	const headerCard = pane.createDiv({ cls: 'speed-reader-ai-bookmarks-header-card' });
-	const headerTop = headerCard.createDiv({ cls: 'speed-reader-ai-bookmarks-header-top' });
 	let backBtn: HTMLButtonElement | null = null;
+	let titleEl: HTMLElement | null = null;
+	let subtitleEl: HTMLElement | null = null;
+	let playBtn: HTMLButtonElement | null = null;
+	let openObsidianLink: HTMLButtonElement;
+
 	if (isMobile) {
-		backBtn = headerTop.createEl('button', {
+		const mobileHeader = pane.createDiv({
+			cls: 'speed-reader-ai-mobile-stack-header speed-reader-ai-bookmarks-mobile-header'
+		});
+		backBtn = mobileHeader.createEl('button', {
 			cls: 'speed-reader-ai-mobile-stack-back',
 			text: '‹',
 			attr: { type: 'button', 'aria-label': 'Back to reading' }
 		});
+		mobileHeader.createDiv({
+			cls: 'speed-reader-ai-mobile-stack-title',
+			text: MOBILE_ROUTE_LABELS.bookmarks
+		});
+		const mobileActions = pane.createDiv({ cls: 'speed-reader-ai-bookmarks-mobile-actions' });
+		openObsidianLink = mobileActions.createEl('button', {
+			cls: 'speed-reader-ai-bookmarks-open-link',
+			text: 'Open in Obsidian',
+			attr: { type: 'button' }
+		});
+	} else {
+		const headerCard = pane.createDiv({ cls: 'speed-reader-ai-bookmarks-header-card' });
+		const headerTop = headerCard.createDiv({ cls: 'speed-reader-ai-bookmarks-header-top' });
+		const headerText = headerTop.createDiv({ cls: 'speed-reader-ai-bookmarks-header-text' });
+		titleEl = headerText.createDiv({
+			cls: 'speed-reader-ai-bookmarks-header-title',
+			text: 'Reading'
+		});
+		subtitleEl = headerText.createDiv({
+			cls: 'speed-reader-ai-bookmarks-header-subtitle',
+			text: ''
+		});
+		playBtn = headerTop.createEl('button', {
+			cls: 'speed-reader-ai-bookmarks-header-play',
+			text: '▶ Play',
+			attr: { type: 'button' }
+		});
+		openObsidianLink = headerCard.createEl('button', {
+			cls: 'speed-reader-ai-bookmarks-open-link',
+			text: 'Open in Obsidian',
+			attr: { type: 'button' }
+		});
 	}
-	const headerText = headerTop.createDiv({ cls: 'speed-reader-ai-bookmarks-header-text' });
-	const titleEl = headerText.createDiv({
-		cls: 'speed-reader-ai-bookmarks-header-title',
-		text: 'Reading'
-	});
-	const subtitleEl = headerText.createDiv({
-		cls: 'speed-reader-ai-bookmarks-header-subtitle',
-		text: ''
-	});
-	const playBtn = headerTop.createEl('button', {
-		cls: 'speed-reader-ai-bookmarks-header-play',
-		text: '▶ Play',
-		attr: { type: 'button' }
-	});
-	const openObsidianLink = headerCard.createEl('button', {
-		cls: 'speed-reader-ai-bookmarks-open-link',
-		text: 'Open in Obsidian',
-		attr: { type: 'button' }
-	});
 
 	const scroll = pane.createDiv({ cls: 'speed-reader-ai-bookmarks-scroll' });
 	const scrollInner = scroll.createDiv({ cls: 'speed-reader-ai-bookmarks-scroll-inner' });
@@ -392,7 +412,7 @@ export function mountBookmarksPane(
 		openObsidianHandler?.();
 	});
 
-	playBtn.addEventListener('click', () => {
+	playBtn?.addEventListener('click', () => {
 		playPauseHandler?.();
 	});
 
@@ -418,9 +438,9 @@ export function mountBookmarksPane(
 			}
 		},
 		updateContext(ctx) {
-			titleEl.setText(ctx.title || 'Reading');
-			subtitleEl.setText(ctx.subtitle);
-			playBtn.setText(ctx.isPlaying ? '⏸ Pause' : '▶ Play');
+			titleEl?.setText(ctx.title || 'Reading');
+			subtitleEl?.setText(ctx.subtitle);
+			playBtn?.setText(ctx.isPlaying ? '⏸ Pause' : '▶ Play');
 		},
 		getSelectedLineIndices() {
 			return [...selected].sort((left, right) => left - right);

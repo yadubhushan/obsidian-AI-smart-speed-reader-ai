@@ -1,36 +1,27 @@
-import { Editor, MarkdownView, Menu, Notice, Plugin, type App } from 'obsidian';
+import { Notice, Plugin, type App } from 'obsidian';
 import { initAI } from '@obsidian-ai-providers/sdk';
 import { initCursorCliDesktopSupport } from './llm/cursorCliDesktopBridge';
-import { noteContentChecksum } from './crypto-checksum';
-import { activeVersionStatus } from './store/cacheIndexUtils';
+import { bootstrapLlmConfig } from './boot/llmConfigBootstrap';
+import { PrepareStatusBar } from './boot/prepareStatusBar';
+import { ReaderLauncher } from './boot/readerLauncher';
+import { registerReaderCommands } from './boot/registerReaderCommands';
+import { ReadingStateSyncCoordinator } from './boot/syncCoordinator';
 import { registerFeature1 } from './features/feature1/registerFeature1';
-import {
-	attachNoteReadingSession,
-	prepareNoteOpenState,
-	registerFeature2
-} from './features/feature2/registerFeature2';
+import { registerFeature2 } from './features/feature2/registerFeature2';
 import { registerFeature3A } from './features/feature3a/registerFeature3A';
 import { registerFeature3B } from './features/feature3b/registerFeature3B';
-import { registerFeature4, wireReaderBookmarks } from './features/feature4/registerFeature4';
+import { registerFeature4 } from './features/feature4/registerFeature4';
 import { registerStudyLoopBridge } from './study-loop/studyLoopBridge';
-import { registerWordLookup, wireReaderWordLookup } from './features/word-lookup/registerWordLookup';
+import { registerWordLookup } from './features/word-lookup/registerWordLookup';
 import { DEFAULT_SETTINGS, SpeedReaderAiSettings, SpeedReaderAiSettingTab } from './settings';
 import { createPluginServices, type PluginServices } from './services/serviceRegistry';
-import { SpeedReaderAiModal } from './speedReaderAiModal';
 import { validateSettings } from './services/settingsValidator';
 import {
 	createDefaultLlmModelCatalog,
-	ensureLlmModelsConfigFile,
 	loadLlmModelCatalogFromPath,
-	migrateLlmModelsConfigIfNeeded,
 	type LlmModelCatalog
 } from './llm/llmModelCatalog';
-import {
-	ensurePreparePromptFiles,
-	loadPreparePromptSet,
-	pluginPromptsDirPath,
-	type PreparePromptSet
-} from './llm/promptCatalog';
+import { loadPreparePromptSet, type PreparePromptSet } from './llm/promptCatalog';
 import { ManifestStore } from './store/ManifestStore';
 import { migratePluginData } from './store/migratePluginData';
 import { createPluginDataPaths, pluginReadCacheDisplayPath, type PluginDataPaths } from './store/pluginDataPaths';
@@ -42,10 +33,12 @@ import {
 } from './store/pluginDataStorage';
 import { listReadCacheDocKeys } from './store/readCachePaths';
 import { createVaultManifestAdapter } from './store/vaultManifestAdapter';
-import type { SpeedReaderOpen } from './ui/speedReaderOpen';
 import type { ReaderTabId } from './ui/readerShell/readerTabDock';
-import type { NotePosition } from './types/m2Contracts';
 
+/**
+ * Composition root: owns plugin-wide state (settings, catalogs, services)
+ * and wires the collaborators that carry the actual behavior.
+ */
 export default class SpeedReaderAiPlugin extends Plugin {
 	settings!: SpeedReaderAiSettings;
 	dataPaths!: PluginDataPaths;
@@ -54,39 +47,31 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	preparePrompts!: PreparePromptSet;
 	private preparePromptsDirPath = '';
 	private manifestStore: ManifestStore | null = null;
-	private prepareStatusBarEl: HTMLElement | null = null;
 	private services: PluginServices | null = null;
 	private pluginSettingTab: SpeedReaderAiSettingTab | null = null;
 	private readingStateSync: ReadingStateSyncStamp | undefined;
+	private prepareStatusBar: PrepareStatusBar | null = null;
+	private readerLauncher!: ReaderLauncher;
+	private readonly syncCoordinator = new ReadingStateSyncCoordinator({
+		getStore: () => this.services?.readingStateStore ?? null,
+		migrate: () =>
+			migratePluginData(this.app.vault.adapter, this.app.vault.configDir, this.manifest.id)
+	});
 
 	async onload() {
 		initAI(this.app, this, async () => undefined, { disableFallback: true });
 		await initCursorCliDesktopSupport();
-		this.llmModelsConfigPath = await migrateLlmModelsConfigIfNeeded(
+
+		const llmConfig = await bootstrapLlmConfig(
 			this.app.vault.adapter,
 			this.app.vault.configDir,
 			this.manifest.id
 		);
-		await ensureLlmModelsConfigFile(
-			this.app.vault.adapter,
-			this.llmModelsConfigPath
-		);
-		this.llmModelCatalog = await loadLlmModelCatalogFromPath(
-			this.app.vault.adapter,
-			this.llmModelsConfigPath
-		);
-		this.preparePromptsDirPath = pluginPromptsDirPath(
-			this.app.vault.configDir,
-			this.manifest.id
-		);
-		await ensurePreparePromptFiles(
-			this.app.vault.adapter,
-			this.preparePromptsDirPath
-		);
-		this.preparePrompts = await loadPreparePromptSet(
-			this.app.vault.adapter,
-			this.preparePromptsDirPath
-		);
+		this.llmModelsConfigPath = llmConfig.llmModelsConfigPath;
+		this.llmModelCatalog = llmConfig.llmModelCatalog;
+		this.preparePromptsDirPath = llmConfig.preparePromptsDirPath;
+		this.preparePrompts = llmConfig.preparePrompts;
+
 		await this.loadSettings();
 		this.dataPaths = createPluginDataPaths(this.app.vault.configDir, this.manifest.id);
 		const migration = await migratePluginData(
@@ -114,128 +99,32 @@ export default class SpeedReaderAiPlugin extends Plugin {
 			getSettings: () => this.settings
 		});
 
-		this.addRibbonIcon('book-open', 'Speed read current note', () => {
-			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			if (view) {
-				this.startSpeedReading(view);
-			} else {
-				new Notice('Open a note first');
-			}
+		this.readerLauncher = new ReaderLauncher({
+			app: this.app,
+			getSettings: () => this.settings,
+			persistSettings: (next) => this.persistValidatedSettings(next),
+			getServices: () => this.getServices(),
+			getManifestStore: () => this.getManifestStore(),
+			getLlmModelCatalog: () => this.llmModelCatalog,
+			getPreparePrompts: () => this.preparePrompts,
+			refreshPrepareStatusBar: () => this.refreshPrepareStatusBar()
 		});
-
-		this.addCommand({
-			id: 'start-speed-reading',
-			name: 'Start speed reading',
-			checkCallback: (checking: boolean) => {
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					if (!checking) {
-						this.startSpeedReading(markdownView);
-					}
-					return true;
-				}
-				return false;
-			}
-		});
-
-		this.addCommand({
-			id: 'speed-read-selection',
-			name: 'Speed read selected text',
-			editorCheckCallback: (checking, editor) => {
-				const selection = editor.getSelection();
-				if (selection && selection.length > 0) {
-					if (!checking) {
-						void this.openSpeedReader({ kind: 'legacy', text: selection });
-					}
-					return true;
-				}
-				return false;
-			}
-		});
-
-		this.addCommand({
-			id: 'read-entire-note',
-			name: 'Read entire note from cursor',
-			checkCallback: (checking: boolean) => {
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					if (!checking) {
-						this.startSpeedReading(markdownView, true);
-					}
-					return true;
-				}
-				return false;
-			}
-		});
-
-		this.addCommand({
-			id: 'open-speed-reader-preferences',
-			name: 'Open speed reader preferences',
-			callback: () => {
-				void this.openReaderPreferences('settings');
-			}
-		});
-
-		this.registerEvent(
-			this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor) => {
-				const selection = editor.getSelection();
-				if (!selection || selection.trim().length === 0) {
-					return;
-				}
-
-				menu.addItem((item) => {
-					item
-						.setTitle('Read with speed reader')
-						.setIcon('book-open')
-						.onClick(() => {
-							void this.openSpeedReader({ kind: 'legacy', text: selection });
-						});
-				});
-			})
-		);
+		registerReaderCommands(this, this.readerLauncher);
 
 		this.pluginSettingTab = new SpeedReaderAiSettingTab(this.app, this);
 		this.addSettingTab(this.pluginSettingTab);
 
-		this.prepareStatusBarEl = this.addStatusBarItem();
-		this.prepareStatusBarEl.addClass('speed-reader-ai-statusbar');
-		this.prepareStatusBarEl.addClass('is-hidden');
-		void this.refreshPrepareStatusBar();
+		this.prepareStatusBar = new PrepareStatusBar(this, () => this.getManifestStore());
+		this.prepareStatusBar.attach();
 
-		this.registerEvent(
-			this.app.workspace.on('active-leaf-change', () => {
-				void this.refreshPrepareStatusBar();
-			})
-		);
-		this.registerEvent(
-			this.app.workspace.on('file-open', () => {
-				void this.refreshPrepareStatusBar();
-			})
-		);
-
-		this.registerDomEvent(document, 'visibilitychange', () => {
-			if (document.visibilityState === 'visible') {
-				void this.reloadReadingStateFromSync();
-			} else if (document.visibilityState === 'hidden') {
-				void this.flushReadingStateBeforeBackground();
-			}
-		});
+		this.syncCoordinator.register(this);
 	}
 
 	onunload() {
-		const store = this.services?.readingStateStore;
-		if (store?.isDirty()) {
-			void store.flush();
-		}
-		this.prepareStatusBarEl = null;
+		this.syncCoordinator.flushOnUnload();
+		this.prepareStatusBar?.detach();
+		this.prepareStatusBar = null;
 		this.services = null;
-	}
-
-	private async flushReadingStateBeforeBackground(): Promise<void> {
-		if (!this.services?.readingStateStore.isDirty()) {
-			return;
-		}
-		await this.services.readingStateStore.flush();
 	}
 
 	onPrepareStatusChange(): void {
@@ -317,6 +206,11 @@ export default class SpeedReaderAiPlugin extends Plugin {
 		await this.saveData(pluginDataFromSettings(this.settings, this.readingStateSync));
 	}
 
+	private persistValidatedSettings(next: SpeedReaderAiSettings): void {
+		this.settings = validateSettings(next, this.llmModelCatalog);
+		void this.saveSettings();
+	}
+
 	async bumpReadingStateSyncStamp(): Promise<void> {
 		this.readingStateSync = {
 			revision: (this.readingStateSync?.revision ?? 0) + 1,
@@ -345,16 +239,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 	/** Reload reading progress after sync or when the app returns to foreground. */
 	async reloadReadingStateFromSync(): Promise<void> {
-		if (!this.services) {
-			return;
-		}
-
-		await migratePluginData(
-			this.app.vault.adapter,
-			this.app.vault.configDir,
-			this.manifest.id
-		);
-		await this.services.readingStateStore.reloadFromDisk();
+		await this.syncCoordinator.reloadFromSync();
 	}
 
 	private refreshOpenSettingsTab(): void {
@@ -368,187 +253,11 @@ export default class SpeedReaderAiPlugin extends Plugin {
 		}
 	}
 
-	private startSpeedReading(view: MarkdownView, fromCursor = false) {
-		const editor = view.editor;
-		let text = editor.getSelection();
-		let startOffset = 0;
-
-		if (!text || text.length === 0) {
-			text = editor.getValue();
-			startOffset = fromCursor ? editor.posToOffset(editor.getCursor()) : 0;
-		}
-
-		if (!text || text.trim().length === 0) {
-			new Notice('No text to speed read');
-			return;
-		}
-
-		const hasSelection = (editor.getSelection()?.length ?? 0) > 0;
-		if (!hasSelection && view.file) {
-			void this.openStructuredNote(view.file.path, text, startOffset);
-			return;
-		}
-
-		void this.openSpeedReader({ kind: 'legacy', text, startOffset });
-	}
-
-	private async openStructuredNote(sourcePath: string, text: string, startOffset: number) {
-		const checksum = await noteContentChecksum(
-			text,
-			this.settings.bookmarks.noteBookmarkSectionHeading
-		);
-		await this.openSpeedReader({
-			kind: 'structured',
-			sourcePath,
-			text,
-			checksum,
-			startOffset
-		});
-	}
-
 	async openReaderPreferences(initialTab: ReaderTabId = 'settings') {
-		const modal = new SpeedReaderAiModal(
-			this.app,
-			{ kind: 'preferences', initialTab },
-			{ ...this.settings },
-			(newSettings) => {
-				this.settings = validateSettings(newSettings, this.llmModelCatalog);
-				void this.saveSettings();
-			},
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			this.llmModelCatalog
-		);
-		modal.open();
-	}
-
-	private async openSpeedReader(open: SpeedReaderOpen) {
-		const services = this.getServices();
-		let readerOpen = open;
-		let existingNoteState: ReturnType<typeof services.readingStateStore.get> | undefined;
-		let noteChecksumReset = false;
-
-		if (open.kind === 'structured') {
-			const prepared = await prepareNoteOpenState({
-				sourcePath: open.sourcePath,
-				sourceChecksum: open.checksum,
-				services
-			});
-			existingNoteState = prepared.existingState;
-			noteChecksumReset = prepared.checksumReset;
-
-			if (noteChecksumReset) {
-				new Notice('Book updated — starting from beginning');
-			}
-
-			const resumePosition =
-				!noteChecksumReset && existingNoteState?.sourceKind === 'note'
-					? (existingNoteState.position as NotePosition)
-					: undefined;
-
-			readerOpen = {
-				...open,
-				startOffset: resumePosition ? undefined : open.startOffset,
-				resumePosition,
-				preferredProcessingMode: existingNoteState?.preferredProcessingMode,
-				preferredAiVersionId: existingNoteState?.preferredAiVersionId
-			};
-		}
-
-		const sourcePath =
-			readerOpen.kind === 'structured' || readerOpen.kind === 'book' ? readerOpen.sourcePath : null;
-
-		const modal = new SpeedReaderAiModal(
-			this.app,
-			readerOpen,
-			{ ...this.settings },
-			(newSettings) => {
-				this.settings = validateSettings(newSettings, this.llmModelCatalog);
-				void this.saveSettings();
-			},
-			readerOpen.kind === 'structured' ? this.getManifestStore() : undefined,
-			this.preparePrompts,
-			readerOpen.kind === 'structured'
-				? () => this.refreshPrepareStatusBar()
-				: undefined,
-			sourcePath
-				? () => {
-						services.eventBus.emit('reader-closed', { sourcePath });
-					}
-				: undefined
-		);
-
-		if (readerOpen.kind === 'structured') {
-			const hooks = attachNoteReadingSession({
-				modal,
-				engine: modal.getEngine(),
-				sourcePath: readerOpen.sourcePath,
-				sourceChecksum: readerOpen.checksum,
-				preferredProcessingMode: existingNoteState?.preferredProcessingMode,
-				existingState: noteChecksumReset ? undefined : existingNoteState,
-				initialPlaybackMode: existingNoteState?.playbackMode,
-				services
-			});
-			modal.setSessionHooks(hooks);
-		}
-
-		modal.open();
-
-		wireReaderWordLookup(this.app, modal, () => ({
-			dictionary: this.settings.dictionary
-		}));
-
-		if (readerOpen.kind === 'structured' || readerOpen.kind === 'book') {
-			wireReaderBookmarks(modal, services);
-		}
-
-		if (sourcePath) {
-			services.eventBus.emit('reader-opened', {
-				sourcePath,
-				sourceKind: readerOpen.kind === 'book' ? 'book' : 'note'
-			});
-		}
-
-		void this.refreshPrepareStatusBar();
+		await this.readerLauncher.openReaderPreferences(initialTab);
 	}
 
 	async refreshPrepareStatusBar(): Promise<void> {
-		const el = this.prepareStatusBarEl;
-		if (!el) return;
-
-		el.removeClass('is-ready', 'is-stale', 'is-hidden');
-		el.empty();
-
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		const file = view?.file;
-		if (!file || file.extension !== 'md') {
-			el.addClass('is-hidden');
-			return;
-		}
-
-		const store = this.getManifestStore();
-		const index = await store.getDocumentIndex(file.path);
-		if (!index) {
-			el.addClass('is-hidden');
-			return;
-		}
-
-		const modeStatus = activeVersionStatus(index);
-
-		if (modeStatus === 'ready') {
-			el.addClass('is-ready');
-			el.setText('⚡ AI Ready');
-			return;
-		}
-
-		if (modeStatus === 'stale') {
-			el.addClass('is-stale');
-			el.setText('⚠ AI Stale');
-			return;
-		}
-
-		el.addClass('is-hidden');
+		await this.prepareStatusBar?.refresh();
 	}
 }

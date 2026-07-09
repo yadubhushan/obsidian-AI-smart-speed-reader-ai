@@ -40,9 +40,17 @@ export class BookCacheStoreImpl implements BookCacheStore {
 
 	async ensureParsed(sourcePath: string, options?: EnsureParsedOptions): Promise<BookCacheIndex> {
 		const docKey = docKeyFromSourcePath(sourcePath);
+		const cached = await this.get(docKey);
+		const sourceExists = await this.app.vault.adapter.exists(sourcePath);
+		if (!sourceExists) {
+			if (cached) {
+				return cached;
+			}
+			throw new Error(`EPUB file not found: ${sourcePath}`);
+		}
+
 		const bytes = await this.app.vault.adapter.readBinary(sourcePath);
 		const checksum = await binaryChecksum(bytes);
-		const cached = await this.get(docKey);
 
 		if (cached && cached.sourceChecksum === checksum) {
 			return cached;

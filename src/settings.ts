@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS } from './types';
 import { displayPluginAiSettings } from './ui/pluginAiSettingsSection';
 import { displayPluginDictionarySettings } from './ui/pluginDictionarySettingsSection';
 import {
+	displayPluginReaderAppearanceSettings,
 	displayPluginReaderBookmarkSettings,
 	displayPluginReaderPacingSettings
 } from './ui/pluginReaderSettingsSection';
@@ -41,6 +42,7 @@ export class SpeedReaderAiSettingTab extends PluginSettingTab {
 		displayPluginDictionarySettings({ plugin: this.plugin }, containerEl);
 
 		displayPluginReaderPacingSettings({ plugin: this.plugin }, containerEl);
+		displayPluginReaderAppearanceSettings({ plugin: this.plugin }, containerEl);
 		displayPluginReaderBookmarkSettings({ plugin: this.plugin }, containerEl);
 
 		containerEl.createEl('h3', { text: 'Reader' });

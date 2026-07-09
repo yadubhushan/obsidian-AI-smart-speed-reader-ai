@@ -1075,6 +1075,22 @@ export class SpeedReaderAiModal extends Modal {
 		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme, {
 			themePreset: this.settings.reader.themePreset
 		});
+		this.applyCustomReaderColors(this.containerEl);
+		this.applyCustomReaderColors(this.contentEl);
+	}
+
+	private applyCustomReaderColors(target: HTMLElement): void {
+		const { focusWord, centerCharacter } = this.settings.reader.colors;
+		if (focusWord) {
+			target.style.setProperty('--sr-focus-word-color', focusWord);
+		} else {
+			target.style.removeProperty('--sr-focus-word-color');
+		}
+		if (centerCharacter) {
+			target.style.setProperty('--sr-center-character-color', centerCharacter);
+		} else {
+			target.style.removeProperty('--sr-center-character-color');
+		}
 	}
 
 	private applyFontFamily() {

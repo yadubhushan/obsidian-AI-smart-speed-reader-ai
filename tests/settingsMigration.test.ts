@@ -133,6 +133,38 @@ describe('migrateFlatSettings', () => {
 		expect(validateSettings(null, defaultCatalog).reader.display.showCenterGuide).toBe(true);
 	});
 
+	it('preserves valid reader color overrides and drops invalid ones', () => {
+		const valid = validateSettings(
+			{
+				reader: {
+					...DEFAULT_SETTINGS.reader,
+					colors: {
+						focusWord: '#123abc',
+						centerCharacter: '#ff8800'
+					}
+				}
+			},
+			defaultCatalog
+		);
+		expect(valid.reader.colors.focusWord).toBe('#123abc');
+		expect(valid.reader.colors.centerCharacter).toBe('#ff8800');
+
+		const invalid = validateSettings(
+			{
+				reader: {
+					...DEFAULT_SETTINGS.reader,
+					colors: {
+						focusWord: 'red',
+						centerCharacter: '#fff'
+					}
+				}
+			},
+			defaultCatalog
+		);
+		expect(invalid.reader.colors.focusWord).toBe('');
+		expect(invalid.reader.colors.centerCharacter).toBe('');
+	});
+
 	it('defaults requireCompletionBeforeNewBook to false and preserves explicit true', () => {
 		expect(validateSettings(null, defaultCatalog).reader.requireCompletionBeforeNewBook).toBe(false);
 		expect(

@@ -404,6 +404,10 @@
 	color: var(--sr-accent-bright, var(--sr-accent, #a100ff));
 }
 
+.speed-reader-ai-bookmarks-mobile-actions {
+	display: none;
+}
+
 .speed-reader-ai-bookmarks-scroll {
 	flex: 1;
 	min-height: 0;
@@ -1014,18 +1018,18 @@
 .speed-reader-ai-left {
 	text-align: right;
 	min-width: calc(var(--speed-reader-ai-font-size, 4rem) * 1.5);
-	color: var(--sr-muted, var(--text-muted));
+	color: var(--sr-focus-word-color, var(--sr-muted, var(--text-muted)));
 }
 
 .speed-reader-ai-orp {
-	color: var(--sr-orp, var(--interactive-accent));
+	color: var(--sr-center-character-color, var(--sr-orp, var(--interactive-accent)));
 	font-weight: 700;
 }
 
 .speed-reader-ai-right {
 	text-align: left;
 	min-width: calc(var(--speed-reader-ai-font-size, 4rem) * 1.5);
-	color: var(--sr-muted, var(--text-muted));
+	color: var(--sr-focus-word-color, var(--sr-muted, var(--text-muted)));
 }
 
 .speed-reader-ai-word-container:not(.is-line-by-line) .speed-reader-ai-word-unit.is-line-start .speed-reader-ai-left,
@@ -1516,13 +1520,44 @@
 	padding-top: 0;
 }
 
-.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-header-play,
-.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-header-subtitle {
-	display: none;
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-scroll {
+	padding: 0.75rem 0.75rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
-.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-scroll {
-	padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-scroll-inner {
+	max-width: none;
+}
+
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-mobile-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	flex-shrink: 0;
+	padding: 0.45rem 1rem 0;
+	background: var(--background-primary);
+}
+
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmarks-open-link {
+	margin-top: 0;
+	min-height: 2.25rem;
+	padding: 0 0.15rem;
+	font-size: var(--font-ui-small);
+}
+
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmark-line-row {
+	grid-template-columns: 2.25rem minmax(0, 1fr) 2.5rem;
+	gap: 0.45rem;
+}
+
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmark-line-text-card {
+	padding: 0.95rem 1rem;
+	border-radius: 1rem;
+}
+
+.speed-reader-ai-mobile[data-mobile-route='bookmarks'] .speed-reader-ai-bookmark-line-text {
+	font-size: 1.05rem;
+	line-height: 1.6;
+	letter-spacing: 0;
 }
 
 .speed-reader-ai-mobile-stack-header {
@@ -3533,6 +3568,19 @@
 	border-color: color-mix(in srgb, var(--interactive-accent) 50%, var(--background-modifier-border));
 	background: color-mix(in srgb, var(--interactive-accent) 15%, var(--background-secondary));
 	color: var(--text-accent);
+}
+
+.speed-reader-delete-choice-modal .modal-content p {
+	color: var(--text-muted);
+	line-height: 1.45;
+}
+
+.speed-reader-delete-choice-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6rem;
+	justify-content: flex-end;
+	margin-top: 1rem;
 }
 
 .speed-reader-dashboard-card__type-badge,

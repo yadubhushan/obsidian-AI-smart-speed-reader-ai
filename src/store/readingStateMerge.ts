@@ -5,6 +5,11 @@ export interface ReadingStateMergeResult {
 	localHadNewer: boolean;
 }
 
+export interface ReadingStateMergeOptions {
+	deletedSourcePaths?: ReadonlySet<string>;
+	preferLocalLastGlobal?: boolean;
+}
+
 function parseTimestamp(value: string | undefined): number {
 	if (!value) {
 		return 0;
@@ -35,9 +40,17 @@ function pickLastGlobalSourcePath(sources: Record<string, ReadingState>): string
 /** Merge local and disk reading state; per-source `lastOpenedAt` wins. */
 export function mergeReadingStateFiles(
 	local: ReadingStateFile,
-	disk: ReadingStateFile
+	disk: ReadingStateFile,
+	options: ReadingStateMergeOptions = {}
 ): ReadingStateMergeResult {
-	const mergedSources: Record<string, ReadingState> = { ...disk.sources };
+	const deletedSourcePaths = options.deletedSourcePaths ?? new Set<string>();
+	const mergedSources: Record<string, ReadingState> = {};
+
+	for (const [sourcePath, diskState] of Object.entries(disk.sources)) {
+		if (!deletedSourcePaths.has(sourcePath)) {
+			mergedSources[sourcePath] = diskState;
+		}
+	}
 	let localHadNewer = false;
 
 	for (const [sourcePath, localState] of Object.entries(local.sources)) {
@@ -56,7 +69,9 @@ export function mergeReadingStateFiles(
 
 	return {
 		merged: {
-			lastGlobalSourcePath: pickLastGlobalSourcePath(mergedSources),
+			lastGlobalSourcePath: options.preferLocalLastGlobal
+				? local.lastGlobalSourcePath
+				: pickLastGlobalSourcePath(mergedSources),
 			sources: mergedSources
 		},
 		localHadNewer

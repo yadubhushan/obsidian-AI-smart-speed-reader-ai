@@ -59,3 +59,7 @@ export function bookCacheMetadataPath(basePath: string, docKey: string): string 
 export function bookCacheCoverPath(basePath: string, docKey: string): string {
 	return joinCachePath(basePath, `${docKey}/cover.jpg`);
 }
+
+export function bookCacheCoverOptionsPath(basePath: string, docKey: string): string {
+	return joinCachePath(basePath, `${docKey}/cover-options.json`);
+}

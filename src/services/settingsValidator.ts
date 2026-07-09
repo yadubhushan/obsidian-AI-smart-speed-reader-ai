@@ -68,6 +68,14 @@ function normalizeFont(value: unknown): ReaderFontOption {
 	return DEFAULT_SETTINGS.reader.font;
 }
 
+function normalizeOptionalHexColor(value: unknown): string {
+	const raw = toString(value, '').trim();
+	if (!raw) {
+		return '';
+	}
+	return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : '';
+}
+
 function normalizeBookBookmarkTemplate(value: unknown): string {
 	const raw = toString(value, DEFAULT_SETTINGS.bookmarks.bookBookmarkNoteTemplate).trim();
 	if (!raw.includes('{book_name}')) {
@@ -184,6 +192,10 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			chunkSize: toNumber(raw.chunkSize, DEFAULT_SETTINGS.reader.chunkSize),
 			colorScheme: normalizeColorScheme(raw.colorScheme ?? 'dark'),
 			themePreset: normalizeThemePreset(raw.themePreset),
+			colors: {
+				focusWord: normalizeOptionalHexColor(raw.focusWordColor),
+				centerCharacter: normalizeOptionalHexColor(raw.centerCharacterColor)
+			},
 			autoStart: isRecord(raw.autoStart)
 				? {
 						enabled: toBoolean(raw.autoStart.enabled, DEFAULT_SETTINGS.reader.autoStart.enabled),
@@ -292,6 +304,7 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 	const displayRaw = isRecord(r.display) ? r.display : {};
 	const autoStartRaw = isRecord(r.autoStart) ? r.autoStart : {};
 	const orientationRaw = isRecord(r.textOrientation) ? r.textOrientation : {};
+	const colorsRaw = isRecord(r.colors) ? r.colors : {};
 
 	return {
 		font: normalizeFont(firstDefined(r.font, flat.font)),
@@ -312,6 +325,14 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 		),
 		colorScheme: normalizeColorScheme(firstDefined(r.colorScheme, flat.colorScheme)),
 		themePreset: normalizeThemePreset(firstDefined(r.themePreset, flat.themePreset)),
+		colors: {
+			focusWord: normalizeOptionalHexColor(
+				firstDefined(colorsRaw.focusWord, flat.focusWordColor)
+			),
+			centerCharacter: normalizeOptionalHexColor(
+				firstDefined(colorsRaw.centerCharacter, flat.centerCharacterColor)
+			)
+		},
 		autoStart: {
 			enabled: toBoolean(
 				firstDefined(autoStartRaw.enabled, flat.autoStartEnabled),
