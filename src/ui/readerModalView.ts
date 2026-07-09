@@ -119,12 +119,12 @@ import {
 	createReaderFocusController,
 	type ReaderFocusHandle
 } from './readerShell/readerFocusController';
+import { registerReaderKeyboard } from './readerShell/readerKeyboard';
 
 import {
 	clampFontSize,
 	clampWpm,
 	createReaderAppearance,
-	FONT_SIZE_STEP,
 	stepFontSize,
 	type ReaderAppearanceHandle
 } from './readerShell/readerAppearance';
@@ -187,6 +187,7 @@ export class SpeedReaderAiModal extends Modal {
 	private state: ReaderState | null = null;
 	private autoStartTimer: number | null = null;
 	private readonly focusController: ReaderFocusHandle;
+	private keyboardCleanup: (() => void) | null = null;
 
 	private ownerDoc!: Document;
 	private shellEl!: HTMLElement;
@@ -701,6 +702,8 @@ export class SpeedReaderAiModal extends Modal {
 		this.mobileMenuHubPane?.destroy();
 		this.mobileMenuHubPane = null;
 		this.focusController.unregister();
+		this.keyboardCleanup?.();
+		this.keyboardCleanup = null;
 		this.engine.pause();
 		this.onSettingsChange(this.settings);
 		this.contentEl.empty();
@@ -1656,126 +1659,28 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private registerKeyboardHandlers() {
-		this.scope.register([], ' ', (event) => {
-			event.preventDefault();
-			if (this.dismissDictionaryOverlayIfVisible()) {
-				return false;
-			}
-			if (this.isInputBlockedByOverlay()) {
-				return false;
-			}
-			this.toggleReaderPlayPause();
-			return false;
-		});
-
-		this.scope.register([], 'ArrowLeft', (event) => {
-			event.preventDefault();
-			this.handleArrowLeft();
-			return false;
-		});
-
-		this.scope.register([], 'ArrowRight', (event) => {
-			event.preventDefault();
-			this.handleArrowRight();
-			return false;
-		});
-
-		this.scope.register(['Shift'], 'ArrowLeft', (event) => {
-			event.preventDefault();
-			this.handleShiftArrowLeft();
-			return false;
-		});
-
-		this.scope.register(['Shift'], 'ArrowRight', (event) => {
-			event.preventDefault();
-			this.handleShiftArrowRight();
-			return false;
-		});
-
-		this.scope.register([], 'ArrowUp', (event) => {
-			event.preventDefault();
-			this.adjustWpm(25);
-			return false;
-		});
-
-		this.scope.register([], 'ArrowDown', (event) => {
-			event.preventDefault();
-			this.adjustWpm(-25);
-			return false;
-		});
-
-		this.scope.register([], '[', (event) => {
-			event.preventDefault();
-			this.adjustFontSize(-FONT_SIZE_STEP);
-			return false;
-		});
-
-		this.scope.register([], ']', (event) => {
-			event.preventDefault();
-			this.adjustFontSize(FONT_SIZE_STEP);
-			return false;
-		});
-
-		this.scope.register([], 'f', (event) => {
-			event.preventDefault();
-			this.focusController.setFocusMode(!this.focusController.isFocusMode());
-			return false;
-		});
-
-		this.scope.register([], 'l', (event) => {
-			event.preventDefault();
-			this.engine.togglePlaybackMode();
-			this.render();
-			return false;
-		});
-
-		this.scope.register([], 'b', (event) => {
-			event.preventDefault();
-			if (this.isInputBlockedByOverlay()) {
-				return false;
-			}
-			void this.bookmarkHandlers?.createBookmark();
-			return false;
-		});
-
-		this.scope.register([], 'd', (event) => {
-			event.preventDefault();
-			if (this.isInputBlockedByOverlay() && !this.isDictionaryOverlayVisible()) {
-				return false;
-			}
-			void this.wordLookupHandlers?.lookupCurrentWord();
-			return false;
-		});
-
-		this.scope.register(['Shift'], 'b', (event) => {
-			event.preventDefault();
-			if (this.isInputBlockedByOverlay()) {
-				return false;
-			}
-			void this.bookmarkHandlers?.openBookmarksTab();
-			return false;
-		});
-
-		this.scope.register([], 'Escape', (event) => {
-			event.preventDefault();
-			if (this.handleReaderBack()) {
-				return false;
-			}
-			this.forceClose();
-			return false;
-		});
-
-		this.contentEl.addEventListener('keydown', (event) => {
-			if (event.key === ' ') {
-				event.preventDefault();
-				if (this.dismissDictionaryOverlayIfVisible()) {
-					return;
-				}
-				if (this.isInputBlockedByOverlay()) {
-					return;
-				}
-				this.toggleReaderPlayPause();
-			}
+		this.keyboardCleanup = registerReaderKeyboard(this.scope, this.contentEl, {
+			isBlocked: () => this.isInputBlockedByOverlay(),
+			isDictionaryVisible: () => this.isDictionaryOverlayVisible(),
+			dismissDictionaryIfVisible: () => this.dismissDictionaryOverlayIfVisible(),
+			togglePlayPause: () => this.toggleReaderPlayPause(),
+			arrowLeft: () => this.handleArrowLeft(),
+			arrowRight: () => this.handleArrowRight(),
+			sectionPrev: () => this.handleShiftArrowLeft(),
+			sectionNext: () => this.handleShiftArrowRight(),
+			adjustWpm: (delta) => this.adjustWpm(delta),
+			adjustFontSize: (delta) => this.adjustFontSize(delta),
+			toggleFocusMode: () =>
+				this.focusController.setFocusMode(!this.focusController.isFocusMode()),
+			togglePlaybackMode: () => {
+				this.engine.togglePlaybackMode();
+				this.render();
+			},
+			createBookmark: () => void this.bookmarkHandlers?.createBookmark(),
+			openBookmarksTab: () => void this.bookmarkHandlers?.openBookmarksTab(),
+			lookupCurrentWord: () => void this.wordLookupHandlers?.lookupCurrentWord(),
+			back: () => this.handleReaderBack(),
+			forceClose: () => this.forceClose()
 		});
 	}
 
