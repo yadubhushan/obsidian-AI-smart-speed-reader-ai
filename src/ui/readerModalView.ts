@@ -116,9 +116,9 @@ import {
 	type ReaderBackAction
 } from './readerShell/readerBackNavigation';
 import {
-	applyDesktopFocusChrome,
-	type SidebarSnapshot
-} from './readerShell/desktopFocusChrome';
+	createReaderFocusController,
+	type ReaderFocusHandle
+} from './readerShell/readerFocusController';
 
 import {
 	clampFontSize,
@@ -183,14 +183,10 @@ export class SpeedReaderAiModal extends Modal {
 
 	private session: StructuredReaderSession | null = null;
 	private engine: RSVPEngine;
-	private focusMode = false;
-	private sidebarSnapshot: SidebarSnapshot | null = null;
 	private activeTab: ReaderTabId = 'home';
 	private state: ReaderState | null = null;
-	private wasPlayingBeforeBlur = false;
 	private autoStartTimer: number | null = null;
-	private boundVisibilityHandler: () => void;
-	private boundBlurHandler: () => void;
+	private readonly focusController: ReaderFocusHandle;
 
 	private ownerDoc!: Document;
 	private shellEl!: HTMLElement;
@@ -287,8 +283,22 @@ export class SpeedReaderAiModal extends Modal {
 		if (readerOpen.kind === 'preferences' && readerOpen.initialTab) {
 			this.activeTab = readerOpen.initialTab;
 		}
-		this.boundVisibilityHandler = () => this.handleVisibilityChange();
-		this.boundBlurHandler = () => this.handleWindowBlur();
+		this.focusController = createReaderFocusController({
+			getDoc: () => this.ownerDoc ?? this.containerEl.ownerDocument,
+			contentEl: this.contentEl,
+			containerEl: this.containerEl,
+			isMobile: this.mobileReader,
+			workspace: this.app.workspace,
+			isPlaying: () => this.state?.isPlaying ?? false,
+			pause: () => this.engine.pause(),
+			play: () => this.engine.play(),
+			beforeEnterFocus: () => {
+				if (this.activeTab !== 'home') {
+					this.setActiveTab('home');
+				}
+			},
+			render: () => this.render()
+		});
 		this.appearance = createReaderAppearance(
 			{
 				containerEl: this.containerEl,
@@ -627,7 +637,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.prepareControls = this.controlBar.getPrepareControls();
 		this.setActiveTab('home');
 		this.registerKeyboardHandlers();
-		this.registerFocusHandlers();
+		this.focusController.register();
 		this.mountMobileGesturesIfNeeded();
 		this.mountPlayingGestureBandsIfNeeded();
 		this.mountMobileCoachMarksIfNeeded();
@@ -647,8 +657,8 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	onClose() {
-		if (this.focusMode || this.sidebarSnapshot) {
-			this.setFocusMode(false);
+		if (this.focusController.hasFocusChrome()) {
+			this.focusController.setFocusMode(false);
 		}
 		this.clearAutoStartTimer();
 		this.speechPlayback.destroy();
@@ -690,8 +700,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.shortcutsPane?.destroy();
 		this.mobileMenuHubPane?.destroy();
 		this.mobileMenuHubPane = null;
-		this.ownerDoc.removeEventListener('visibilitychange', this.boundVisibilityHandler);
-		this.ownerDoc.defaultView?.removeEventListener('blur', this.boundBlurHandler);
+		this.focusController.unregister();
 		this.engine.pause();
 		this.onSettingsChange(this.settings);
 		this.contentEl.empty();
@@ -1590,7 +1599,7 @@ export class SpeedReaderAiModal extends Modal {
 			dictionaryVisible: this.isDictionaryOverlayVisible(),
 			coachMarksOpen: this.mobileCoachOpen,
 			bottomSheetOpen: this.mobileMenuOpen,
-			focusMode: this.focusMode
+			focusMode: this.focusController.isFocusMode()
 		};
 	}
 
@@ -1609,7 +1618,7 @@ export class SpeedReaderAiModal extends Modal {
 				this.popMobileRoute();
 				break;
 			case 'exit-focus-mode':
-				this.setFocusMode(false);
+				this.focusController.setFocusMode(false);
 				break;
 			case 'close-modal':
 				this.forceClose();
@@ -1709,7 +1718,7 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.scope.register([], 'f', (event) => {
 			event.preventDefault();
-			this.setFocusMode(!this.focusMode);
+			this.focusController.setFocusMode(!this.focusController.isFocusMode());
 			return false;
 		});
 
@@ -1837,56 +1846,8 @@ export class SpeedReaderAiModal extends Modal {
 		});
 	}
 
-	private registerFocusHandlers() {
-		this.ownerDoc.addEventListener('visibilitychange', this.boundVisibilityHandler);
-		this.ownerDoc.defaultView?.addEventListener('blur', this.boundBlurHandler);
-	}
-
-	private setFocusMode(enabled: boolean) {
-		if (enabled && this.activeTab !== 'home') {
-			this.setActiveTab('home');
-		}
-		this.focusMode = enabled;
-		this.contentEl.toggleClass('speed-reader-ai-focus-active', this.focusMode);
-		this.containerEl.toggleClass('is-focus-active', this.focusMode);
-		if (!this.mobileReader) {
-			this.sidebarSnapshot = applyDesktopFocusChrome(
-				this.app.workspace,
-				enabled,
-				this.sidebarSnapshot
-			);
-		}
-		this.render();
-	}
-
-	private handleVisibilityChange() {
-		if (this.ownerDoc.hidden) {
-			this.pauseIfPlaying();
-		} else if (this.wasPlayingBeforeBlur) {
-			this.wasPlayingBeforeBlur = false;
-			this.engine.play();
-		}
-	}
-
-	private handleWindowBlur() {
-		if (!this.ownerDoc.hidden) {
-			this.pauseIfPlaying();
-		}
-	}
-
-	private pauseIfPlaying() {
-		const state = this.state;
-		if (state?.isPlaying) {
-			this.wasPlayingBeforeBlur = true;
-			this.engine.pause();
-		}
-	}
-
 	private refocusContent() {
-		const active = this.ownerDoc.activeElement;
-		if (active instanceof HTMLButtonElement || active instanceof HTMLSelectElement) {
-			this.contentEl.focus();
-		}
+		this.focusController.refocusContent();
 	}
 
 	private rebuildHeadingSelector() {
@@ -2048,7 +2009,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.header?.update(state);
 		this.controlBar?.update(state, this.getDocumentProgressPercent(state));
 		const showPauseContextInFocus =
-			this.focusMode && !state.isPlaying && !state.finished;
+			this.focusController.isFocusMode() && !state.isPlaying && !state.finished;
 		const showContext =
 			this.settings.reader.display.showContext || showPauseContextInFocus;
 		const onReadingSurface = this.mobileReader
