@@ -83,14 +83,18 @@ import {
 } from './readerShell/mobileActionBar';
 import {
 	mountMobileGestures,
-	type EdgeSide,
 	type MobileGesturesHandle
 } from './readerShell/mobileGestures';
 import {
 	mountPlayingGestureBands,
 	type PlayingGestureBandsHandle
 } from './readerShell/playingGestureBands';
-import { getScrubHoldDelay, getScrubStepSize } from './readerShell/edgeScrub';
+import {
+	createEdgeScrubController,
+	mountSkipFlash,
+	type EdgeScrubHandle,
+	type SkipFlashHandle
+} from './readerShell/edgeScrub';
 import {
 	mountMobileBottomSheet,
 	type MobileBottomSheetHandle
@@ -124,6 +128,11 @@ import {
 	stepFontSize,
 	type ReaderAppearanceHandle
 } from './readerShell/readerAppearance';
+import {
+	clampTtsWpm,
+	MAX_TTS_WPM,
+	SpeechPlaybackController
+} from '../services/speechPlaybackController';
 
 function formatRemainingTime(milliseconds: number): string {
 	const totalSeconds = Math.ceil(milliseconds / 1000);
@@ -205,12 +214,25 @@ export class SpeedReaderAiModal extends Modal {
 	private mobileDictionaryOpen = false;
 	private wasPlayingBeforeDictionary = false;
 	private mobileCoachOpen = false;
-	private edgeHoldSide: EdgeSide | null = null;
-	private edgeScrubTimer: number | null = null;
-	private edgeScrubTickCount = 0;
-	private edgeScrubStartedAt = 0;
-	private skipFlashEl: HTMLElement | null = null;
-	private skipFlashTimer: number | null = null;
+	private readonly edgeScrub: EdgeScrubHandle = createEdgeScrubController({
+		onStep: (side, count) =>
+			side === 'left' ? this.handleScrubStepLeft(count) : this.handleScrubStepRight(count),
+		setHoldSide: (side) => {
+			this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
+			this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
+			if (side !== null) {
+				this.shellEl.addClass(
+					side === 'left'
+						? 'speed-reader-ai-mobile-edge-hold-left'
+						: 'speed-reader-ai-mobile-edge-hold-right'
+				);
+			}
+		},
+		schedule: (cb, ms) => window.setTimeout(cb, ms),
+		clear: (timer) => window.clearTimeout(timer),
+		now: () => Date.now()
+	});
+	private skipFlash: SkipFlashHandle | null = null;
 	private readonly mobileReader = isMobileReader();
 	private mobileRoute: MobileRoute = 'reading';
 	private mobileRouteStack: MobileRoute[] = ['reading'];
@@ -227,6 +249,7 @@ export class SpeedReaderAiModal extends Modal {
 	private sectionSelect!: HTMLSelectElement;
 	private interSectionOverlay: InterSectionOverlayHandle | null = null;
 	private readonly appearance: ReaderAppearanceHandle;
+	private readonly speechPlayback = new SpeechPlaybackController();
 	private prepareOverlay: PrepareOverlayHandle | null = null;
 
 	private modePicker: ModePickerHandle | null = null;
@@ -281,6 +304,11 @@ export class SpeedReaderAiModal extends Modal {
 				const previousIsPlaying = this.previousIsPlaying;
 				this.state = state;
 				this.previousIsPlaying = state.isPlaying;
+				this.speechPlayback.sync(
+					state,
+					this.settings.reader.ttsEnabled,
+					this.settings.reader.ttsVoiceUri
+				);
 				this.sessionHooks?.onEngineStateChange?.(state, previousIsPlaying);
 				this.render();
 			},
@@ -367,6 +395,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.appearance.applyCenterGuideVisibility();
 
 		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
+		this.skipFlash = mountSkipFlash(this.wordContainer);
 		this.interSectionOverlay = mountInterSectionOverlay(this.wordContainer);
 		this.prepareOverlay = mountPrepareOverlay(this.wordContainer);
 		this.contextLine = mountContextLine(this.homePaneEl, {
@@ -473,6 +502,7 @@ export class SpeedReaderAiModal extends Modal {
 				onFontDelta: (delta) => this.adjustFontSize(delta),
 				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
 				onCopyContext: () => this.copyCurrentParagraphContextPrompt(),
+				onTtsToggle: () => this.toggleTts(),
 				onReadWithoutAi: () => this.onReadWithoutAi(),
 				onPrepare: () => this.onPrepareWithAi(),
 				onClearCache: () => this.onClearDocumentCache(),
@@ -500,6 +530,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.mobileActionBar.onDefine(() => {
 				void this.wordLookupHandlers?.lookupCurrentWord();
 			});
+			this.mobileActionBar.onTtsToggle(() => this.toggleTts());
 			this.mobileActionBar.onMenu(() => {
 				this.pushMobileRoute('more');
 			});
@@ -620,6 +651,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.setFocusMode(false);
 		}
 		this.clearAutoStartTimer();
+		this.speechPlayback.destroy();
 		this.revokeCoverObjectUrl();
 		this.bookmarkHandlers = null;
 		this.wordLookupHandlers = null;
@@ -646,8 +678,9 @@ export class SpeedReaderAiModal extends Modal {
 		this.mobileGestures?.destroy();
 		this.playingGestureBands?.destroy();
 		this.playingGestureBands = null;
-		this.stopEdgeScrub();
-		this.clearSkipFlash();
+		this.edgeScrub.stop();
+		this.skipFlash?.destroy();
+		this.skipFlash = null;
 		this.mobileCoachMarks?.destroy();
 		this.mobileCoachMarks = null;
 		removeMobileShellClass(this.shellEl, this.containerEl);
@@ -1051,12 +1084,42 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private persistSettings(next: SpeedReaderAiSettings) {
-		this.settings = validateSettings(next, this.llmModelCatalog);
+		const normalizedNext = next.reader.ttsEnabled
+			? {
+					...next,
+					reader: { ...next.reader, wpm: clampTtsWpm(next.reader.wpm) }
+				}
+			: next;
+		this.settings = validateSettings(normalizedNext, this.llmModelCatalog);
 		this.engine.setSettings(this.settings);
 		this.appearance.applyAll();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
 		this.onSettingsChange(this.settings);
 		new Notice('Settings saved');
+	}
+
+	private toggleTts(): void {
+		const enabled = !this.settings.reader.ttsEnabled;
+		const speedWasLimited = enabled && this.settings.reader.wpm > MAX_TTS_WPM;
+		const safeWpm = enabled ? clampTtsWpm(this.settings.reader.wpm) : this.settings.reader.wpm;
+		this.settings = {
+			...this.settings,
+			reader: { ...this.settings.reader, ttsEnabled: enabled, wpm: safeWpm }
+		};
+		this.engine.setSettings(this.settings);
+		if (speedWasLimited) {
+			this.engine.adjustWpm(0);
+		}
+		this.controlBar?.setTtsEnabled(enabled);
+		this.mobileActionBar?.setTtsEnabled(enabled);
+		this.speechPlayback.sync(this.state, enabled, this.settings.reader.ttsVoiceUri);
+		this.onSettingsChange(this.settings);
+		new Notice(
+			speedWasLimited
+				? `Text to speech enabled · speed limited to ${MAX_TTS_WPM} WPM`
+				: `Text to speech ${enabled ? 'enabled' : 'disabled'}`
+		);
+		this.render();
 	}
 
 	private scheduleAutoStart() {
@@ -1884,7 +1947,12 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private adjustWpm(delta: number, options?: { quiet?: boolean }) {
-		const newWpm = this.engine.adjustWpm(delta);
+		const currentWpm = this.settings.reader.wpm;
+		const requestedWpm = currentWpm + delta;
+		const targetWpm = this.settings.reader.ttsEnabled
+			? clampTtsWpm(requestedWpm)
+			: requestedWpm;
+		const newWpm = this.engine.adjustWpm(targetWpm - currentWpm);
 		this.settings = {
 			...this.settings,
 			reader: { ...this.settings.reader, wpm: newWpm }
@@ -1914,7 +1982,9 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private setReaderWpm(wpm: number) {
-		const clamped = clampWpm(wpm);
+		const clamped = this.settings.reader.ttsEnabled
+			? clampTtsWpm(clampWpm(wpm))
+			: clampWpm(wpm);
 		const delta = clamped - this.settings.reader.wpm;
 		if (delta === 0) {
 			return;
@@ -2029,6 +2099,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.mobileCompactBar.setChapterNavVisible(this.canNavigateSections());
 			this.mobileCompactBar.setVisible(!playing && isReadingRoot);
 		}
+		this.mobileActionBar?.setTtsEnabled(this.settings.reader.ttsEnabled);
 		this.mobileActionBar?.setVisible(!playing && isReadingRoot);
 		this.playingGestureBands?.setActive(playing);
 	}
@@ -2083,11 +2154,11 @@ export class SpeedReaderAiModal extends Modal {
 					this.refocusContent();
 				},
 				onDoubleTapLeft: () => {
-					this.flashSkipEdge('left');
+					this.skipFlash?.flash('left');
 					this.handleArrowLeft();
 				},
 				onDoubleTapRight: () => {
-					this.flashSkipEdge('right');
+					this.skipFlash?.flash('right');
 					this.handleArrowRight();
 				},
 				onLongPressWord: () => {
@@ -2100,8 +2171,8 @@ export class SpeedReaderAiModal extends Modal {
 				onSwipeRight: () => this.handleArrowRight(),
 				onSwipeChapterLeft: () => this.handleShiftArrowLeft(),
 				onSwipeChapterRight: () => this.handleShiftArrowRight(),
-				onEdgeHoldStart: (side) => this.startEdgeScrub(side),
-				onEdgeHoldEnd: () => this.stopEdgeScrub(),
+				onEdgeHoldStart: (side) => this.edgeScrub.start(side),
+				onEdgeHoldEnd: () => this.edgeScrub.stop(),
 				isBlocked: () => {
 					if (this.interSectionOverlay?.isVisible() ?? true) {
 						return true;
@@ -2136,71 +2207,6 @@ export class SpeedReaderAiModal extends Modal {
 		if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
 			navigator.vibrate(10);
 		}
-	}
-
-	private startEdgeScrub(side: EdgeSide) {
-		this.stopEdgeScrub();
-		this.edgeHoldSide = side;
-		this.edgeScrubTickCount = 0;
-		this.edgeScrubStartedAt = Date.now();
-		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
-		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
-		this.shellEl.addClass(
-			side === 'left'
-				? 'speed-reader-ai-mobile-edge-hold-left'
-				: 'speed-reader-ai-mobile-edge-hold-right'
-		);
-		this.runEdgeScrubTick();
-	}
-
-	private runEdgeScrubTick() {
-		if (this.edgeHoldSide === null) {
-			return;
-		}
-		const elapsedMs = Date.now() - this.edgeScrubStartedAt;
-		const step = getScrubStepSize(elapsedMs);
-		if (this.edgeHoldSide === 'left') {
-			this.handleScrubStepLeft(step);
-		} else {
-			this.handleScrubStepRight(step);
-		}
-		this.edgeScrubTickCount += 1;
-		const delay = getScrubHoldDelay(this.edgeScrubTickCount, elapsedMs);
-		this.edgeScrubTimer = window.setTimeout(() => this.runEdgeScrubTick(), delay);
-	}
-
-	private stopEdgeScrub() {
-		if (this.edgeScrubTimer !== null) {
-			window.clearTimeout(this.edgeScrubTimer);
-			this.edgeScrubTimer = null;
-		}
-		this.edgeHoldSide = null;
-		this.edgeScrubTickCount = 0;
-		this.edgeScrubStartedAt = 0;
-		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-left');
-		this.shellEl.removeClass('speed-reader-ai-mobile-edge-hold-right');
-	}
-
-	private flashSkipEdge(side: 'left' | 'right') {
-		this.clearSkipFlash();
-		const flash = this.wordContainer.createDiv({
-			cls:
-				side === 'left'
-					? 'speed-reader-ai-mobile-skip-flash speed-reader-ai-mobile-skip-flash-left'
-					: 'speed-reader-ai-mobile-skip-flash speed-reader-ai-mobile-skip-flash-right',
-			text: side === 'left' ? '◀' : '▶'
-		});
-		this.skipFlashEl = flash;
-		this.skipFlashTimer = window.setTimeout(() => this.clearSkipFlash(), 300);
-	}
-
-	private clearSkipFlash() {
-		if (this.skipFlashTimer !== null) {
-			window.clearTimeout(this.skipFlashTimer);
-			this.skipFlashTimer = null;
-		}
-		this.skipFlashEl?.remove();
-		this.skipFlashEl = null;
 	}
 
 	private onMobileChapterSelect(sectionId: string) {

@@ -109,6 +109,7 @@ export class RSVPEngine implements RSVPEngineContext {
 	private activeParagraphStarts: number[] | null = null;
 	private sectionTitlePrefixEnabled = false;
 	private sectionNavLabel: SectionNavLabel = 'Section';
+	private speechSequence = 0;
 	private onStateChange: (state: ReaderState) => void;
 	public onComplete: () => void;
 	public onSectionComplete?: () => void;
@@ -874,6 +875,7 @@ export class RSVPEngine implements RSVPEngineContext {
 	}
 
 	emitState(finished: boolean) {
+		const speechSequence = ++this.speechSequence;
 		const chunk = this.getCurrentChunk();
 		const lineFields = this.getLineRepeatStateFields();
 		const playbackMode = this.playbackMode;
@@ -913,7 +915,8 @@ export class RSVPEngine implements RSVPEngineContext {
 				currentTokenIndex: this.currentTokenIndex,
 				totalTokens,
 				displayToken,
-				isDeterministic: this.isDeterministic
+				isDeterministic: this.isDeterministic,
+				speechSequence
 			});
 			return;
 		}
@@ -938,7 +941,8 @@ export class RSVPEngine implements RSVPEngineContext {
 			playbackMode,
 			...lineFields,
 			chunkSeekIndices,
-			playbackSource: 'legacy'
+			playbackSource: 'legacy',
+			speechSequence
 		});
 	}
 }

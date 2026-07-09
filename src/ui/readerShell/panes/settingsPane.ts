@@ -37,8 +37,11 @@ export function mountSettingsPane(
 		bodyHost = pane.createDiv({ cls: 'speed-reader-ai-mobile-stack-body' });
 	}
 	let draft = structuredClone(settings);
+	let removeVoicesChangedListener: (() => void) | null = null;
 
 	const render = () => {
+		removeVoicesChangedListener?.();
+		removeVoicesChangedListener = null;
 		bodyHost.empty();
 		if (handlers.showMobileGesturesGuide) {
 			const guide = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-gestures-guide' });
@@ -219,6 +222,96 @@ export function mountSettingsPane(
 		centerGuideCheck.checked = draft.reader.display.showCenterGuide;
 		centerGuideRow.createSpan({ text: 'Show center guide line' });
 
+		right.createEl('h4', { text: 'Text to speech' });
+		right.createEl('label', { text: 'Voice' });
+		const voiceSelect = right.createEl('select', {
+			cls: 'speed-reader-ai-settings-input',
+			attr: { 'aria-label': 'Text to speech voice' }
+		});
+		const voiceStatus = right.createSpan({
+			cls: 'speed-reader-ai-settings-hint',
+			text: 'Voices are provided by this device.'
+		});
+		let selectedVoiceUri = draft.reader.ttsVoiceUri;
+		const populateVoices = () => {
+			voiceSelect.empty();
+			voiceSelect.createEl('option', { text: 'System default', value: '' });
+			const synthesis =
+				typeof window !== 'undefined' && 'speechSynthesis' in window
+					? window.speechSynthesis
+					: null;
+			const voices = synthesis?.getVoices() ?? [];
+			for (const voice of [...voices].sort((a, b) =>
+				`${a.lang} ${a.name}`.localeCompare(`${b.lang} ${b.name}`)
+			)) {
+				voiceSelect.createEl('option', {
+					text: `${voice.name} (${voice.lang})${voice.default ? ' — default' : ''}`,
+					value: voice.voiceURI
+				});
+			}
+			if (
+				selectedVoiceUri &&
+				voices.some((voice) => voice.voiceURI === selectedVoiceUri)
+			) {
+				voiceSelect.value = selectedVoiceUri;
+			} else {
+				voiceSelect.value = '';
+				if (selectedVoiceUri) {
+					voiceStatus.setText('Saved voice is unavailable on this device; using the default.');
+				}
+			}
+		};
+		populateVoices();
+		voiceSelect.addEventListener('change', () => {
+			selectedVoiceUri = voiceSelect.value;
+			voiceStatus.setText('Voices are provided by this device.');
+		});
+		const synthesis =
+			typeof window !== 'undefined' && 'speechSynthesis' in window
+				? window.speechSynthesis
+				: null;
+		if (synthesis) {
+			const onVoicesChanged = () => populateVoices();
+			synthesis.addEventListener('voiceschanged', onVoicesChanged);
+			removeVoicesChangedListener = () =>
+				synthesis.removeEventListener('voiceschanged', onVoicesChanged);
+		} else {
+			voiceSelect.disabled = true;
+			voiceStatus.setText('Text to speech is unavailable on this device.');
+		}
+
+		const testVoiceBtn = right.createEl('button', {
+			cls: 'speed-reader-ai-settings-action-btn',
+			text: 'Test voice',
+			attr: { type: 'button' }
+		});
+		testVoiceBtn.disabled = !synthesis;
+		testVoiceBtn.addEventListener('click', () => {
+			if (!synthesis) {
+				return;
+			}
+			try {
+				synthesis.cancel();
+				const utterance = new SpeechSynthesisUtterance(
+					'This is how the selected speed reader voice sounds.'
+				);
+				const selectedVoice = synthesis
+					.getVoices()
+					.find((voice) => voice.voiceURI === voiceSelect.value);
+				if (selectedVoice) {
+					utterance.voice = selectedVoice;
+				}
+				utterance.rate = 1;
+				utterance.onerror = () =>
+					voiceStatus.setText('The selected voice could not be played.');
+				utterance.onend = () => voiceStatus.setText('Voice preview finished.');
+				synthesis.speak(utterance);
+				voiceStatus.setText('Playing voice preview…');
+			} catch {
+				voiceStatus.setText('The selected voice could not be played.');
+			}
+		});
+
 		const actions = bodyHost.createDiv({ cls: 'speed-reader-ai-settings-actions' });
 		const saveBtn = actions.createEl('button', { cls: 'speed-reader-ai-settings-action-btn', text: 'Save' });
 		const defaultsBtn = actions.createEl('button', {
@@ -239,6 +332,7 @@ export function mountSettingsPane(
 					fontSize: Number(fontSizeInput.value),
 					contextLineFontSize: Number(contextLineFontSizeInput.value),
 					wpm: Number(wpmInput.value),
+					ttsVoiceUri: voiceSelect.value,
 					chunkSize: Number(chunkSizeInput.value),
 					defaultPlaybackMode: defaultModeSelect.value as PlaybackMode,
 					progressiveRsvpMaxWordLength: Number(progressiveRsvpInput.value),
@@ -286,6 +380,7 @@ export function mountSettingsPane(
 
 	return {
 		destroy() {
+			removeVoicesChangedListener?.();
 			stackChrome?.destroy();
 			pane.remove();
 		},

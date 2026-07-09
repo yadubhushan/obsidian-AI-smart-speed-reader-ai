@@ -233,6 +233,8 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 				DEFAULT_SETTINGS.reader.progressiveRsvpMaxWordLength
 			),
 			lineRepeatGapMs: toNumber(raw.lineRepeatGapMs, DEFAULT_SETTINGS.reader.lineRepeatGapMs),
+			ttsEnabled: toBoolean(raw.ttsEnabled, DEFAULT_SETTINGS.reader.ttsEnabled),
+			ttsVoiceUri: toString(raw.ttsVoiceUri, DEFAULT_SETTINGS.reader.ttsVoiceUri),
 			enableMicropause: toBoolean(raw.enableMicropause, DEFAULT_SETTINGS.reader.enableMicropause),
 			micropauseIntensity: toNumber(
 				raw.micropauseIntensity,
@@ -400,6 +402,14 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			),
 			100,
 			3000
+		),
+		ttsEnabled: toBoolean(
+			firstDefined(r.ttsEnabled, flat.ttsEnabled),
+			DEFAULT_SETTINGS.reader.ttsEnabled
+		),
+		ttsVoiceUri: toString(
+			firstDefined(r.ttsVoiceUri, flat.ttsVoiceUri),
+			DEFAULT_SETTINGS.reader.ttsVoiceUri
 		),
 		enableMicropause: toBoolean(
 			firstDefined(r.enableMicropause, flat.enableMicropause),

@@ -5,7 +5,9 @@ export interface MobileActionBarHandle {
 	onBookmarkExplorer(cb: () => void): void;
 	onCopyContext(cb: () => void): void;
 	onDefine(cb: () => void): void;
+	onTtsToggle(cb: () => void): void;
 	onMenu(cb: () => void): void;
+	setTtsEnabled(enabled: boolean): void;
 }
 
 export function mountMobileActionBar(container: HTMLElement): MobileActionBarHandle {
@@ -31,6 +33,15 @@ export function mountMobileActionBar(container: HTMLElement): MobileActionBarHan
 		text: '📖',
 		attr: { type: 'button', 'aria-label': 'Define word' }
 	});
+	const ttsBtn = bar.createEl('button', {
+		cls: 'speed-reader-ai-mobile-action-btn speed-reader-ai-mobile-tts-btn',
+		text: '🔇',
+		attr: {
+			type: 'button',
+			'aria-label': 'Enable text to speech',
+			'aria-pressed': 'false'
+		}
+	});
 	const menuBtn = bar.createEl('button', {
 		cls: 'speed-reader-ai-mobile-action-btn',
 		text: '☰',
@@ -41,12 +52,14 @@ export function mountMobileActionBar(container: HTMLElement): MobileActionBarHan
 	let bookmarkExplorerHandler: (() => void) | null = null;
 	let copyContextHandler: (() => void) | null = null;
 	let defineHandler: (() => void) | null = null;
+	let ttsHandler: (() => void) | null = null;
 	let menuHandler: (() => void) | null = null;
 
 	bookmarkBtn.addEventListener('click', () => bookmarkHandler?.());
 	bookmarkExplorerBtn.addEventListener('click', () => bookmarkExplorerHandler?.());
 	copyContextBtn.addEventListener('click', () => copyContextHandler?.());
 	defineBtn.addEventListener('click', () => defineHandler?.());
+	ttsBtn.addEventListener('click', () => ttsHandler?.());
 	menuBtn.addEventListener('click', () => menuHandler?.());
 
 	return {
@@ -67,6 +80,15 @@ export function mountMobileActionBar(container: HTMLElement): MobileActionBarHan
 		},
 		onDefine(cb) {
 			defineHandler = cb;
+		},
+		onTtsToggle(cb) {
+			ttsHandler = cb;
+		},
+		setTtsEnabled(enabled) {
+			ttsBtn.setText(enabled ? '🔊' : '🔇');
+			ttsBtn.setAttr('aria-label', enabled ? 'Disable text to speech' : 'Enable text to speech');
+			ttsBtn.setAttr('aria-pressed', String(enabled));
+			ttsBtn.toggleClass('is-active', enabled);
 		},
 		onMenu(cb) {
 			menuHandler = cb;

@@ -13,6 +13,8 @@ describe('migrateFlatSettings', () => {
 			chunkSize: 2,
 			colorScheme: 'light',
 			showContext: false,
+			ttsEnabled: true,
+			ttsVoiceUri: 'voice://test',
 			llmBackend: 'cursor-cli',
 			cursorCliPath: '/usr/local/bin/cursor',
 			llmModel: 'composer-2.5-fast',
@@ -24,6 +26,8 @@ describe('migrateFlatSettings', () => {
 		expect(migrated.reader?.chunkSize).toBe(2);
 		expect(migrated.reader?.colorScheme).toBe('light');
 		expect(migrated.reader?.display?.showContext).toBe(false);
+		expect(migrated.reader?.ttsEnabled).toBe(true);
+		expect(migrated.reader?.ttsVoiceUri).toBe('voice://test');
 		expect(migrated.ai?.llmBackend).toBe('cursor-cli');
 		expect(migrated.ai?.cursorCliPath).toBe('/usr/local/bin/cursor');
 		expect(migrated.dictionary?.enableWordLookup).toBe(false);
@@ -42,6 +46,34 @@ describe('migrateFlatSettings', () => {
 
 	it('validateSettings produces full nested defaults for empty input', () => {
 		expect(validateSettings(null, defaultCatalog)).toEqual(DEFAULT_SETTINGS);
+		expect(DEFAULT_SETTINGS.reader.ttsEnabled).toBe(false);
+	});
+
+	it('validates persisted TTS values and rejects malformed values', () => {
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, ttsEnabled: true } },
+				defaultCatalog
+			).reader.ttsEnabled
+		).toBe(true);
+		expect(
+			validateSettings(
+				{
+					reader: {
+						...DEFAULT_SETTINGS.reader,
+						ttsEnabled: 'yes' as never,
+						ttsVoiceUri: 42 as never
+					}
+				},
+				defaultCatalog
+			).reader.ttsEnabled
+		).toBe(false);
+		expect(
+			validateSettings(
+				{ reader: { ...DEFAULT_SETTINGS.reader, ttsVoiceUri: 42 as never } },
+				defaultCatalog
+			).reader.ttsVoiceUri
+		).toBe('');
 	});
 
 	it('clamps contextLineFontSize to 12–32', () => {

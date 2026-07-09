@@ -88,6 +88,10 @@ export interface ReaderSettings {
 	/** Words with letter count ≤ threshold may bundle in Progressive RSVP mode. */
 	progressiveRsvpMaxWordLength: number;
 	lineRepeatGapMs: number;
+	/** Speak each displayed chunk with the device's built-in voice. */
+	ttsEnabled: boolean;
+	/** Web Speech voiceURI; empty uses the device default voice. */
+	ttsVoiceUri: string;
 	enableMicropause: boolean;
 	micropauseIntensity: number;
 	/** Words on each side of current word in context line */
@@ -178,6 +182,8 @@ export interface ReaderState {
 		alt?: string;
 	};
 	isDeterministic?: boolean;
+	/** Monotonic engine emission used to distinguish intentional repeated chunks. */
+	speechSequence?: number;
 }
 
 export interface ParsedDocument {
@@ -210,6 +216,8 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		defaultPlaybackMode: 'rsvp',
 		progressiveRsvpMaxWordLength: 4,
 		lineRepeatGapMs: 600,
+		ttsEnabled: false,
+		ttsVoiceUri: '',
 		enableMicropause: true,
 		micropauseIntensity: 1.5,
 		contextWords: 8,

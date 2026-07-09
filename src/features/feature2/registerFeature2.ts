@@ -144,8 +144,36 @@ export async function prepareBookOpenState(deps: {
 	sourceChecksum: string;
 	services: PluginServices;
 }): Promise<{ existingState?: ReadingState; checksumReset: boolean }> {
+	return prepareOpenState({ ...deps, sourceKind: 'book' });
+}
+
+async function prepareOpenState(deps: {
+	sourcePath: string;
+	sourceChecksum: string;
+	sourceKind: SourceKind;
+	services: PluginServices;
+}): Promise<{ existingState?: ReadingState; checksumReset: boolean }> {
 	await deps.services.readingStateStore.reloadFromDisk();
-	const existing = deps.services.readingStateStore.get(deps.sourcePath);
+	const stateFile = await deps.services.readingStateStore.load();
+	let existing = deps.services.readingStateStore.get(deps.sourcePath);
+
+	if (!existing) {
+		const checksumMatches = Object.values(stateFile.sources).filter(
+			(state) =>
+				state.sourceKind === deps.sourceKind &&
+				state.sourceChecksum === deps.sourceChecksum
+		);
+		if (checksumMatches.length === 1) {
+			const movedState = checksumMatches[0]!;
+			existing = {
+				...movedState,
+				sourcePath: deps.sourcePath
+			};
+			await deps.services.readingStateStore.remove(movedState.sourcePath);
+			await deps.services.readingStateStore.upsert(existing);
+		}
+	}
+
 	const checksumReset = Boolean(
 		existing?.sourceChecksum && existing.sourceChecksum !== deps.sourceChecksum
 	);
@@ -159,5 +187,5 @@ export async function prepareNoteOpenState(deps: {
 	sourceChecksum: string;
 	services: PluginServices;
 }): Promise<{ existingState?: ReadingState; checksumReset: boolean }> {
-	return prepareBookOpenState(deps);
+	return prepareOpenState({ ...deps, sourceKind: 'note' });
 }

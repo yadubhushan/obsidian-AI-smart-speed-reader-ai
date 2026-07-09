@@ -1,12 +1,13 @@
 import type { PlaybackMode, ReaderState, SpeedReaderAiSettings } from '../../types';
 import { mountPrepareControls, type PrepareControlsHandle } from '../prepareControls';
-import { mountPlaybackModeSelect, type PlaybackModeSelectHandle } from './playbackModePicker';
+import { mountPlaybackModeSelect } from './playbackModePicker';
 
 export interface ReaderControlBarHandle {
 	destroy(): void;
 	update(state: ReaderState | null, documentProgressPercent?: number | null): void;
 	setVisible(visible: boolean): void;
 	setPrepareVisible(visible: boolean): void;
+	setTtsEnabled(enabled: boolean): void;
 	getPrepareControls(): PrepareControlsHandle | null;
 }
 
@@ -15,6 +16,7 @@ export interface ReaderControlBarHandlers {
 	onFontDelta: (delta: number) => void;
 	onPlaybackModeChange: (mode: PlaybackMode) => void;
 	onCopyContext: () => void | Promise<void>;
+	onTtsToggle: () => void;
 	onReadWithoutAi: () => void;
 	onPrepare: () => void | Promise<void>;
 	onClearCache: () => void | Promise<void>;
@@ -34,6 +36,7 @@ export function mountReaderControlBar(
 	}
 ): ReaderControlBarHandle {
 	const showDocumentProgress = options.showDocumentProgress ?? false;
+	let ttsEnabled = settings.reader.ttsEnabled;
 	const bar = container.createDiv({ cls: 'speed-reader-ai-control-bar' });
 	const row = bar.createDiv({ cls: 'speed-reader-ai-control-row' });
 
@@ -73,6 +76,15 @@ export function mountReaderControlBar(
 			'aria-label': 'Copy paragraph context prompt'
 		}
 	});
+	const ttsBtn = row.createEl('button', {
+		cls: 'speed-reader-ai-control-btn speed-reader-ai-tts-btn',
+		text: 'Text to speech off',
+		attr: {
+			type: 'button',
+			'aria-label': 'Enable text to speech',
+			'aria-pressed': 'false'
+		}
+	});
 
 	const navGroup = row.createDiv({ cls: 'speed-reader-ai-control-nav-group' });
 	const prevBtn = navGroup.createEl('button', {
@@ -97,6 +109,7 @@ export function mountReaderControlBar(
 	copyContextBtn.addEventListener('click', () => {
 		void handlers.onCopyContext();
 	});
+	ttsBtn.addEventListener('click', handlers.onTtsToggle);
 	prevBtn.addEventListener('click', () => handlers.onPrevSection?.());
 	nextBtn.addEventListener('click', () => handlers.onNextSection?.());
 
@@ -110,6 +123,11 @@ export function mountReaderControlBar(
 			fontVal.setText(String(settings.reader.fontSize));
 			wpmVal.setText(String(state ? Math.round(state.currentWpm) : settings.reader.wpm));
 			modePicker.setMode(state?.playbackMode ?? settings.reader.defaultPlaybackMode);
+			ttsBtn.setText(ttsEnabled ? '🔊 Text to speech on' : '🔇 Text to speech off');
+			ttsBtn.setAttr('aria-label', ttsEnabled ? 'Disable text to speech' : 'Enable text to speech');
+			ttsBtn.setAttr('aria-pressed', String(ttsEnabled));
+			ttsBtn.toggleClass('is-active', ttsEnabled);
+			ttsBtn.toggleClass('is-hidden', Boolean(state?.isPlaying));
 			if (docPctVal) {
 				if (documentProgressPercent == null || !state) {
 					docPctVal.setText('');
@@ -138,6 +156,13 @@ export function mountReaderControlBar(
 				onPrepare: handlers.onPrepare,
 				onClearCache: handlers.onClearCache
 			});
+		},
+		setTtsEnabled(enabled) {
+			ttsEnabled = enabled;
+			ttsBtn.setText(enabled ? '🔊 Text to speech on' : '🔇 Text to speech off');
+			ttsBtn.setAttr('aria-label', enabled ? 'Disable text to speech' : 'Enable text to speech');
+			ttsBtn.setAttr('aria-pressed', String(enabled));
+			ttsBtn.toggleClass('is-active', enabled);
 		},
 		getPrepareControls: () => prepareControls
 	};
