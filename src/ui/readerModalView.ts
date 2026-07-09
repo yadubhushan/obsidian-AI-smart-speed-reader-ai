@@ -137,6 +137,18 @@ function headingLabel(heading: HeadingInfo): string {
 	return `${'#'.repeat(heading.level)} ${heading.text}`;
 }
 
+export interface SpeedReaderAiModalOptions {
+	readerOpen: SpeedReaderOpen;
+	settings: SpeedReaderAiSettings;
+	onSettingsChange: (settings: SpeedReaderAiSettings) => void;
+	manifestStore?: ManifestStore;
+	preparePrompts?: PreparePromptSet;
+	onCacheCleared?: () => void | Promise<void>;
+	onReaderClose?: () => void;
+	llmModelCatalog?: LlmModelCatalog;
+	bookCacheBase?: string;
+}
+
 export class SpeedReaderAiModal extends Modal {
 	private readonly readerOpen: SpeedReaderOpen;
 	private settings: SpeedReaderAiSettings;
@@ -219,19 +231,19 @@ export class SpeedReaderAiModal extends Modal {
 	private chapterNav: ChapterNavControlsHandle | null = null;
 	private coverObjectUrl: string | null = null;
 	private readonly bookCacheBase: string;
-	constructor(
-		app: App,
-		readerOpen: SpeedReaderOpen,
-		settings: SpeedReaderAiSettings,
-		onSettingsChange: (settings: SpeedReaderAiSettings) => void,
-		manifestStore?: ManifestStore,
-		preparePrompts?: PreparePromptSet,
-		onCacheCleared?: () => void | Promise<void>,
-		onReaderClose?: () => void,
-		llmModelCatalog: LlmModelCatalog = createDefaultLlmModelCatalog(),
-		bookCacheBase = ''
-	) {
+	constructor(app: App, options: SpeedReaderAiModalOptions) {
 		super(app);
+		const {
+			readerOpen,
+			settings,
+			onSettingsChange,
+			manifestStore,
+			preparePrompts,
+			onCacheCleared,
+			onReaderClose,
+			llmModelCatalog = createDefaultLlmModelCatalog(),
+			bookCacheBase = ''
+		} = options;
 		this.bookCacheBase = bookCacheBase;
 		this.readerOpen = readerOpen;
 		this.settings = settings;

@@ -75,19 +75,14 @@ export class ReaderLauncher implements ReaderCommandHost {
 	}
 
 	async openReaderPreferences(initialTab: ReaderTabId = 'settings'): Promise<void> {
-		const modal = new SpeedReaderAiModal(
-			this.deps.app,
-			{ kind: 'preferences', initialTab },
-			{ ...this.deps.getSettings() },
-			(newSettings) => {
+		const modal = new SpeedReaderAiModal(this.deps.app, {
+			readerOpen: { kind: 'preferences', initialTab },
+			settings: { ...this.deps.getSettings() },
+			onSettingsChange: (newSettings) => {
 				this.deps.persistSettings(newSettings);
 			},
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			this.deps.getLlmModelCatalog()
-		);
+			llmModelCatalog: this.deps.getLlmModelCatalog()
+		});
 		modal.open();
 	}
 
@@ -127,24 +122,24 @@ export class ReaderLauncher implements ReaderCommandHost {
 		const sourcePath =
 			readerOpen.kind === 'structured' || readerOpen.kind === 'book' ? readerOpen.sourcePath : null;
 
-		const modal = new SpeedReaderAiModal(
-			this.deps.app,
+		const modal = new SpeedReaderAiModal(this.deps.app, {
 			readerOpen,
-			{ ...this.deps.getSettings() },
-			(newSettings) => {
+			settings: { ...this.deps.getSettings() },
+			onSettingsChange: (newSettings) => {
 				this.deps.persistSettings(newSettings);
 			},
-			readerOpen.kind === 'structured' ? this.deps.getManifestStore() : undefined,
-			this.deps.getPreparePrompts(),
-			readerOpen.kind === 'structured'
-				? () => this.deps.refreshPrepareStatusBar()
-				: undefined,
-			sourcePath
+			manifestStore: readerOpen.kind === 'structured' ? this.deps.getManifestStore() : undefined,
+			preparePrompts: this.deps.getPreparePrompts(),
+			onCacheCleared:
+				readerOpen.kind === 'structured'
+					? () => this.deps.refreshPrepareStatusBar()
+					: undefined,
+			onReaderClose: sourcePath
 				? () => {
 						services.eventBus.emit('reader-closed', { sourcePath });
 					}
 				: undefined
-		);
+		});
 
 		if (readerOpen.kind === 'structured') {
 			const hooks = attachNoteReadingSession({

@@ -62,9 +62,8 @@ export async function openNoteReader(deps: OpenNoteReaderDeps): Promise<SpeedRea
 			: undefined;
 	const resumePosition = requestPosition ?? storedPosition;
 
-	const modal = new SpeedReaderAiModal(
-		deps.app,
-		{
+	const modal = new SpeedReaderAiModal(deps.app, {
+		readerOpen: {
 			kind: 'structured',
 			sourcePath: deps.request.sourcePath,
 			text,
@@ -73,13 +72,13 @@ export async function openNoteReader(deps: OpenNoteReaderDeps): Promise<SpeedRea
 			preferredProcessingMode: existingState?.preferredProcessingMode,
 			preferredAiVersionId: existingState?.preferredAiVersionId
 		},
-		{ ...deps.settings },
-		deps.onSettingsChange,
-		deps.getManifestStore(),
-		deps.preparePrompts,
-		deps.onPrepareStatusChange,
-		() => deps.onClose?.(deps.request.sourcePath)
-	);
+		settings: { ...deps.settings },
+		onSettingsChange: deps.onSettingsChange,
+		manifestStore: deps.getManifestStore(),
+		preparePrompts: deps.preparePrompts,
+		onCacheCleared: deps.onPrepareStatusChange,
+		onReaderClose: () => deps.onClose?.(deps.request.sourcePath)
+	});
 
 	const playbackMode =
 		deps.request.playbackMode ?? existingState?.playbackMode ?? deps.settings.reader.defaultPlaybackMode;

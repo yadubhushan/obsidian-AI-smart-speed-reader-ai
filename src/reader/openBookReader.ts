@@ -68,9 +68,8 @@ export async function openBookReader(deps: OpenBookReaderDeps): Promise<SpeedRea
 	const playbackMode =
 		deps.request.playbackMode ?? existingState?.playbackMode ?? deps.settings.reader.defaultPlaybackMode;
 
-	const modal = new SpeedReaderAiModal(
-		deps.app,
-		{
+	const modal = new SpeedReaderAiModal(deps.app, {
+		readerOpen: {
 			kind: 'book',
 			sourcePath: deps.request.sourcePath,
 			bookIndex: index,
@@ -78,15 +77,13 @@ export async function openBookReader(deps: OpenBookReaderDeps): Promise<SpeedRea
 			sectionIndex,
 			tokenIndex
 		},
-		{ ...deps.settings },
-		deps.onSettingsChange,
-		undefined,
-		deps.preparePrompts,
-		undefined,
-		() => deps.onClose?.(deps.request.sourcePath),
-		createDefaultLlmModelCatalog(),
-		deps.services.dataPaths.bookCacheBase
-	);
+		settings: { ...deps.settings },
+		onSettingsChange: deps.onSettingsChange,
+		preparePrompts: deps.preparePrompts,
+		onReaderClose: () => deps.onClose?.(deps.request.sourcePath),
+		llmModelCatalog: createDefaultLlmModelCatalog(),
+		bookCacheBase: deps.services.dataPaths.bookCacheBase
+	});
 
 	const hooks = attachBookReadingSession({
 		modal,
