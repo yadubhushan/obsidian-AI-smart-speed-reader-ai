@@ -36,7 +36,6 @@ import type { ReaderWordLookupHandles } from '../features/word-lookup/attachRead
 import type { DictionaryLookupOutcome } from '../dictionary/dictionaryTypes';
 import type { DictionarySaveButtonState } from './dictionaryFooter';
 import { mountDictionaryOverlay, type DictionaryOverlayHandle } from './dictionaryOverlay';
-import { applyReaderThemeToElement, readerFontFamily } from './readerShell/readerThemes';
 import { writeTextToClipboard } from '../services/clipboard';
 import { buildReaderContextPrompt } from './readerContextPrompt';
 import { mountReaderHeader, type ReaderHeaderHandle } from './readerShell/readerHeader';
@@ -117,9 +116,14 @@ import {
 	type SidebarSnapshot
 } from './readerShell/desktopFocusChrome';
 
-const FONT_SIZE_STEP = 3;
-const MIN_FONT_SIZE = 24;
-const MAX_FONT_SIZE = 200;
+import {
+	clampFontSize,
+	clampWpm,
+	createReaderAppearance,
+	FONT_SIZE_STEP,
+	stepFontSize,
+	type ReaderAppearanceHandle
+} from './readerShell/readerAppearance';
 
 function formatRemainingTime(milliseconds: number): string {
 	const totalSeconds = Math.ceil(milliseconds / 1000);
@@ -222,6 +226,7 @@ export class SpeedReaderAiModal extends Modal {
 	private headingSelectWrapper!: HTMLElement;
 	private sectionSelect!: HTMLSelectElement;
 	private interSectionOverlay: InterSectionOverlayHandle | null = null;
+	private readonly appearance: ReaderAppearanceHandle;
 	private prepareOverlay: PrepareOverlayHandle | null = null;
 
 	private modePicker: ModePickerHandle | null = null;
@@ -261,6 +266,15 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		this.boundVisibilityHandler = () => this.handleVisibilityChange();
 		this.boundBlurHandler = () => this.handleWindowBlur();
+		this.appearance = createReaderAppearance(
+			{
+				containerEl: this.containerEl,
+				contentEl: this.contentEl,
+				getWordContainer: () => this.wordContainer ?? null,
+				getContextLineRootEl: () => this.contextLine?.getRootEl() ?? null
+			},
+			() => this.settings
+		);
 		this.engine = new RSVPEngine(
 			this.settings,
 			(state) => {
@@ -288,8 +302,8 @@ export class SpeedReaderAiModal extends Modal {
 		contentEl.setAttr('tabindex', '-1');
 		contentEl.focus();
 
-		this.applyReaderTheme();
-		this.applyFontFamily();
+		this.appearance.applyTheme();
+		this.appearance.applyFontFamily();
 
 		this.shellEl = contentEl.createDiv({ cls: 'speed-reader-ai-shell' });
 
@@ -348,9 +362,9 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.homePaneEl = this.paneStackEl.createDiv({ cls: 'speed-reader-ai-pane speed-reader-ai-pane-home' });
 		this.wordContainer = this.homePaneEl.createDiv({ cls: 'speed-reader-ai-word-container' });
-		this.applyFontSize();
-		this.applyContextLineFontSize();
-		this.applyCenterGuideVisibility();
+		this.appearance.applyFontSize();
+		this.appearance.applyContextLineFontSize();
+		this.appearance.applyCenterGuideVisibility();
 
 		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
 		this.interSectionOverlay = mountInterSectionOverlay(this.wordContainer);
@@ -425,8 +439,8 @@ export class SpeedReaderAiModal extends Modal {
 				return defaults;
 			},
 			onResetFontSize: () => {
-				this.applyFontSize();
-				this.applyContextLineFontSize();
+				this.appearance.applyFontSize();
+				this.appearance.applyContextLineFontSize();
 				this.engine.setSettings(this.settings);
 				this.returnToReadingAfterPaneAction();
 			},
@@ -1039,11 +1053,7 @@ export class SpeedReaderAiModal extends Modal {
 	private persistSettings(next: SpeedReaderAiSettings) {
 		this.settings = validateSettings(next, this.llmModelCatalog);
 		this.engine.setSettings(this.settings);
-		this.applyReaderTheme();
-		this.applyFontFamily();
-		this.applyFontSize();
-		this.applyContextLineFontSize();
-		this.applyCenterGuideVisibility();
+		this.appearance.applyAll();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
 		this.onSettingsChange(this.settings);
 		new Notice('Settings saved');
@@ -1068,38 +1078,6 @@ export class SpeedReaderAiModal extends Modal {
 			window.clearTimeout(this.autoStartTimer);
 			this.autoStartTimer = null;
 		}
-	}
-
-	private applyReaderTheme(): void {
-		applyReaderThemeToElement(this.containerEl, this.settings.reader.colorScheme, {
-			themePreset: this.settings.reader.themePreset
-		});
-		applyReaderThemeToElement(this.contentEl, this.settings.reader.colorScheme, {
-			themePreset: this.settings.reader.themePreset
-		});
-		this.applyCustomReaderColors(this.containerEl);
-		this.applyCustomReaderColors(this.contentEl);
-	}
-
-	private applyCustomReaderColors(target: HTMLElement): void {
-		const { focusWord, centerCharacter } = this.settings.reader.colors;
-		if (focusWord) {
-			target.style.setProperty('--sr-focus-word-color', focusWord);
-		} else {
-			target.style.removeProperty('--sr-focus-word-color');
-		}
-		if (centerCharacter) {
-			target.style.setProperty('--sr-center-character-color', centerCharacter);
-		} else {
-			target.style.removeProperty('--sr-center-character-color');
-		}
-	}
-
-	private applyFontFamily() {
-		this.wordContainer?.style.setProperty(
-			'--speed-reader-ai-font-family',
-			readerFontFamily(this.settings.reader.font)
-		);
 	}
 
 	setSessionHooks(hooks: ReaderSessionHooks | undefined): void {
@@ -1936,7 +1914,7 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private setReaderWpm(wpm: number) {
-		const clamped = Math.max(50, Math.min(5000, Math.round(wpm)));
+		const clamped = clampWpm(wpm);
 		const delta = clamped - this.settings.reader.wpm;
 		if (delta === 0) {
 			return;
@@ -1955,7 +1933,7 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private setReaderFontSize(fontSize: number) {
-		const clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Math.round(fontSize)));
+		const clamped = clampFontSize(fontSize);
 		if (clamped === this.settings.reader.fontSize) {
 			return;
 		}
@@ -1963,37 +1941,13 @@ export class SpeedReaderAiModal extends Modal {
 			...this.settings,
 			reader: { ...this.settings.reader, fontSize: clamped }
 		};
-		this.applyFontSize();
-		this.applyContextLineFontSize();
+		this.appearance.applyFontSize();
+		this.appearance.applyContextLineFontSize();
 		this.engine.setSettings(this.settings);
 	}
 
-	private applyFontSize() {
-		this.wordContainer?.style.setProperty(
-			'--speed-reader-ai-font-size',
-			`${this.settings.reader.fontSize}px`
-		);
-	}
-
-	private applyContextLineFontSize() {
-		this.contextLine?.getRootEl().style.setProperty(
-			'--speed-reader-ai-context-line-font-size',
-			`${this.settings.reader.contextLineFontSize}px`
-		);
-	}
-
-	private applyCenterGuideVisibility(): void {
-		this.wordContainer?.toggleClass(
-			'is-center-guide-hidden',
-			!this.settings.reader.display.showCenterGuide
-		);
-	}
-
 	private adjustFontSize(delta: number) {
-		const newSize = Math.max(
-			MIN_FONT_SIZE,
-			Math.min(MAX_FONT_SIZE, this.settings.reader.fontSize + delta)
-		);
+		const newSize = stepFontSize(this.settings.reader.fontSize, delta);
 		if (newSize === this.settings.reader.fontSize) {
 			return;
 		}
@@ -2002,8 +1956,8 @@ export class SpeedReaderAiModal extends Modal {
 			...this.settings,
 			reader: { ...this.settings.reader, fontSize: newSize }
 		};
-		this.applyFontSize();
-		this.applyContextLineFontSize();
+		this.appearance.applyFontSize();
+		this.appearance.applyContextLineFontSize();
 		new Notice(`Font size: ${newSize}px`);
 	}
 
