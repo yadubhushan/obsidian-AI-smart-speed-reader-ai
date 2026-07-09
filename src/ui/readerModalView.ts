@@ -109,6 +109,8 @@ import {
 	syncMobileRouteShell,
 	isMobileStackRoute,
 	isMobileReadingRoot,
+	popRouteStack,
+	pushRouteStack,
 	type MobileRoute
 } from './readerShell/mobileNavigation';
 import {
@@ -944,7 +946,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.forceClose();
 			return;
 		}
-		this.mobileRouteStack = ['reading'];
+		this.mobileRouteStack = pushRouteStack(this.mobileRouteStack, 'reading');
 		this.applyMobileRoute('reading');
 		this.refocusContent();
 	}
@@ -954,8 +956,8 @@ export class SpeedReaderAiModal extends Modal {
 			this.goToReadingRoot();
 			return;
 		}
-		this.mobileRouteStack.pop();
-		const route = this.mobileRouteStack[this.mobileRouteStack.length - 1] ?? 'reading';
+		const { stack, route } = popRouteStack(this.mobileRouteStack);
+		this.mobileRouteStack = stack;
 		if (route === 'reading' && this.readerOpen.kind === 'preferences') {
 			this.forceClose();
 			return;
@@ -969,28 +971,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.goToReadingRoot();
 			return;
 		}
-
-		const top = this.mobileRouteStack[this.mobileRouteStack.length - 1] ?? 'reading';
-		if (top === route) {
-			this.applyMobileRoute(route);
-			return;
-		}
-
-		if (top === 'reading') {
-			if (route === 'bookmarks') {
-				this.mobileRouteStack = ['reading', 'bookmarks'];
-			} else if (route === 'more') {
-				this.mobileRouteStack = ['reading', 'more'];
-			} else {
-				this.mobileRouteStack = ['reading', 'more', route];
-			}
-		} else if (top === 'more') {
-			this.mobileRouteStack.push(route);
-		} else {
-			this.mobileRouteStack.pop();
-			this.mobileRouteStack.push(route);
-		}
-
+		this.mobileRouteStack = pushRouteStack(this.mobileRouteStack, route);
 		this.applyMobileRoute(route);
 	}
 

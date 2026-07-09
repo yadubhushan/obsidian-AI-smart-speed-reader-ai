@@ -56,3 +56,48 @@ export function syncMobileRouteShell(shellEl: HTMLElement, route: MobileRoute): 
 export function isMobileReadingRoot(route: MobileRoute): boolean {
 	return route === 'reading';
 }
+
+/**
+ * Route-stack transition for navigating to a route:
+ * - 'reading' resets to the root
+ * - a sibling opened from 'reading' starts a fresh stack ('bookmarks' and
+ *   'more' sit directly above the root; anything else nests under 'more')
+ * - routes opened from 'more' stack on top; siblings replace each other
+ */
+export function pushRouteStack(
+	stack: readonly MobileRoute[],
+	route: MobileRoute
+): MobileRoute[] {
+	if (route === 'reading') {
+		return ['reading'];
+	}
+	const top = stack[stack.length - 1] ?? 'reading';
+	if (top === route) {
+		return [...stack];
+	}
+	if (top === 'reading') {
+		if (route === 'bookmarks') {
+			return ['reading', 'bookmarks'];
+		}
+		if (route === 'more') {
+			return ['reading', 'more'];
+		}
+		return ['reading', 'more', route];
+	}
+	if (top === 'more') {
+		return [...stack, route];
+	}
+	return [...stack.slice(0, -1), route];
+}
+
+/** Pops one route; an empty or single-entry stack resolves to the reading root. */
+export function popRouteStack(stack: readonly MobileRoute[]): {
+	stack: MobileRoute[];
+	route: MobileRoute;
+} {
+	if (stack.length <= 1) {
+		return { stack: ['reading'], route: 'reading' };
+	}
+	const next = stack.slice(0, -1);
+	return { stack: next, route: next[next.length - 1] ?? 'reading' };
+}
