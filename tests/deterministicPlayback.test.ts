@@ -8,6 +8,7 @@ import {
 import type { NormalizedSegment } from '../src/parse/normalizeTypes';
 import { overviewBundle } from './prepareFixtures';
 import { parseSegments } from '../src/parse/segmentParser';
+import { normalizeDocument } from '../src/parse/normalizeSegments';
 import { OVERVIEW_EXCERPT } from './prepareFixtures';
 
 function wordTexts(stream: ReturnType<typeof segmentsToStream>): string[] {
@@ -33,6 +34,28 @@ describe('deterministicPlayback', () => {
 			for (const section of processed.sections) {
 				expect(section.stream.length).toBeGreaterThan(0);
 			}
+		}
+	});
+
+	it('does not create an empty section for a document-title-only preamble', () => {
+		const markdown = `# Thought Summary
+
+## Thursday, April 30
+
+First summary body.
+
+## Thursday, May 07
+
+Second summary body.`;
+		const parsed = parseSegments(markdown);
+		const bundle = normalizeDocument(parsed, 'thought-summary.md', 'checksum');
+		const processed = bundleToSectionsProcessed(bundle);
+
+		expect(processed.kind).toBe('sections');
+		if (processed.kind === 'sections') {
+			expect(processed.sections).toHaveLength(2);
+			expect(processed.sections[0]?.title).toBe('Thursday, April 30');
+			expect(processed.sections.every((section) => section.stream.length > 0)).toBe(true);
 		}
 	});
 

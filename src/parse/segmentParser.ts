@@ -361,25 +361,69 @@ function preambleTitle(segments: DocumentSegment[], start: number, end: number):
 	return firstParagraphTitle(segments.slice(start, end)) ?? 'Introduction';
 }
 
+function hasReadablePreambleContent(
+	segments: DocumentSegment[],
+	start: number,
+	end: number
+): boolean {
+	for (let index = start; index < end; index++) {
+		const segment = segments[index];
+		if (!segment || isExcludedSegment(segment)) continue;
+		if (
+			segment.kind !== 'heading' &&
+			segment.kind !== 'hr' &&
+			segment.kind !== 'code_block'
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Pick the shallowest repeated heading level as the note's chapter boundary.
+ * A lone H1 is normally the document title, while a lone H2 keeps the plugin's
+ * existing single-section behavior for backwards compatibility.
+ */
+function detectSectionHeadingLevel(segments: DocumentSegment[]): number | null {
+	const counts = new Map<number, number>();
+
+	for (const segment of segments) {
+		if (segment.kind !== 'heading') continue;
+		const level = segment.meta?.level;
+		if (typeof level !== 'number' || level < 1 || level > 6) continue;
+		counts.set(level, (counts.get(level) ?? 0) + 1);
+	}
+
+	for (let level = 1; level <= 6; level++) {
+		if ((counts.get(level) ?? 0) >= 2) {
+			return level;
+		}
+	}
+
+	return counts.get(2) === 1 ? 2 : null;
+}
+
 export function buildSections(
 	segments: DocumentSegment[],
 	options?: ParseSegmentsOptions
 ): DocumentSection[] {
-	const h2Indices: number[] = [];
+	const sectionHeadingLevel = detectSectionHeadingLevel(segments);
+	const sectionHeadingIndices: number[] = [];
 	for (let index = 0; index < segments.length; index++) {
 		const segment = segments[index];
 		if (
 			segment?.kind === 'heading' &&
-			segment.meta?.level === 2
+			segment.meta?.level === sectionHeadingLevel
 		) {
-			h2Indices.push(index);
+			sectionHeadingIndices.push(index);
 		}
 	}
 
 	const usedIds = new Set<string>();
 	const sections: DocumentSection[] = [];
 
-	if (h2Indices.length === 0) {
+	if (sectionHeadingIndices.length === 0) {
 		const segmentStart = firstIncludedSegmentIndex(segments);
 		const title =
 			titleFromFileName(options?.fileName) ??
@@ -398,23 +442,31 @@ export function buildSections(
 	}
 
 	const firstIncluded = firstIncludedSegmentIndex(segments);
-	const firstH2 = h2Indices[0]!;
+	const firstSectionHeading = sectionHeadingIndices[0]!;
+	let firstSectionStart = firstSectionHeading;
 
-	if (firstIncluded < firstH2) {
-		sections.push({
-			id: '00-preamble',
-			title: preambleTitle(segments, firstIncluded, firstH2),
-			level: 0,
-			order: sections.length,
-			segmentStart: firstIncluded,
-			segmentEnd: firstH2
-		});
+	if (firstIncluded < firstSectionHeading) {
+		if (hasReadablePreambleContent(segments, firstIncluded, firstSectionHeading)) {
+			sections.push({
+				id: '00-preamble',
+				title: preambleTitle(segments, firstIncluded, firstSectionHeading),
+				level: 0,
+				order: sections.length,
+				segmentStart: firstIncluded,
+				segmentEnd: firstSectionHeading
+			});
+		} else {
+			// Keep title-only preamble segments covered without exposing an empty
+			// playback section. Headings are metadata and produce no RSVP tokens.
+			firstSectionStart = firstIncluded;
+		}
 	}
 
-	for (let h2Index = 0; h2Index < h2Indices.length; h2Index++) {
-		const segmentStart = h2Indices[h2Index]!;
-		const segmentEnd = h2Indices[h2Index + 1] ?? segments.length;
-		const heading = segments[segmentStart]!;
+	for (let sectionIndex = 0; sectionIndex < sectionHeadingIndices.length; sectionIndex++) {
+		const headingIndex = sectionHeadingIndices[sectionIndex]!;
+		const segmentStart = sectionIndex === 0 ? firstSectionStart : headingIndex;
+		const segmentEnd = sectionHeadingIndices[sectionIndex + 1] ?? segments.length;
+		const heading = segments[headingIndex]!;
 		const title = headingText(heading);
 		const order = sections.length;
 		const slug = slugifyTitle(title);
@@ -423,7 +475,7 @@ export function buildSections(
 		sections.push({
 			id,
 			title,
-			level: 2,
+			level: sectionHeadingLevel ?? 0,
 			order,
 			segmentStart,
 			segmentEnd

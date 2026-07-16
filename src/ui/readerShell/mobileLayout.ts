@@ -1,5 +1,6 @@
 import { Platform } from 'obsidian';
 import type { ReaderState } from '../../types';
+import { setReaderImmersiveBlackout } from './readerImmersiveBlackout';
 
 export const MOBILE_GESTURE_HINT_KEY = 'speed-reader-ai-mobile-gesture-hint-shown';
 
@@ -20,6 +21,7 @@ export function removeMobileShellClass(
 	shellEl.removeClass('speed-reader-ai-mobile-paused');
 	shellEl.removeClass('speed-reader-ai-mobile-menu-open');
 	modalContainerEl?.removeClass('speed-reader-ai-mobile-playing');
+	setReaderImmersiveBlackout(shellEl.ownerDocument, modalContainerEl, false);
 }
 
 export function syncMobilePlayingState(
@@ -32,6 +34,7 @@ export function syncMobilePlayingState(
 	shellEl.toggleClass('speed-reader-ai-mobile-playing', immersive);
 	shellEl.toggleClass('speed-reader-ai-mobile-menu-open', overlayOpen);
 	modalContainerEl?.toggleClass('speed-reader-ai-mobile-playing', immersive);
+	setReaderImmersiveBlackout(shellEl.ownerDocument, modalContainerEl, immersive);
 }
 
 export function syncMobilePausedState(shellEl: HTMLElement, isPausedHome: boolean): void {

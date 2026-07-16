@@ -282,6 +282,26 @@ Section two body.`;
 		expect(result.sections[2]?.title).toBe('Second');
 	});
 
+	it('folds a title-only preamble into the first readable H2 section', () => {
+		const markdown = `# Thought Summary
+
+## Thursday, April 30
+
+First summary body.
+
+## Thursday, May 07
+
+Second summary body.`;
+
+		const result = parseSegments(markdown);
+
+		expect(result.sections).toHaveLength(2);
+		expect(result.sections[0]?.title).toBe('Thursday, April 30');
+		expect(result.sections[0]?.segmentStart).toBe(0);
+		expect(result.sections[1]?.title).toBe('Thursday, May 07');
+		assertSegmentSectionCoverage(result);
+	});
+
 	it('assigns every non-excluded segment to exactly one section', () => {
 		assertSegmentSectionCoverage(parseSegments(OVERVIEW_EXCERPT));
 		assertSegmentSectionCoverage(

@@ -1,5 +1,6 @@
 import type { Workspace } from 'obsidian';
 import { applyDesktopFocusChrome, type SidebarSnapshot } from './desktopFocusChrome';
+import { setReaderImmersiveBlackout } from './readerImmersiveBlackout';
 
 export type FocusEventKind = 'visibilitychange' | 'window-blur';
 export type VisibilityAction = 'pause' | 'resume' | 'none';
@@ -105,6 +106,7 @@ export function createReaderFocusController(deps: ReaderFocusDeps): ReaderFocusH
 			focusMode = enabled;
 			deps.contentEl.toggleClass('speed-reader-ai-focus-active', focusMode);
 			deps.containerEl.toggleClass('is-focus-active', focusMode);
+			setReaderImmersiveBlackout(deps.getDoc(), deps.containerEl, focusMode);
 			if (!deps.isMobile) {
 				sidebarSnapshot = applyDesktopFocusChrome(deps.workspace, enabled, sidebarSnapshot);
 			}

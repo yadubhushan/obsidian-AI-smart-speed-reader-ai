@@ -121,6 +121,7 @@ import {
 	createReaderFocusController,
 	type ReaderFocusHandle
 } from './readerShell/readerFocusController';
+import { setReaderImmersiveBlackout } from './readerShell/readerImmersiveBlackout';
 import { registerReaderKeyboard } from './readerShell/readerKeyboard';
 
 import {
@@ -317,6 +318,7 @@ export class SpeedReaderAiModal extends Modal {
 				const previousIsPlaying = this.previousIsPlaying;
 				this.state = state;
 				this.previousIsPlaying = state.isPlaying;
+				this.syncDesktopFocusWithPlayback(state, previousIsPlaying);
 				this.speechPlayback.sync(
 					state,
 					this.settings.reader.ttsEnabled,
@@ -697,6 +699,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.mobileCoachMarks?.destroy();
 		this.mobileCoachMarks = null;
 		removeMobileShellClass(this.shellEl, this.containerEl);
+		setReaderImmersiveBlackout(this.ownerDoc ?? this.containerEl.ownerDocument, this.containerEl, false);
 		this.contentPane?.destroy();
 		this.bookmarksPane?.destroy();
 		this.settingsPane?.destroy();
@@ -1310,6 +1313,22 @@ export class SpeedReaderAiModal extends Modal {
 
 	private startPlayback(): void {
 		this.engine.play();
+	}
+
+	private syncDesktopFocusWithPlayback(
+		state: ReaderState,
+		previousIsPlaying: boolean | null
+	): void {
+		if (
+			this.mobileReader ||
+			this.readerOpen.kind === 'preferences' ||
+			previousIsPlaying === null ||
+			previousIsPlaying === state.isPlaying
+		) {
+			return;
+		}
+
+		this.focusController.setFocusMode(state.isPlaying && !state.finished);
 	}
 
 	private playbackOptions() {
