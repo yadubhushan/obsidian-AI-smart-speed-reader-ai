@@ -23,16 +23,35 @@ function makeWords(count: number, sentenceEndAt: number[] = []): WordData[] {
 }
 
 describe('readingNavigation', () => {
-	it('rewinds in 15-word chunks within a long sentence', () => {
+	it('rewinds to the start of the current sentence, however far back that is', () => {
 		const navWords = navWordsFromLegacy(makeWords(35, [34]));
-		expect(computeSmartRewindTarget(25, navWords)).toBe(10);
+		expect(computeSmartRewindTarget(25, navWords)).toBe(0);
 		expect(computeSmartRewindTarget(10, navWords)).toBe(0);
 	});
 
-	it('at sentence start rewinds to previous sentence end', () => {
-		const navWords = navWordsFromLegacy(makeWords(40, [14, 39]));
+	it('at a sentence start rewinds to the start of the previous sentence', () => {
+		const navWords = navWordsFromLegacy(makeWords(40, [14, 24, 39]));
 		expect(computeSmartRewindTarget(20, navWords)).toBe(15);
-		expect(computeSmartRewindTarget(15, navWords)).toBe(14);
+		expect(computeSmartRewindTarget(15, navWords)).toBe(0);
+		expect(computeSmartRewindTarget(25, navWords)).toBe(15);
+	});
+
+	it('stops at the document start instead of running off the front', () => {
+		const navWords = navWordsFromLegacy(makeWords(10, [9]));
+		expect(computeSmartRewindTarget(0, navWords)).toBe(0);
+	});
+
+	it('treats the Devanagari danda as a sentence end', () => {
+		const navWords = navWordsFromStream([
+			{ kind: 'word', text: 'दीवार' },
+			{ kind: 'word', text: 'में' },
+			{ kind: 'word', text: 'रहती।' },
+			{ kind: 'word', text: 'एक' },
+			{ kind: 'word', text: 'खिड़की' }
+		]);
+		expect(navWords[2]!.isSentenceEnd).toBe(true);
+		expect(computeSmartRewindTarget(4, navWords)).toBe(3);
+		expect(computeSmartRewindTarget(3, navWords)).toBe(0);
 	});
 
 	it('forwards in 15-word chunks within a sentence', () => {
@@ -97,7 +116,7 @@ describe('readingNavigation', () => {
 		expect(tokens.some((t) => t.isCurrent && t.text === 'w3')).toBe(false);
 	});
 
-	it('uses default chunk size of 15', () => {
+	it('uses default chunk size of 15 for forward jumps', () => {
 		expect(SMART_NAV_CHUNK_SIZE).toBe(15);
 	});
 });

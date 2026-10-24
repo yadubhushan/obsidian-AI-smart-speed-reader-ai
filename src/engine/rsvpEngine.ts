@@ -57,8 +57,10 @@ import {
 	buildPauseContext,
 	computeSmartForwardTarget,
 	computeSmartRewindTarget,
+	findSentenceStart,
 	navWordsFromLegacy,
 	navWordsFromStream,
+	type NavWord,
 	PAUSE_CONTEXT_RADIUS,
 	PauseContextToken,
 	SMART_NAV_CHUNK_SIZE,
@@ -66,6 +68,15 @@ import {
 } from './readingNavigation';
 
 export type { PauseContextToken } from './readingNavigation';
+
+/** A completed smart jump, with the words it moved across (nearest first is the caller's job). */
+export interface NavJump {
+	direction: 'back' | 'forward';
+	fromWordIndex: number;
+	toWordIndex: number;
+	/** Display text of every word between the old and new position, in reading order. */
+	words: string[];
+}
 
 export interface LoadProcessedDocumentOptions {
 	sectionIndex?: number;
@@ -347,26 +358,113 @@ export class RSVPEngine implements RSVPEngineContext {
 		}
 	}
 
-	rewindSmart(chunkSize = SMART_NAV_CHUNK_SIZE) {
+	/** Backward navigation: always lands on the start of a sentence. */
+	rewindSmart(): NavJump | null {
 		const navWords = this.getNavWords();
 		if (navWords.length === 0) {
-			return;
+			return null;
 		}
 
 		const currentWordIdx = this.getCurrentWordIndex(navWords);
-		const targetWordIdx = computeSmartRewindTarget(currentWordIdx, navWords, chunkSize);
-		this.seekToNavWord(navWords[targetWordIdx]!);
+		const targetWordIdx = computeSmartRewindTarget(currentWordIdx, navWords);
+		return this.jumpToNavWordIndex(navWords, currentWordIdx, targetWordIdx);
 	}
 
-	fastForwardSmart(chunkSize = SMART_NAV_CHUNK_SIZE) {
+	fastForwardSmart(chunkSize = SMART_NAV_CHUNK_SIZE): NavJump | null {
 		const navWords = this.getNavWords();
 		if (navWords.length === 0) {
-			return;
+			return null;
 		}
 
 		const currentWordIdx = this.getCurrentWordIndex(navWords);
 		const targetWordIdx = computeSmartForwardTarget(currentWordIdx, navWords, chunkSize);
-		this.seekToNavWord(navWords[targetWordIdx]!);
+		return this.jumpToNavWordIndex(navWords, currentWordIdx, targetWordIdx);
+	}
+
+	/**
+	 * Snap back to the start of the sentence the reader is currently sitting in.
+	 * No-op when already parked on the first word of that sentence — used when an
+	 * edge-hold scrub is released mid-sentence.
+	 */
+	snapToSentenceStart(): NavJump | null {
+		const navWords = this.getNavWords();
+		if (navWords.length === 0) {
+			return null;
+		}
+
+		const currentWordIdx = this.getCurrentWordIndex(navWords);
+		const targetWordIdx = findSentenceStart(navWords, currentWordIdx);
+		if (targetWordIdx === currentWordIdx) {
+			return null;
+		}
+		return this.jumpToNavWordIndex(navWords, currentWordIdx, targetWordIdx);
+	}
+
+	/**
+	 * Seek to `targetWordIdx` and report the words passed over, so the view can
+	 * animate the jump instead of teleporting the display.
+	 */
+	private jumpToNavWordIndex(
+		navWords: NavWord[],
+		currentWordIdx: number,
+		targetWordIdx: number
+	): NavJump | null {
+		const target = navWords[targetWordIdx];
+		if (!target) {
+			return null;
+		}
+
+		const from = Math.min(currentWordIdx, targetWordIdx);
+		const to = Math.max(currentWordIdx, targetWordIdx);
+		const passed = navWords.slice(from, to + 1).map((navWord) => navWord.display);
+
+		this.seekToNavWord(target);
+
+		return {
+			direction: targetWordIdx < currentWordIdx ? 'back' : 'forward',
+			fromWordIndex: currentWordIdx,
+			toWordIndex: targetWordIdx,
+			words: passed
+		};
+	}
+
+	/** Paused navigation: jump to the start of the next paragraph. */
+	nextParagraph() {
+		this.seekToAdjacentParagraph(1);
+	}
+
+	/**
+	 * Paused navigation: jump to the previous paragraph. When the reader is
+	 * mid-paragraph, the first step restarts the current paragraph.
+	 */
+	prevParagraph() {
+		this.seekToAdjacentParagraph(-1);
+	}
+
+	private seekToAdjacentParagraph(direction: 1 | -1) {
+		const navWords = this.getNavWords();
+		if (navWords.length === 0) {
+			return;
+		}
+		const units = buildParagraphUnits(navWords, this.sentenceUnits);
+		if (units.length === 0) {
+			return;
+		}
+
+		const currentWordIdx = this.getCurrentWordIndex(navWords);
+		const current = findParagraphForWordIndex(units, currentWordIdx);
+		const currentUnitIndex = current ? units.indexOf(current) : 0;
+
+		let targetIndex: number;
+		if (direction > 0) {
+			targetIndex = Math.min(currentUnitIndex + 1, units.length - 1);
+		} else if (currentWordIdx > units[currentUnitIndex]!.startWordIdx) {
+			targetIndex = currentUnitIndex;
+		} else {
+			targetIndex = Math.max(currentUnitIndex - 1, 0);
+		}
+
+		this.seekToNavWord(navWords[units[targetIndex]!.startWordIdx]!);
 	}
 
 	getPauseContext(radiusWords = PAUSE_CONTEXT_RADIUS): PauseContextToken[] {

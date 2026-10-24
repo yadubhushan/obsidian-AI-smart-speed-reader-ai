@@ -23,6 +23,34 @@ describe('splitWordForOrpDisplay', () => {
 		const parts = splitWordForOrpDisplay('of its');
 		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('of its');
 	});
+
+	it('never splits a Devanagari consonant from its matra', () => {
+		const parts = splitWordForOrpDisplay('थी');
+		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('थी');
+		expect(parts.orp).toBe('थी');
+		expect(parts.before).toBe('');
+		expect(parts.after).toBe('');
+	});
+
+	it('puts the ORP on a whole cluster in a longer Hindi word', () => {
+		const parts = splitWordForOrpDisplay('खिड़की');
+		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('खिड़की');
+		expect(parts.before).toBe('खि');
+		expect(parts.orp).toBe('ड़');
+	});
+
+	it('ignores a stale code-unit ORP index that lands inside a cluster', () => {
+		const parts = splitWordForOrpDisplay('रहती', 3);
+		expect(`${parts.before}${parts.orp}${parts.after}`).toBe('रहती');
+		expect(parts.orp).toBe('ती');
+	});
+
+	it('keeps ASCII behaviour unchanged', () => {
+		const parts = splitWordForOrpDisplay('reading');
+		expect(parts.before).toBe('re');
+		expect(parts.orp).toBe('a');
+		expect(parts.after).toBe('ding');
+	});
 });
 
 describe('stripMarkdown', () => {

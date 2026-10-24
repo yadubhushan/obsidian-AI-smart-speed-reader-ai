@@ -63,6 +63,57 @@ describe('RSVPEngine', () => {
 		expect(stateChanges[stateChanges.length - 1]!.isPlaying).toBe(false);
 	});
 
+	describe('paragraph navigation', () => {
+		function loadThreeParagraphs() {
+			// 9 words, paragraphs starting at word indices 0, 3, 6.
+			engine.loadProcessedDocument({
+				kind: 'single_story',
+				processorId: 'single_story',
+				meta: {
+					sourcePath: 'docs/paras.md',
+					sourceChecksum: 'test',
+					processedAt: '2026-05-19T12:00:00.000Z',
+					model: 'test',
+					prepareStrategy: 'single'
+				},
+				paragraphStarts: [0, 3, 6],
+				stream: [
+					{ kind: 'word', text: 'a1' },
+					{ kind: 'word', text: 'a2' },
+					{ kind: 'word', text: 'a3.' },
+					{ kind: 'word', text: 'b1' },
+					{ kind: 'word', text: 'b2' },
+					{ kind: 'word', text: 'b3.' },
+					{ kind: 'word', text: 'c1' },
+					{ kind: 'word', text: 'c2' },
+					{ kind: 'word', text: 'c3.' }
+				]
+			});
+		}
+
+		it('jumps forward to the next paragraph start and clamps at the end', () => {
+			loadThreeParagraphs();
+			expect(engine.getBaseTokenIndex()).toBe(0);
+			engine.nextParagraph();
+			expect(engine.getBaseTokenIndex()).toBe(3);
+			engine.nextParagraph();
+			expect(engine.getBaseTokenIndex()).toBe(6);
+			engine.nextParagraph();
+			expect(engine.getBaseTokenIndex()).toBe(6);
+		});
+
+		it('restarts the current paragraph then steps back, clamping at the start', () => {
+			loadThreeParagraphs();
+			engine.seekToToken(4); // mid second paragraph
+			engine.prevParagraph();
+			expect(engine.getBaseTokenIndex()).toBe(3); // restart current paragraph
+			engine.prevParagraph();
+			expect(engine.getBaseTokenIndex()).toBe(0); // previous paragraph
+			engine.prevParagraph();
+			expect(engine.getBaseTokenIndex()).toBe(0); // clamped
+		});
+	});
+
 	it('advances words on timeout', () => {
 		engine.loadText('One two three four five');
 		engine.play();
@@ -116,16 +167,42 @@ describe('RSVPEngine', () => {
 		expect(stateChanges[stateChanges.length - 1]!.currentIndex).toBe(2);
 	});
 
-	it('rewindSmart moves back in chunks and respects sentence boundaries', () => {
+	it('rewindSmart lands on the start of the sentence and reports the words crossed', () => {
 		const words = Array.from({ length: 20 }, (_, i) => `w${i}`).join(' ');
-		engine.loadText(`${words}. more words here.`);
+		engine.loadText(`first sentence. ${words}.`);
 		engine.play();
 		vi.advanceTimersByTime(3000);
 		engine.pause();
 		const before = stateChanges[stateChanges.length - 1]!.currentIndex;
-		engine.rewindSmart();
+		expect(before).toBeGreaterThan(2);
+
+		const jump = engine.rewindSmart();
 		const after = stateChanges[stateChanges.length - 1]!.currentIndex;
-		expect(after).toBeLessThan(before);
+		// 'first sentence.' occupies words 0-1, so the second sentence starts at 2.
+		expect(after).toBe(2);
+		expect(jump).not.toBeNull();
+		expect(jump!.direction).toBe('back');
+		expect(jump!.toWordIndex).toBe(2);
+		expect(jump!.words[0]).toBe('w0');
+		expect(jump!.words).toHaveLength(jump!.fromWordIndex - jump!.toWordIndex + 1);
+	});
+
+	it('rewindSmart steps to the previous sentence once parked on a sentence start', () => {
+		engine.loadText('One two three. Four five six. Seven eight nine.');
+		engine.pause();
+		engine.seekToIndex(7);
+		expect(engine.rewindSmart()!.toWordIndex).toBe(6);
+		expect(engine.rewindSmart()!.toWordIndex).toBe(3);
+		expect(engine.rewindSmart()!.toWordIndex).toBe(0);
+		expect(engine.rewindSmart()!.toWordIndex).toBe(0);
+	});
+
+	it('snapToSentenceStart is a no-op when already on the sentence start', () => {
+		engine.loadText('One two three. Four five six.');
+		engine.pause();
+		engine.seekToIndex(5);
+		expect(engine.snapToSentenceStart()!.toWordIndex).toBe(3);
+		expect(engine.snapToSentenceStart()).toBeNull();
 	});
 
 	it('getPauseContext returns tokens with a current word marked', () => {

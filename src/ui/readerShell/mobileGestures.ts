@@ -151,6 +151,26 @@ export function isSwipeBack(
 	return dx >= minPx && absX > absY && elapsed <= maxMs;
 }
 
+/**
+ * Classify a completed pointer gesture as a horizontal swipe.
+ * Returns 'left' (finger moved left) or 'right', or null when the motion is
+ * too small, too vertical, or too slow to count as a swipe.
+ */
+export function classifyHorizontalSwipe(
+	dx: number,
+	dy: number,
+	elapsed: number,
+	minPx = SWIPE_MIN_PX,
+	maxMs = SWIPE_MAX_MS
+): 'left' | 'right' | null {
+	const absX = Math.abs(dx);
+	const absY = Math.abs(dy);
+	if (absX < minPx || absX <= absY || elapsed > maxMs) {
+		return null;
+	}
+	return dx < 0 ? 'left' : 'right';
+}
+
 export function mountMobileGestures(
 	wordContainer: HTMLElement,
 	chapterPillEl: HTMLElement | null,
@@ -460,6 +480,25 @@ export function mountMobileGestures(
 		const dx = event.clientX - savedStartX;
 		const dy = event.clientY - savedStartY;
 		const elapsed = Date.now() - savedStartTime;
+
+		// While paused, a horizontal swipe on the context/paragraph area
+		// navigates between paragraphs (same as swiping the word area).
+		if (!callbacks.isPlaying()) {
+			const swipe = classifyHorizontalSwipe(dx, dy, elapsed);
+			if (swipe) {
+				event.preventDefault();
+				event.stopPropagation();
+				lastContextWord = null;
+				lastContextWordTapTime = 0;
+				if (swipe === 'left') {
+					callbacks.onSwipeLeft();
+				} else {
+					callbacks.onSwipeRight();
+				}
+				return;
+			}
+		}
+
 		if (
 			Math.abs(dx) > TAP_MAX_MOVE_PX ||
 			Math.abs(dy) > TAP_MAX_MOVE_PX ||

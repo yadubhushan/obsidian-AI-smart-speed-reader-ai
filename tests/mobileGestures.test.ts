@@ -7,6 +7,7 @@ import {
 	isSwipeDown,
 	isSwipeUp,
 	isSwipeBack,
+	classifyHorizontalSwipe,
 	shouldSuppressContextWordRetap,
 	EDGE_ZONE_RATIO
 } from '../src/ui/readerShell/mobileGestures';
@@ -169,6 +170,22 @@ describe('mobileGestures helpers', () => {
 			expect(isSwipeBack(50, 60, 300)).toBe(false);
 			expect(isSwipeBack(20, 0, 300)).toBe(false);
 			expect(isSwipeBack(50, 0, 600)).toBe(false);
+		});
+	});
+
+	describe('classifyHorizontalSwipe', () => {
+		it('classifies left and right swipes within threshold', () => {
+			expect(classifyHorizontalSwipe(-50, 5, 300)).toBe('left');
+			expect(classifyHorizontalSwipe(50, 5, 300)).toBe('right');
+			expect(classifyHorizontalSwipe(48, 0, 500)).toBe('right');
+			expect(classifyHorizontalSwipe(-48, 0, 500)).toBe('left');
+		});
+
+		it('rejects vertical, short, or slow gestures', () => {
+			expect(classifyHorizontalSwipe(50, 60, 300)).toBe(null);
+			expect(classifyHorizontalSwipe(-50, 60, 300)).toBe(null);
+			expect(classifyHorizontalSwipe(20, 0, 300)).toBe(null);
+			expect(classifyHorizontalSwipe(50, 0, 600)).toBe(null);
 		});
 	});
 

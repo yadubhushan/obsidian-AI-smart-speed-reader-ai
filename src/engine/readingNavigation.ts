@@ -4,8 +4,12 @@ import type { StreamToken } from '../types/processedDocument';
 export const SMART_NAV_CHUNK_SIZE = 15;
 export const PAUSE_CONTEXT_RADIUS = 15;
 
-/** Trailing punctuation captured from a token (may include trailing hyphens for display). */
-const TRAILING_PUNCT_RE = /^(.+?)([.,!?;:)}\]"'\-]+)$/;
+/**
+ * Trailing punctuation captured from a token (may include trailing hyphens for
+ * display). `\u0964`/`\u0965` are the Devanagari danda and double danda, which end
+ * a Hindi sentence the way `.` ends an English one.
+ */
+const TRAILING_PUNCT_RE = /^(.+?)([.,!?;:)}\]"'\-\u0964\u0965]+)$/u;
 
 export interface NavWord {
 	wordIndex: number;
@@ -36,7 +40,7 @@ export function parseTrailingPunctuation(raw: string): { word: string; punctuati
 
 /**
  * Line-by-line / line-repeat unit boundaries break after these markers:
- * `--`, `;`, `.`, `!`
+ * `--`, `;`, `.`, `!`, and the Devanagari danda `\u0964` / double danda `\u0965`.
  */
 export function isSentenceEndPunctuation(punctuation: string): boolean {
 	if (!punctuation) {
@@ -45,7 +49,7 @@ export function isSentenceEndPunctuation(punctuation: string): boolean {
 	if (punctuation.includes('--')) {
 		return true;
 	}
-	return /[;.!]/.test(punctuation);
+	return /[;.!\u0964\u0965]/u.test(punctuation);
 }
 
 export function navWordsFromLegacy(words: WordData[]): NavWord[] {
@@ -131,6 +135,21 @@ export function findPreviousSentenceEnd(navWords: NavWord[], currentWordIdx: num
 	return 0;
 }
 
+/**
+ * Start of the sentence before the one containing `currentWordIdx`. Used when the
+ * reader is already parked on a sentence start and asks to go back again.
+ */
+export function findPreviousSentenceStart(navWords: NavWord[], currentWordIdx: number): number {
+	if (navWords.length === 0) {
+		return 0;
+	}
+	const sentenceStart = findSentenceStart(navWords, currentWordIdx);
+	if (sentenceStart <= 0) {
+		return 0;
+	}
+	return findSentenceStart(navWords, sentenceStart - 1);
+}
+
 export function findNextSentenceStart(navWords: NavWord[], currentWordIdx: number): number {
 	if (navWords.length === 0) {
 		return 0;
@@ -146,11 +165,12 @@ export function findNextSentenceStart(navWords: NavWord[], currentWordIdx: numbe
 	return last;
 }
 
-export function computeSmartRewindTarget(
-	currentWordIdx: number,
-	navWords: NavWord[],
-	chunkSize = SMART_NAV_CHUNK_SIZE
-): number {
+/**
+ * Backward navigation always lands on a sentence start: the start of the current
+ * sentence when the reader is mid-sentence, otherwise the start of the previous
+ * one. Never a bare "N words back" — resuming mid-sentence loses the thread.
+ */
+export function computeSmartRewindTarget(currentWordIdx: number, navWords: NavWord[]): number {
 	if (navWords.length === 0) {
 		return 0;
 	}
@@ -158,13 +178,10 @@ export function computeSmartRewindTarget(
 	const w = Math.max(0, Math.min(currentWordIdx, navWords.length - 1));
 	const sentenceStart = findSentenceStart(navWords, w);
 
-	if (w - chunkSize >= sentenceStart) {
-		return w - chunkSize;
-	}
 	if (w > sentenceStart) {
 		return sentenceStart;
 	}
-	return findPreviousSentenceEnd(navWords, w);
+	return findPreviousSentenceStart(navWords, w);
 }
 
 export function computeSmartForwardTarget(

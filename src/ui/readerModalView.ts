@@ -1,5 +1,5 @@
 import { App, Modal, Notice } from 'obsidian';
-import { RSVPEngine } from '../engine/rsvpEngine';
+import { RSVPEngine, type NavJump } from '../engine/rsvpEngine';
 import { isLinePlaybackMode, getPlaybackModeLabel } from '../engine/playbackMode';
 import { tokenDisplayLabel } from '../engine/manifestPlayback';
 import { SettingsBackedLlmClient, describeActiveLlmBackend } from '../llm/createLlmClient';
@@ -7,12 +7,15 @@ import { getAiProvidersApi } from '../llm/aiProvidersBridge';
 import type { LlmModelCatalog } from '../llm/llmModelCatalog';
 import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 import type { ManifestStore } from '../store/ManifestStore';
-import { DEFAULT_SETTINGS, HeadingInfo, PlaybackMode, ReaderState, SpeedReaderAiSettings, WordData } from '../types';
+import { HeadingInfo, PlaybackMode, ReaderState, SpeedReaderAiSettings, WordData } from '../types';
 import type { PreparePromptSet } from '../llm/promptCatalog';
 import type { ProcessingModeId } from '../types/processedDocument';
 import { mountModePicker, type ModePickerHandle } from './modePicker';
 import { mountVersionPicker, type VersionPickerHandle } from './versionPicker';
-import { mountPrepareControls, type PrepareControlsHandle } from './prepareControls';
+import {
+	type PrepareControlsHandle,
+	type PrepareUiStatus
+} from './prepareControls';
 import { mountChapterNavControls, type ChapterNavControlsHandle } from './chapterNavControls';
 import { mountSectionNavControls, type SectionNavControlsHandle } from './sectionNavControls';
 import {
@@ -93,8 +96,10 @@ import {
 	createEdgeScrubController,
 	mountSkipFlash,
 	type EdgeScrubHandle,
+	type EdgeScrubSide,
 	type SkipFlashHandle
 } from './readerShell/edgeScrub';
+import { mountNavStreak, type NavStreakHandle } from './readerShell/navStreak';
 import {
 	mountMobileBottomSheet,
 	type MobileBottomSheetHandle
@@ -123,6 +128,29 @@ import {
 } from './readerShell/readerFocusController';
 import { setReaderImmersiveBlackout } from './readerShell/readerImmersiveBlackout';
 import { registerReaderKeyboard } from './readerShell/readerKeyboard';
+import {
+	deriveDesktopChromeMode,
+	shouldShowInitialReadingSetup,
+	type DesktopReaderChromeMode
+} from './readerShell/desktopChromeState';
+import {
+	mountDesktopReadingSetup,
+	type DesktopReadingSetupHandle
+} from './readerShell/desktopReadingSetup';
+import {
+	mountDesktopPausedControlSheet,
+	type DesktopNavigationOption,
+	type DesktopPausedControlSheetHandle
+} from './readerShell/desktopPausedControlSheet';
+import {
+	isEligibleCanvasPauseTarget,
+	mountDesktopPlayingHud,
+	type DesktopPlayingHudHandle
+} from './readerShell/desktopPlayingHud';
+import {
+	mountDesktopReaderDrawer,
+	type DesktopReaderDrawerHandle
+} from './readerShell/desktopReaderDrawer';
 
 import {
 	clampFontSize,
@@ -198,8 +226,8 @@ export class SpeedReaderAiModal extends Modal {
 	private homePaneEl!: HTMLElement;
 	private wordContainer!: HTMLElement;
 	private wordDisplayEl!: HTMLElement;
-	private header!: ReaderHeaderHandle;
-	private controlBar!: ReaderControlBarHandle;
+	private header: ReaderHeaderHandle | null = null;
+	private controlBar: ReaderControlBarHandle | null = null;
 	private contextLine!: ContextLineHandle;
 	private tabDock: ReaderTabDockHandle | null = null;
 	private mobileCompactBar: MobileCompactBarHandle | null = null;
@@ -233,6 +261,8 @@ export class SpeedReaderAiModal extends Modal {
 		now: () => Date.now()
 	});
 	private skipFlash: SkipFlashHandle | null = null;
+	private navStreak: NavStreakHandle | null = null;
+	private edgeScrubSide: EdgeScrubSide | null = null;
 	private readonly mobileReader = isMobileReader();
 	private mobileRoute: MobileRoute = 'reading';
 	private mobileRouteStack: MobileRoute[] = ['reading'];
@@ -251,6 +281,15 @@ export class SpeedReaderAiModal extends Modal {
 	private readonly appearance: ReaderAppearanceHandle;
 	private readonly speechPlayback = new SpeechPlaybackController();
 	private prepareOverlay: PrepareOverlayHandle | null = null;
+	private desktopReadingSetup: DesktopReadingSetupHandle | null = null;
+	private desktopPausedSheet: DesktopPausedControlSheetHandle | null = null;
+	private desktopPlayingHud: DesktopPlayingHudHandle | null = null;
+	private desktopDrawer: DesktopReaderDrawerHandle | null = null;
+	private desktopChromeMode: DesktopReaderChromeMode = 'paused';
+	private setupRequired = false;
+	private setupRequested = false;
+	private prepareStatus: PrepareUiStatus = 'idle';
+	private wordContainerClickHandler: ((event: MouseEvent) => void) | null = null;
 
 	private modePicker: ModePickerHandle | null = null;
 	private versionPicker: VersionPickerHandle | null = null;
@@ -350,19 +389,21 @@ export class SpeedReaderAiModal extends Modal {
 
 		this.shellEl = contentEl.createDiv({ cls: 'speed-reader-ai-shell' });
 
-		this.header = mountReaderHeader(this.shellEl, {
-			rtl: this.settings.reader.textOrientation.rtl,
-			showRemainingTime: this.settings.reader.display.showRemainingTime,
-			showProgress: this.settings.reader.display.showProgress
-		});
-		this.header.onPlayPause(() => {
-			this.toggleReaderPlayPause();
-			this.refocusContent();
-		});
-		this.header.onProgressClick((percentage) => {
-			this.engine.seekToPercent(percentage);
-			this.refocusContent();
-		});
+		if (!this.usesAdaptiveDesktopChrome()) {
+			this.header = mountReaderHeader(this.shellEl, {
+				rtl: this.settings.reader.textOrientation.rtl,
+				showRemainingTime: this.settings.reader.display.showRemainingTime,
+				showProgress: this.settings.reader.display.showProgress
+			});
+			this.header.onPlayPause(() => {
+				this.toggleReaderPlayPause();
+				this.refocusContent();
+			});
+			this.header.onProgressClick((percentage) => {
+				this.engine.seekToPercent(percentage);
+				this.refocusContent();
+			});
+		}
 
 		if (this.mobileReader) {
 			applyMobileShellClass(this.shellEl);
@@ -410,7 +451,20 @@ export class SpeedReaderAiModal extends Modal {
 		this.appearance.applyCenterGuideVisibility();
 
 		this.wordDisplayEl = this.wordContainer.createDiv({ cls: 'speed-reader-ai-word-display' });
+		if (this.usesAdaptiveDesktopChrome()) {
+			this.wordContainerClickHandler = (event) => {
+				if (!this.state?.isPlaying || this.desktopChromeMode !== 'playing') {
+					return;
+				}
+				const selection = this.ownerDoc.getSelection()?.toString() ?? '';
+				if (isEligibleCanvasPauseTarget(event.target, this.wordContainer, selection)) {
+					this.engine.pause();
+				}
+			};
+			this.wordContainer.addEventListener('click', this.wordContainerClickHandler);
+		}
 		this.skipFlash = mountSkipFlash(this.wordContainer);
+		this.navStreak = mountNavStreak(this.wordContainer);
 		this.interSectionOverlay = mountInterSectionOverlay(this.wordContainer);
 		this.prepareOverlay = mountPrepareOverlay(this.wordContainer);
 		this.contextLine = mountContextLine(this.homePaneEl, {
@@ -436,10 +490,22 @@ export class SpeedReaderAiModal extends Modal {
 		this.structuredBarEl = this.homePaneEl.createDiv({
 			cls: 'speed-reader-ai-structured-bar is-hidden'
 		});
-		this.modePickerHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-mode-picker-host' });
-		this.versionPickerHost = this.structuredBarEl.createDiv({
-			cls: 'speed-reader-ai-version-picker-host'
-		});
+		if (this.usesAdaptiveDesktopChrome()) {
+			this.desktopReadingSetup = mountDesktopReadingSetup(this.homePaneEl, {
+				onReadLocally: () => this.onReadWithoutAi(),
+				onPrepareWithAi: () => this.onPrepareWithAi(),
+				onClearCache: () => this.onClearDocumentCache()
+			});
+			this.modePickerHost = this.desktopReadingSetup.getModeHost();
+			this.versionPickerHost = this.desktopReadingSetup.getVersionHost();
+		} else {
+			this.modePickerHost = this.structuredBarEl.createDiv({
+				cls: 'speed-reader-ai-mode-picker-host'
+			});
+			this.versionPickerHost = this.structuredBarEl.createDiv({
+				cls: 'speed-reader-ai-version-picker-host'
+			});
+		}
 		this.headingSelectWrapper = this.structuredBarEl.createDiv({
 			cls: 'speed-reader-ai-section-select-wrapper is-hidden'
 		});
@@ -448,8 +514,16 @@ export class SpeedReaderAiModal extends Modal {
 		});
 		this.sectionSelect.addEventListener('change', () => this.onHeadingSelectChange());
 
-		this.contentPane = mountContentPane(this.paneStackEl, { isMobile: this.mobileReader });
-		this.bookmarksPane = mountBookmarksPane(this.paneStackEl, { isMobile: this.mobileReader });
+		let auxiliaryPaneParent = this.paneStackEl;
+		if (this.usesAdaptiveDesktopChrome()) {
+			this.desktopDrawer = mountDesktopReaderDrawer(this.paneStackEl, () => {
+				this.setActiveTab('home');
+			});
+			auxiliaryPaneParent = this.desktopDrawer.getBodyEl();
+		}
+
+		this.contentPane = mountContentPane(auxiliaryPaneParent, { isMobile: this.mobileReader });
+		this.bookmarksPane = mountBookmarksPane(auxiliaryPaneParent, { isMobile: this.mobileReader });
 		this.bookmarksPane.onSeekLine((lineIndex) => {
 			this.seekBookmarkLine(lineIndex);
 		});
@@ -472,29 +546,21 @@ export class SpeedReaderAiModal extends Modal {
 		this.contentPane.onSwipeBack(() => {
 			this.popMobileRoute();
 		});
-		this.settingsPane = mountSettingsPane(this.paneStackEl, this.settings, {
-			onSave: (next) => {
+		this.settingsPane = mountSettingsPane(auxiliaryPaneParent, this.settings, {
+			onChange: (mutate) => {
+				const next = structuredClone(this.settings);
+				mutate(next);
 				this.persistSettings(next);
-				this.returnToReadingAfterPaneAction();
 			},
-			onDefaults: () => {
-				const defaults = structuredClone(DEFAULT_SETTINGS);
-				this.returnToReadingAfterPaneAction();
-				return defaults;
-			},
-			onResetFontSize: () => {
-				this.appearance.applyFontSize();
-				this.appearance.applyContextLineFontSize();
-				this.engine.setSettings(this.settings);
-				this.returnToReadingAfterPaneAction();
-			},
-			showMobileGesturesGuide: this.mobileReader,
 			isMobile: this.mobileReader
 		});
 		this.settingsPane.onSwipeBack(() => {
 			this.popMobileRoute();
 		});
-		this.shortcutsPane = mountShortcutsPane(this.paneStackEl, { isMobile: this.mobileReader });
+		this.shortcutsPane = mountShortcutsPane(auxiliaryPaneParent, {
+			isMobile: this.mobileReader,
+			showGestures: this.mobileReader
+		});
 		this.shortcutsPane.onSwipeBack(() => {
 			this.popMobileRoute();
 		});
@@ -509,27 +575,48 @@ export class SpeedReaderAiModal extends Modal {
 			});
 		}
 
-		this.controlBar = mountReaderControlBar(
-			this.shellEl,
-			this.settings,
-			{
+		if (this.usesAdaptiveDesktopChrome()) {
+			this.desktopPausedSheet = mountDesktopPausedControlSheet(this.shellEl, {
+				onPlayPause: () => this.toggleReaderPlayPause(),
 				onWpmDelta: (delta) => this.adjustWpm(delta),
 				onFontDelta: (delta) => this.adjustFontSize(delta),
 				onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
-				onCopyContext: () => this.copyCurrentParagraphContextPrompt(),
+				onPreviousSection: () => this.navigateToAdjacentSection(-1),
+				onNextSection: () => this.navigateToAdjacentSection(1),
+				onNavigate: (id) => this.navigateFromDesktopSheet(id),
 				onTtsToggle: () => this.toggleTts(),
-				onReadWithoutAi: () => this.onReadWithoutAi(),
-				onPrepare: () => this.onPrepareWithAi(),
-				onClearCache: () => this.onClearDocumentCache(),
-				onPrevSection: () => this.navigateToAdjacentSection(-1),
-				onNextSection: () => this.navigateToAdjacentSection(1)
-			},
-			{
-				showSectionNav: false,
-				sectionNavLabel: this.readerOpen.kind === 'book' ? 'Chapter' : 'Section',
-				showDocumentProgress: !this.mobileReader
-			}
-		);
+				onBookmark: () => void this.bookmarkHandlers?.createBookmark(),
+				onCopyContext: () => this.copyCurrentParagraphContextPrompt(),
+				onOpenSetup: () => this.openDesktopReadingSetup(),
+				onOpenContent: () => this.openDesktopDrawer('content'),
+				onOpenBookmarks: () => this.showBookmarkPicker(),
+				onOpenShortcuts: () => this.openDesktopDrawer('shortcuts'),
+				onOpenSettings: () => this.openDesktopDrawer('settings')
+			});
+			this.desktopPlayingHud = mountDesktopPlayingHud(this.shellEl, () => this.engine.pause());
+		} else {
+			this.controlBar = mountReaderControlBar(
+				this.shellEl,
+				this.settings,
+				{
+					onWpmDelta: (delta) => this.adjustWpm(delta),
+					onFontDelta: (delta) => this.adjustFontSize(delta),
+					onPlaybackModeChange: (mode) => this.setPlaybackMode(mode),
+					onCopyContext: () => this.copyCurrentParagraphContextPrompt(),
+					onTtsToggle: () => this.toggleTts(),
+					onReadWithoutAi: () => this.onReadWithoutAi(),
+					onPrepare: () => this.onPrepareWithAi(),
+					onClearCache: () => this.onClearDocumentCache(),
+					onPrevSection: () => this.navigateToAdjacentSection(-1),
+					onNextSection: () => this.navigateToAdjacentSection(1)
+				},
+				{
+					showSectionNav: false,
+					sectionNavLabel: this.readerOpen.kind === 'book' ? 'Chapter' : 'Section',
+					showDocumentProgress: !this.mobileReader
+				}
+			);
+		}
 
 		if (this.mobileReader && this.readerOpen.kind !== 'preferences') {
 			this.mobileActionBar = mountMobileActionBar(this.mobilePausedStackEl!);
@@ -566,7 +653,7 @@ export class SpeedReaderAiModal extends Modal {
 				}
 				this.render();
 			});
-		} else {
+		} else if (!this.usesAdaptiveDesktopChrome()) {
 			this.tabDock = mountReaderTabDock(
 				this.shellEl,
 				this.activeTab,
@@ -607,6 +694,14 @@ export class SpeedReaderAiModal extends Modal {
 				this.session.activeModeId,
 				playbackOpts
 			);
+			if (this.usesAdaptiveDesktopChrome()) {
+				this.setupRequired = shouldShowInitialReadingSetup({
+					isStructured: true,
+					hasResumePosition: Boolean(this.readerOpen.resumePosition),
+					activeVersionStatus: this.session.modeStatus(),
+					hasPreferredAiVersion: Boolean(this.readerOpen.preferredAiVersionId)
+				});
+			}
 			if (this.readerOpen.resumePosition) {
 				const processed = this.engine.getLoadedProcessedDocument();
 				if (processed) {
@@ -638,8 +733,8 @@ export class SpeedReaderAiModal extends Modal {
 		}
 
 		this.rebuildHeadingSelector();
-		this.controlBar.setPrepareVisible(this.readerOpen.kind === 'structured');
-		this.prepareControls = this.controlBar.getPrepareControls();
+		this.controlBar?.setPrepareVisible(this.readerOpen.kind === 'structured');
+		this.prepareControls = this.controlBar?.getPrepareControls() ?? null;
 		this.setActiveTab('home');
 		this.registerKeyboardHandlers();
 		this.focusController.register();
@@ -647,7 +742,9 @@ export class SpeedReaderAiModal extends Modal {
 		this.mountPlayingGestureBandsIfNeeded();
 		this.mountMobileCoachMarksIfNeeded();
 		this.updateModeSpecificUi();
-		this.scheduleAutoStart();
+		if (!this.setupRequired) {
+			this.scheduleAutoStart();
+		}
 	}
 
 	close(): void {
@@ -678,13 +775,23 @@ export class SpeedReaderAiModal extends Modal {
 		this.interSectionOverlay = null;
 		this.prepareOverlay?.destroy();
 		this.prepareOverlay = null;
+		this.desktopReadingSetup?.destroy();
+		this.desktopReadingSetup = null;
+		this.desktopPausedSheet?.destroy();
+		this.desktopPausedSheet = null;
+		this.desktopPlayingHud?.destroy();
+		this.desktopPlayingHud = null;
+		this.desktopDrawer?.destroy();
+		this.desktopDrawer = null;
 		this.modePicker?.destroy();
 		this.versionPicker?.destroy();
 		this.prepareControls?.destroy();
 		this.sectionNav?.destroy();
 		this.chapterNav?.destroy();
 		this.header?.destroy();
+		this.header = null;
 		this.controlBar?.destroy();
+		this.controlBar = null;
 		this.contextLine?.destroy();
 		this.tabDock?.destroy();
 		this.mobileCompactBar?.destroy();
@@ -696,6 +803,12 @@ export class SpeedReaderAiModal extends Modal {
 		this.edgeScrub.stop();
 		this.skipFlash?.destroy();
 		this.skipFlash = null;
+		this.navStreak?.destroy();
+		this.navStreak = null;
+		if (this.wordContainerClickHandler && this.wordContainer) {
+			this.wordContainer.removeEventListener('click', this.wordContainerClickHandler);
+		}
+		this.wordContainerClickHandler = null;
 		this.mobileCoachMarks?.destroy();
 		this.mobileCoachMarks = null;
 		removeMobileShellClass(this.shellEl, this.containerEl);
@@ -733,7 +846,7 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	showBookmarkPickerFromService(): void {
-		this.bookmarkHandlers?.openBookmarksTab();
+		void this.bookmarkHandlers?.openBookmarksTab();
 	}
 
 	private seekBookmarkLine(lineIndex: number): void {
@@ -1035,6 +1148,116 @@ export class SpeedReaderAiModal extends Modal {
 		}
 	}
 
+	private usesAdaptiveDesktopChrome(): boolean {
+		return !this.mobileReader && this.readerOpen.kind !== 'preferences';
+	}
+
+	private openDesktopDrawer(tab: Exclude<ReaderTabId, 'home'>): void {
+		if (!this.usesAdaptiveDesktopChrome()) {
+			this.setActiveTab(tab);
+			return;
+		}
+		this.engine.pause();
+		this.setActiveTab(tab);
+	}
+
+	private openDesktopReadingSetup(): void {
+		if (!this.usesAdaptiveDesktopChrome() || this.readerOpen.kind !== 'structured') {
+			return;
+		}
+		this.engine.pause();
+		this.setActiveTab('home');
+		this.setupRequested = true;
+		this.clearAutoStartTimer();
+		this.render();
+	}
+
+	private getDesktopNavigationState(): {
+		label: string;
+		options: DesktopNavigationOption[];
+		currentId: string | null;
+		canStep: boolean;
+	} {
+		const state = this.state;
+		const sections = this.engine.getSectionList();
+		if (sections.length > 0) {
+			const noun = this.readerOpen.kind === 'book' ? 'Chapter' : 'Section';
+			return {
+				label: noun,
+				options: sections.map((section, index) => ({
+					id: section.id,
+					label: `${index + 1} of ${sections.length} · ${section.title}`
+				})),
+				currentId: sections[state?.currentSectionIndex ?? 0]?.id ?? null,
+				canStep: true
+			};
+		}
+
+		const streamHeadings = this.engine.getStreamHeadings();
+		if (streamHeadings.length > 0) {
+			const currentTokenIndex = state?.currentTokenIndex ?? 0;
+			let current = streamHeadings[0];
+			for (const heading of streamHeadings) {
+				if (heading.tokenIndex <= currentTokenIndex) {
+					current = heading;
+				}
+			}
+			return {
+				label: 'Heading',
+				options: streamHeadings.map((heading) => ({
+					id: `token:${heading.tokenIndex}`,
+					label: heading.title
+				})),
+				currentId: current ? `token:${current.tokenIndex}` : null,
+				canStep: false
+			};
+		}
+
+		const headings = this.engine.getHeadings();
+		if (headings.length > 0) {
+			const currentWordIndex = state?.currentIndex ?? 0;
+			let current = headings[0];
+			for (const heading of headings) {
+				if (heading.wordIndex <= currentWordIndex) {
+					current = heading;
+				}
+			}
+			return {
+				label: 'Heading',
+				options: headings.map((heading) => ({
+					id: `word:${heading.wordIndex}`,
+					label: heading.text
+				})),
+				currentId: current ? `word:${current.wordIndex}` : null,
+				canStep: false
+			};
+		}
+
+		return { label: 'Reading', options: [], currentId: null, canStep: false };
+	}
+
+	private navigateFromDesktopSheet(id: string): void {
+		if (this.engine.getSectionList().some((section) => section.id === id)) {
+			this.jumpToSection(id);
+			return;
+		}
+		if (id.startsWith('token:')) {
+			const tokenIndex = Number.parseInt(id.slice('token:'.length), 10);
+			if (!Number.isNaN(tokenIndex)) {
+				this.engine.seekToToken(tokenIndex);
+				this.refocusContent();
+			}
+			return;
+		}
+		if (id.startsWith('word:')) {
+			const wordIndex = Number.parseInt(id.slice('word:'.length), 10);
+			if (!Number.isNaN(wordIndex)) {
+				this.engine.jumpToHeading(wordIndex);
+				this.refocusContent();
+			}
+		}
+	}
+
 	private setActiveTab(tab: ReaderTabId) {
 		if (this.mobileReader) {
 			if (tab === 'home') {
@@ -1048,7 +1271,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.activeTab = tab;
 		this.tabDock?.setActiveTab(tab);
 		const isHome = tab === 'home';
-		this.homePaneEl?.toggleClass('is-hidden', !isHome);
+		this.homePaneEl?.toggleClass('is-hidden', !isHome && !this.desktopDrawer);
 		this.paneStackEl
 			?.querySelector('.speed-reader-ai-pane-content')
 			?.toggleClass('is-hidden', tab !== 'content');
@@ -1066,6 +1289,13 @@ export class SpeedReaderAiModal extends Modal {
 		this.header?.setProgressVisible(isHome && this.settings.reader.display.showProgress);
 		this.contextLine?.setVisible(isHome && this.settings.reader.display.showContext);
 		this.controlBar?.setVisible(isHome && this.readerOpen.kind !== 'preferences');
+		const drawerTitles: Partial<Record<ReaderTabId, string>> = {
+			content: 'Contents',
+			bookmarks: 'Bookmarks',
+			settings: 'Preferences',
+			shortcuts: 'Keyboard shortcuts'
+		};
+		this.desktopDrawer?.setVisible(!isHome, drawerTitles[tab]);
 		this.shellEl?.toggleClass('is-preferences-only', this.readerOpen.kind === 'preferences');
 
 		if (tab === 'settings') {
@@ -1076,6 +1306,9 @@ export class SpeedReaderAiModal extends Modal {
 		}
 		if (isHome) {
 			this.refocusContent();
+		}
+		if (this.usesAdaptiveDesktopChrome()) {
+			this.render();
 		}
 	}
 
@@ -1091,7 +1324,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.appearance.applyAll();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
 		this.onSettingsChange(this.settings);
-		new Notice('Settings saved');
 	}
 
 	private toggleTts(): void {
@@ -1121,6 +1353,9 @@ export class SpeedReaderAiModal extends Modal {
 	private scheduleAutoStart() {
 		this.clearAutoStartTimer();
 		if (this.readerOpen.kind === 'preferences') {
+			return;
+		}
+		if (this.usesAdaptiveDesktopChrome() && (this.setupRequired || this.setupRequested)) {
 			return;
 		}
 		if (!this.settings.reader.autoStart.enabled) {
@@ -1312,6 +1547,9 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private startPlayback(): void {
+		if (this.usesAdaptiveDesktopChrome() && (this.setupRequired || this.setupRequested)) {
+			return;
+		}
 		this.engine.play();
 	}
 
@@ -1377,18 +1615,21 @@ export class SpeedReaderAiModal extends Modal {
 		);
 		this.refreshVersionPicker();
 
-		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
-		this.sectionNav = mountSectionNavControls(sectionHost, this.engine, {
-			onPrevSection: () => this.navigateToAdjacentSection(-1),
-			onNextSection: () => this.navigateToAdjacentSection(1),
-			onJumpToSection: (id) => this.jumpToSection(id)
-		});
-		if (!this.mobileReader) {
+		if (!this.usesAdaptiveDesktopChrome()) {
+			const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
+			this.sectionNav = mountSectionNavControls(sectionHost, this.engine, {
+				onPrevSection: () => this.navigateToAdjacentSection(-1),
+				onNextSection: () => this.navigateToAdjacentSection(1),
+				onJumpToSection: (id) => this.jumpToSection(id)
+			});
 			this.structuredBarEl.removeClass('is-hidden');
 		}
 	}
 
 	private mountBookControls() {
+		if (this.usesAdaptiveDesktopChrome()) {
+			return;
+		}
 		const sectionHost = this.structuredBarEl.createDiv({ cls: 'speed-reader-ai-section-nav-host' });
 		this.chapterNav = mountChapterNavControls(sectionHost, this.engine, {
 			onPrevChapter: () => this.navigateToAdjacentSection(-1),
@@ -1408,6 +1649,10 @@ export class SpeedReaderAiModal extends Modal {
 			this.playbackOptions()
 		);
 		this.syncPrepareStatus(kind);
+		if (this.usesAdaptiveDesktopChrome() && kind === 'ai') {
+			this.setupRequired = false;
+			this.setupRequested = false;
+		}
 		this.rebuildHeadingSelector();
 		this.sectionNav?.refresh();
 		this.updateModeSpecificUi();
@@ -1431,22 +1676,31 @@ export class SpeedReaderAiModal extends Modal {
 
 	private onReadWithoutAi() {
 		if (!this.session) return;
+		const leavingSetup = this.setupRequired || this.setupRequested;
 		this.session.loadDeterministic(this.engine, this.session.activeModeId);
-		this.prepareControls?.setStatus('deterministic');
+		this.prepareStatus = 'deterministic';
+		this.prepareControls?.setStatus(this.prepareStatus);
+		this.desktopReadingSetup?.setStatus(this.prepareStatus);
+		this.setupRequired = false;
+		this.setupRequested = false;
 		this.rebuildHeadingSelector();
 		this.sectionNav?.refresh();
 		this.updateModeSpecificUi();
+		if (leavingSetup) {
+			this.scheduleAutoStart();
+		}
 	}
 
 	private async onClearDocumentCache() {
 		if (!this.session) return;
-		const confirmed = confirm(
+		const confirmed = this.ownerDoc.defaultView?.confirm(
 			'Remove AI prepare cache for this note? You can prepare again later.'
-		);
+		) ?? false;
 		if (!confirmed) return;
 
 		const removed = await this.session.clearCache(this.engine);
 		this.syncPrepareStatus('deterministic');
+		this.setupRequired = this.usesAdaptiveDesktopChrome();
 		this.versionPicker?.setVisible(false);
 		this.rebuildHeadingSelector();
 		this.sectionNav?.refresh();
@@ -1463,8 +1717,13 @@ export class SpeedReaderAiModal extends Modal {
 		if (!this.session) return;
 
 		this.engine.pause();
+		this.prepareStatus = 'preparing';
 		this.prepareControls?.setPreparing(true);
-		this.prepareOverlay?.show();
+		this.desktopReadingSetup?.setPreparing(true);
+		if (!this.usesAdaptiveDesktopChrome()) {
+			this.prepareOverlay?.show();
+		}
+		this.render();
 		const llm = new SettingsBackedLlmClient({
 			getSettings: () => this.settings,
 			getAiProviders: () => getAiProvidersApi(this.app)
@@ -1492,19 +1751,25 @@ export class SpeedReaderAiModal extends Modal {
 			this.modePicker?.setValue(this.session.activeModeId);
 			this.refreshVersionPicker();
 			this.syncPrepareStatus('ai');
+			this.setupRequired = false;
+			this.setupRequested = false;
 			this.rebuildHeadingSelector();
 			this.sectionNav?.refresh();
 			this.updateModeSpecificUi();
 			void this.onCacheCleared?.();
 		} catch (e: unknown) {
-			this.prepareControls?.setStatus('error');
+			this.prepareStatus = 'error';
+			this.prepareControls?.setStatus(this.prepareStatus);
+			this.desktopReadingSetup?.setStatus(this.prepareStatus);
 			const message = e instanceof Error ? e.message : String(e);
 			new Notice(
 				`Prepare failed: ${message}. Check LLM backend (${describeActiveLlmBackend(this.settings)}) in plugin settings.`
 			);
 		} finally {
 			this.prepareControls?.setPreparing(false);
+			this.desktopReadingSetup?.setPreparing(false);
 			this.prepareOverlay?.hide();
+			this.render();
 		}
 	}
 
@@ -1512,12 +1777,14 @@ export class SpeedReaderAiModal extends Modal {
 		if (!this.session) return;
 		const modeStatus = this.session.modeStatus();
 		if (modeStatus === 'stale') {
-			this.prepareControls?.setStatus('stale');
+			this.prepareStatus = 'stale';
 		} else if (kind === 'ai') {
-			this.prepareControls?.setStatus('prepared');
+			this.prepareStatus = 'prepared';
 		} else {
-			this.prepareControls?.setStatus('deterministic');
+			this.prepareStatus = 'deterministic';
 		}
+		this.prepareControls?.setStatus(this.prepareStatus);
+		this.desktopReadingSetup?.setStatus(this.prepareStatus);
 	}
 
 	private updateModeSpecificUi() {
@@ -1525,7 +1792,7 @@ export class SpeedReaderAiModal extends Modal {
 		const isStructured = this.readerOpen.kind === 'structured';
 		const isBook = this.readerOpen.kind === 'book';
 		const hideStructuredBar =
-			(!isStructured && !isBook) || this.mobileReader;
+			(!isStructured && !isBook) || this.mobileReader || this.usesAdaptiveDesktopChrome();
 		this.structuredBarEl?.toggleClass('is-hidden', hideStructuredBar);
 
 		this.controlBar?.setPrepareVisible(isStructured);
@@ -1548,7 +1815,6 @@ export class SpeedReaderAiModal extends Modal {
 			}
 		}
 
-		const showSectionNav = this.canNavigateSections();
 		this.controlBar?.setVisible(
 			this.activeTab === 'home' &&
 				!this.mobileReader &&
@@ -1576,9 +1842,16 @@ export class SpeedReaderAiModal extends Modal {
 			this.notifySectionChange();
 			this.startPlayback();
 		});
+		this.render();
 	}
 
 	private isInputBlockedByOverlay(): boolean {
+		if (
+			this.usesAdaptiveDesktopChrome() &&
+			(this.desktopChromeMode === 'setup' || this.activeTab !== 'home')
+		) {
+			return true;
+		}
 		if (this.interSectionOverlay?.isVisible() ?? true) {
 			return true;
 		}
@@ -1630,23 +1903,17 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private handleReaderBack(): boolean {
+		if (this.usesAdaptiveDesktopChrome() && this.setupRequested && !this.setupRequired) {
+			this.setupRequested = false;
+			this.render();
+			return true;
+		}
 		const action = resolveReaderBackAction(this.buildBackSnapshot());
 		if (action === 'close-modal') {
 			return false;
 		}
 		this.executeReaderBackAction(action);
 		return true;
-	}
-
-	private returnToReadingAfterPaneAction(): void {
-		if (this.readerOpen.kind === 'preferences') {
-			this.forceClose();
-			return;
-		}
-		if (this.activeTab !== 'home') {
-			this.setActiveTab('home');
-			this.refocusContent();
-		}
 	}
 
 	private dismissDictionaryOverlayIfVisible(): boolean {
@@ -1688,7 +1955,7 @@ export class SpeedReaderAiModal extends Modal {
 		if (this.state && isLinePlaybackMode(this.state.playbackMode)) {
 			this.engine.prevLine();
 		} else {
-			this.engine.rewindSmart();
+			this.playNavStreak(this.engine.rewindSmart());
 		}
 		this.refocusContent();
 	}
@@ -1697,14 +1964,45 @@ export class SpeedReaderAiModal extends Modal {
 		if (this.state && isLinePlaybackMode(this.state.playbackMode)) {
 			this.engine.nextLine();
 		} else {
-			this.engine.fastForwardSmart();
+			this.playNavStreak(this.engine.fastForwardSmart());
 		}
+		this.refocusContent();
+	}
+
+	/** Flick the skipped words past the display so a jump reads as travel. */
+	private playNavStreak(jump: NavJump | null) {
+		if (!jump) {
+			return;
+		}
+		this.navStreak?.play(jump.words, jump.direction);
+	}
+
+	/** Paused swipe navigation: move one paragraph backward. */
+	private handleParagraphPrev() {
+		this.engine.prevParagraph();
+		this.refocusContent();
+	}
+
+	/** Paused swipe navigation: move one paragraph forward. */
+	private handleParagraphNext() {
+		this.engine.nextParagraph();
 		this.refocusContent();
 	}
 
 	/** Token/word steps — used for continuous edge scrub while holding. */
 	private handleScrubStepLeft(count = 1) {
 		this.engine.rewind(count);
+	}
+
+	/**
+	 * Releasing a backward scrub lands on a sentence start, never mid-sentence —
+	 * the same contract as every other backward move.
+	 */
+	private handleScrubEnd(side: EdgeScrubSide) {
+		this.edgeScrub.stop();
+		if (side === 'left') {
+			this.playNavStreak(this.engine.snapToSentenceStart());
+		}
 	}
 
 	private handleScrubStepRight(count = 1) {
@@ -1897,10 +2195,56 @@ export class SpeedReaderAiModal extends Modal {
 		new Notice(`Font size: ${newSize}px`);
 	}
 
+	private renderDesktopChrome(state: ReaderState | null): void {
+		if (!this.usesAdaptiveDesktopChrome()) {
+			return;
+		}
+
+		this.desktopChromeMode = deriveDesktopChromeMode({
+			setupRequested: this.setupRequested,
+			setupRequired: this.setupRequired,
+			isPlaying: Boolean(state?.isPlaying),
+			finished: Boolean(state?.finished),
+			transitionVisible: this.interSectionOverlay?.isVisible() ?? false
+		});
+
+		this.shellEl.removeClass(
+			'speed-reader-ai-desktop-setup',
+			'speed-reader-ai-desktop-paused',
+			'speed-reader-ai-desktop-playing',
+			'speed-reader-ai-desktop-transition'
+		);
+		this.shellEl.addClass(`speed-reader-ai-desktop-${this.desktopChromeMode}`);
+
+		const setupVisible = this.desktopChromeMode === 'setup';
+		const pausedVisible =
+			this.desktopChromeMode === 'paused' && this.activeTab === 'home';
+		const playingVisible = this.desktopChromeMode === 'playing';
+		this.desktopReadingSetup?.setVisible(setupVisible);
+		this.desktopReadingSetup?.setStatus(this.prepareStatus);
+		this.desktopPausedSheet?.setVisible(pausedVisible);
+		this.desktopPlayingHud?.setVisible(playingVisible);
+
+		const navigation = this.getDesktopNavigationState();
+		this.desktopPausedSheet?.update({
+			readerState: state,
+			settings: this.settings,
+			navigationLabel: navigation.label,
+			navigationOptions: navigation.options,
+			currentNavigationId: navigation.currentId,
+			canStepNavigation: navigation.canStep,
+			prepareStatus: this.readerOpen.kind === 'structured' ? this.prepareStatus : 'idle',
+			showPrepareStatus: this.readerOpen.kind === 'structured'
+		});
+		const documentProgress = state ? this.getDocumentProgressPercent(state) : null;
+		this.desktopPlayingHud?.update(state, documentProgress);
+	}
+
 	private render() {
 		const state = this.state;
 		if (!state || !this.wordDisplayEl) {
 			this.header?.update(state);
+			this.renderDesktopChrome(state);
 			this.syncMobileChrome(state);
 			return;
 		}
@@ -1913,6 +2257,7 @@ export class SpeedReaderAiModal extends Modal {
 		this.renderWord(state);
 		this.header?.update(state);
 		this.controlBar?.update(state, this.getDocumentProgressPercent(state));
+		this.renderDesktopChrome(state);
 		const showPauseContextInFocus =
 			this.focusController.isFocusMode() && !state.isPlaying && !state.finished;
 		const showContext =
@@ -2033,12 +2378,19 @@ export class SpeedReaderAiModal extends Modal {
 				onTapContextWord: (word) => {
 					void this.wordLookupHandlers?.lookupWord(word);
 				},
-				onSwipeLeft: () => this.handleArrowLeft(),
-				onSwipeRight: () => this.handleArrowRight(),
+				onSwipeLeft: () => this.handleParagraphPrev(),
+				onSwipeRight: () => this.handleParagraphNext(),
 				onSwipeChapterLeft: () => this.handleShiftArrowLeft(),
 				onSwipeChapterRight: () => this.handleShiftArrowRight(),
-				onEdgeHoldStart: (side) => this.edgeScrub.start(side),
-				onEdgeHoldEnd: () => this.edgeScrub.stop(),
+				onEdgeHoldStart: (side) => {
+					this.edgeScrubSide = side;
+					this.edgeScrub.start(side);
+				},
+				onEdgeHoldEnd: () => {
+					const side = this.edgeScrubSide;
+					this.edgeScrubSide = null;
+					this.handleScrubEnd(side ?? 'left');
+				},
 				isBlocked: () => {
 					if (this.interSectionOverlay?.isVisible() ?? true) {
 						return true;
@@ -2251,7 +2603,6 @@ export class SpeedReaderAiModal extends Modal {
 
 		const profile = this.engine.getReaderUxProfile();
 		const hasLegacyHeadings = this.engine.getHeadings().length > 0;
-		const hasSections = this.engine.getSectionList().length > 0;
 		const hasStreamHeadings = this.engine.getStreamHeadings().length > 0;
 		const showPicker =
 			this.readerOpen.kind === 'book'

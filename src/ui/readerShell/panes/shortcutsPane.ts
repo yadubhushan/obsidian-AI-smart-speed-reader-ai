@@ -3,6 +3,8 @@ import { mountMobileStackChrome, type MobileStackChromeHandle } from '../mobileS
 
 export interface ShortcutsPaneOptions {
 	isMobile?: boolean;
+	/** Show the touch gestures list (mobile reader). */
+	showGestures?: boolean;
 }
 
 export interface ShortcutsPaneHandle {
@@ -24,6 +26,16 @@ const SHORTCUT_ROWS: [string, string][] = [
 	['Escape', 'Close reader']
 ];
 
+const GESTURE_ROWS: string[] = [
+	'While playing: tap center of word strip to play or pause',
+	'While playing: hold left or right edge of screen to scrub back or forward (releasing on the left snaps to the sentence start)',
+	'While playing: hold above or below word strip (center) to increase or decrease speed',
+	'While paused: double-tap left to jump to the start of the sentence, right to skip forward',
+	'While paused: long-press word to look up definition',
+	'While paused: tap a context word to define; tap 🔖 to bookmark',
+	'While paused: swipe left or right to skip'
+];
+
 export function mountShortcutsPane(
 	container: HTMLElement,
 	options: ShortcutsPaneOptions = {}
@@ -43,14 +55,23 @@ export function mountShortcutsPane(
 		bodyHost = pane.createDiv({ cls: 'speed-reader-ai-mobile-stack-body' });
 	}
 
+	if (options.showGestures) {
+		const guide = bodyHost.createDiv({ cls: 'speed-reader-ai-shortcuts-gestures' });
+		guide.createEl('h4', { text: 'Gestures' });
+		const list = guide.createEl('ul');
+		for (const text of GESTURE_ROWS) {
+			list.createEl('li', { text });
+		}
+	}
+	// Keyboard shortcuts don't apply on a touch-only mobile reader.
 	if (!isMobile) {
 		bodyHost.createEl('h3', { text: 'Keyboard shortcuts' });
-	}
-	const table = bodyHost.createDiv({ cls: 'speed-reader-ai-shortcuts-table' });
-	for (const [key, desc] of SHORTCUT_ROWS) {
-		const row = table.createDiv({ cls: 'speed-reader-ai-shortcuts-row' });
-		row.createEl('kbd', { text: key });
-		row.createSpan({ text: desc });
+		const table = bodyHost.createDiv({ cls: 'speed-reader-ai-shortcuts-table' });
+		for (const [key, desc] of SHORTCUT_ROWS) {
+			const row = table.createDiv({ cls: 'speed-reader-ai-shortcuts-row' });
+			row.createEl('kbd', { text: key });
+			row.createSpan({ text: desc });
+		}
 	}
 
 	return {
