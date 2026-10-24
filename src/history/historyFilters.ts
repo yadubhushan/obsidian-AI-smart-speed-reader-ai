@@ -3,16 +3,18 @@ import type { ReadingState, ReadingStateFile, ReadingStatus } from '../types/m2C
 export const MAX_PINS = 5;
 export const PIN_LIMIT_NOTICE = 'Maximum 5 pins. Unpin one to pin this item.';
 
-export type HistoryFilterChip = 'inProgress' | 'pinned' | 'finished';
+export type HistoryFilterChip = 'inProgress' | 'pinned' | 'upNext' | 'finished';
 
 export interface HistoryFilterState {
 	inProgress: boolean;
 	pinned: boolean;
+	/** Books never opened; ignored by the notes tab. */
+	upNext: boolean;
 	finished: boolean;
 }
 
 export function defaultHistoryFilters(): HistoryFilterState {
-	return { inProgress: true, pinned: true, finished: false };
+	return { inProgress: true, pinned: true, upNext: true, finished: false };
 }
 
 export interface HistoryRowFilterable {
@@ -33,6 +35,9 @@ export function rowMatchesHistoryFilters(
 	if (filters.pinned) {
 		selected.push('pinned');
 	}
+	if (filters.upNext) {
+		selected.push('upNext');
+	}
 	if (filters.finished) {
 		selected.push('finished');
 	}
@@ -47,6 +52,8 @@ export function rowMatchesHistoryFilters(
 				return row.status === 'in_progress';
 			case 'pinned':
 				return row.pinned;
+			case 'upNext':
+				return row.status === 'unread';
 			case 'finished':
 				return row.status === 'finished';
 			default:

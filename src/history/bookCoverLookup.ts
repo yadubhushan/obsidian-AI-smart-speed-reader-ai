@@ -8,6 +8,16 @@ import type { BookCacheIndex } from '../types/m2Contracts';
 
 type FetchLike = typeof fetch;
 
+/** Open Library rate-limits ISBN cover lookups hard; offer only a few. */
+const MAX_OPEN_LIBRARY_OPTIONS = 3;
+
+export class CoverLookupRateLimitError extends Error {
+	constructor() {
+		super('Google Books is rate-limiting requests. Wait a minute and try again.');
+		this.name = 'CoverLookupRateLimitError';
+	}
+}
+
 export interface BookCoverOption {
 	provider: 'google-books' | 'open-library';
 	url: string;
@@ -75,10 +85,13 @@ function extractIsbn(volume: GoogleBooksVolume): string | undefined {
 
 export async function findBookCoverOptions(
 	title: string,
-	author?: string,
-	fetchImpl: FetchLike = fetch
+	author: string | undefined,
+	fetchImpl: FetchLike
 ): Promise<BookCoverOption[]> {
 	const res = await fetchImpl(googleBookSearchUrl(title, author));
+	if (res.status === 429) {
+		throw new CoverLookupRateLimitError();
+	}
 	if (!res.ok) {
 		throw new Error(`Google Books error: ${res.status}`);
 	}
@@ -107,7 +120,7 @@ export async function findBookCoverOptions(
 		});
 	}
 
-	for (const isbn of isbns) {
+	for (const isbn of [...isbns].slice(0, MAX_OPEN_LIBRARY_OPTIONS)) {
 		const url = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg?default=false`;
 		if (seen.has(url)) {
 			continue;
@@ -142,7 +155,7 @@ export async function ensureBookCoverAssetsBeforeEpubDelete(
 	app: App,
 	bookCacheBase: string,
 	index: BookCacheIndex,
-	fetchImpl: FetchLike = fetch
+	fetchImpl: FetchLike
 ): Promise<{ options: BookCoverOption[]; wroteCover: boolean }> {
 	const adapter = app.vault.adapter;
 	await adapter.mkdir(bookCacheDocKeyPath(bookCacheBase, index.docKey)).catch(() => undefined);

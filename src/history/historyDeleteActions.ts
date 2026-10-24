@@ -4,6 +4,7 @@ import type { ManifestStore } from '../store/ManifestStore';
 import type { PluginServices } from '../services/serviceRegistry';
 import type { DashboardSurfaceKind } from './historyListModel';
 import { ensureBookCoverAssetsBeforeEpubDelete } from './bookCoverLookup';
+import { coverFetch } from './coverFetch';
 
 export interface DeleteHistoryItemDeps {
 	app: App;
@@ -114,7 +115,8 @@ export async function deleteHistoryItem(deps: DeleteHistoryItemDeps): Promise<bo
 			const coverResult = await ensureBookCoverAssetsBeforeEpubDelete(
 				deps.app,
 				deps.services.dataPaths.bookCacheBase,
-				index
+				index,
+				coverFetch
 			);
 			if (coverResult.options.length > 0 && coverResult.wroteCover) {
 				new Notice(`Fetched cover for: ${deps.title}`);

@@ -10,6 +10,8 @@ import type {
 	ReadingStatus
 } from '../types/m2Contracts';
 import type { HistoryFilterState, HistoryRowFilterable } from './historyFilters';
+import { bookDedupeKey, cleanBookFilename, stripTitleJunk } from './bookTitleCleanup';
+import type { BookDisplayOverride } from './libraryMetadataStore';
 
 export type BookSortMode = 'lastRead' | 'title' | 'progress';
 export type NotePlaybackBadge = 'ai' | 'deterministic';
@@ -43,6 +45,12 @@ export interface BookHistoryRow extends HistoryRowFilterable, HistoryDisplayFiel
 	docKey: string;
 	section: 'main' | 'unread';
 	isContinueTarget: boolean;
+	/** Title/author before any user rename, for the rename dialog and reset. */
+	originalTitle: string;
+	originalAuthor?: string;
+	hasCustomTitle: boolean;
+	/** False when only cached state remains (EPUB deleted or moved). */
+	inVault: boolean;
 }
 
 export interface NoteHistoryRow extends HistoryRowFilterable, HistoryDisplayFields {
@@ -70,22 +78,37 @@ export interface BuildBookHistoryModelInput {
 	entries: EpubVaultEntry[];
 	getReadingState: (sourcePath: string) => ReadingState | undefined;
 	getCachedIndex: (docKey: string) => Promise<BookCacheIndex | null>;
+	getDisplayOverride?: (sourcePath: string) => BookDisplayOverride | undefined;
+	isInVault?: (sourcePath: string) => boolean;
 	continueSourcePath?: string | null;
 }
 
-function resolveTitle(
-	entry: EpubVaultEntry,
-	state: ReadingState | undefined,
-	cached: BookCacheIndex | null
-): string {
-	return state?.title ?? cached?.title ?? entry.title;
+interface ResolvedBookName {
+	title: string;
+	author?: string;
+	originalTitle: string;
+	originalAuthor?: string;
+	hasCustomTitle: boolean;
 }
 
-function resolveAuthor(
+/** Precedence: user rename, then EPUB metadata, then a cleaned-up filename. */
+export function resolveBookName(
+	entry: EpubVaultEntry,
 	state: ReadingState | undefined,
-	cached: BookCacheIndex | null
-): string | undefined {
-	return state?.author ?? cached?.author;
+	cached: BookCacheIndex | null,
+	override?: BookDisplayOverride
+): ResolvedBookName {
+	const fromFile = cleanBookFilename(entry.title);
+	const metadataTitle = state?.title ?? cached?.title;
+	const originalTitle = metadataTitle ? stripTitleJunk(metadataTitle) : fromFile.title;
+	const originalAuthor = state?.author ?? cached?.author ?? fromFile.author;
+	return {
+		title: override?.title ?? originalTitle,
+		author: override?.author ?? originalAuthor,
+		originalTitle,
+		originalAuthor,
+		hasCustomTitle: Boolean(override?.title || override?.author)
+	};
 }
 
 function formatWordCountLabel(wordCount: number): string {
@@ -143,14 +166,19 @@ function buildRow(
 	state: ReadingState | undefined,
 	cached: BookCacheIndex | null,
 	section: 'main' | 'unread',
-	continueSourcePath: string | null
+	input: BuildBookHistoryModelInput
 ): BookHistoryRow {
 	const docKey = docKeyFromSourcePath(entry.sourcePath);
 	const progressPercent = state?.progressPercent ?? 0;
+	const name = resolveBookName(entry, state, cached, input.getDisplayOverride?.(entry.sourcePath));
 	return {
 		sourcePath: entry.sourcePath,
-		title: resolveTitle(entry, state, cached),
-		author: resolveAuthor(state, cached),
+		title: name.title,
+		author: name.author,
+		originalTitle: name.originalTitle,
+		originalAuthor: name.originalAuthor,
+		hasCustomTitle: name.hasCustomTitle,
+		inVault: input.isInVault?.(entry.sourcePath) ?? true,
 		folder: state?.folder ?? entry.folder,
 		status: state?.status ?? 'unread',
 		progressPercent,
@@ -164,7 +192,7 @@ function buildRow(
 		lastReadLabel: section === 'unread' ? 'Not started yet' : formatRelativeLastOpened(state?.lastOpenedAt),
 		progressLabel: `${Math.max(0, Math.min(100, Math.round(progressPercent)))}% complete`,
 		surfaceKind: 'book',
-		isContinueTarget: entry.sourcePath === continueSourcePath
+		isContinueTarget: entry.sourcePath === (input.continueSourcePath ?? null)
 	};
 }
 
@@ -260,7 +288,7 @@ export async function buildBookHistoryModel(
 		const cached = await input.getCachedIndex(docKey);
 
 		if (!state || state.status === 'unread') {
-			unread.push(buildRow(entry, state, cached, 'unread', input.continueSourcePath ?? null));
+			unread.push(buildRow(entry, state, cached, 'unread', input));
 			continue;
 		}
 
@@ -269,11 +297,53 @@ export async function buildBookHistoryModel(
 		}
 
 		if (state.status === 'in_progress' || state.status === 'finished') {
-			main.push(buildRow(entry, state, cached, 'main', input.continueSourcePath ?? null));
+			main.push(buildRow(entry, state, cached, 'main', input));
 		}
 	}
 
-	return { main, unread };
+	const kept = new Set(collapseDuplicateBooks([...main, ...unread]));
+	return {
+		main: main.filter((row) => kept.has(row)),
+		unread: unread.filter((row) => kept.has(row))
+	};
+}
+
+function duplicateRank(row: BookHistoryRow): number[] {
+	return [
+		row.pinned ? 1 : 0,
+		row.progressPercent > 0 ? 1 : 0,
+		row.section === 'main' ? 1 : 0,
+		row.inVault ? 1 : 0,
+		row.lengthLabel !== 'Ready to read' ? 1 : 0,
+		row.lastOpenedAt ? Date.parse(row.lastOpenedAt) || 0 : 0,
+		-row.sourcePath.length
+	];
+}
+
+function compareRankDesc(a: number[], b: number[]): number {
+	for (let index = 0; index < a.length; index += 1) {
+		const diff = (b[index] ?? 0) - (a[index] ?? 0);
+		if (diff !== 0) {
+			return diff;
+		}
+	}
+	return 0;
+}
+
+/**
+ * The same book often sits in the vault more than once (re-downloads, moved folders,
+ * cached state for a deleted copy). Keep the copy that carries reading history.
+ */
+export function collapseDuplicateBooks(rows: BookHistoryRow[]): BookHistoryRow[] {
+	const best = new Map<string, BookHistoryRow>();
+	for (const row of rows) {
+		const key = bookDedupeKey(row.title) || row.sourcePath;
+		const current = best.get(key);
+		if (!current || compareRankDesc(duplicateRank(row), duplicateRank(current)) < 0) {
+			best.set(key, row);
+		}
+	}
+	return rows.filter((row) => best.get(bookDedupeKey(row.title) || row.sourcePath) === row);
 }
 
 function compareLastRead<T extends { lastOpenedAt?: string }>(a: T, b: T): number {
@@ -414,12 +484,12 @@ export function buildBookDashboardSections(
 			'lastRead'
 		);
 		if (inProgressRows.length > 0) {
-			sections.push({ key: 'inProgress', title: 'In Progress', rows: inProgressRows });
+			sections.push({ key: 'inProgress', title: 'Reading', rows: inProgressRows });
 		}
 	}
 
-	if (searchedUnread.length > 0) {
-		sections.push({ key: 'upNext', title: 'Up Next', rows: searchedUnread });
+	if (filters.upNext && searchedUnread.length > 0) {
+		sections.push({ key: 'upNext', title: 'Up next', rows: searchedUnread });
 	}
 
 	if (filters.finished) {
@@ -461,7 +531,7 @@ export function buildNoteDashboardSections(
 			'lastRead'
 		);
 		if (inProgressRows.length > 0) {
-			sections.push({ key: 'inProgress', title: 'In Progress', rows: inProgressRows });
+			sections.push({ key: 'inProgress', title: 'Reading', rows: inProgressRows });
 		}
 	}
 

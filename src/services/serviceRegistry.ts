@@ -15,6 +15,7 @@ import type { PluginDataPaths } from '../store/pluginDataPaths';
 import { registerSourceFormatProcessor } from '../formats/sourceFormatProcessorRegistry';
 import { createEpubVaultIndex, type EpubVaultIndexImpl } from '../history/epubVaultIndex';
 import { createBookmarkService, type BookmarkService } from '../bookmarks/bookmarkService';
+import { LibraryMetadataStore } from '../history/libraryMetadataStore';
 
 export interface PluginServices {
 	eventBus: EventBus;
@@ -25,6 +26,7 @@ export interface PluginServices {
 	epubProcessor: SourceFormatProcessor;
 	epubVaultIndex: EpubVaultIndex;
 	bookmarkService: BookmarkService;
+	libraryMetadata: LibraryMetadataStore;
 }
 
 export function createPluginServices(
@@ -70,7 +72,12 @@ export function createPluginServices(
 		readerGate: null as unknown as ReaderGateImpl,
 		epubProcessor,
 		epubVaultIndex,
-		bookmarkService
+		bookmarkService,
+		libraryMetadata: new LibraryMetadataStore(
+			plugin.app.vault.adapter,
+			dataPaths.libraryMetadataFile,
+			eventBus
+		)
 	};
 	services.readerGate = createReaderGate({
 		app: plugin.app,

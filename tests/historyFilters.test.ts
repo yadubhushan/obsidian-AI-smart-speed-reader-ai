@@ -31,12 +31,13 @@ describe('historyFilters', () => {
 		expect(defaultHistoryFilters()).toEqual({
 			inProgress: true,
 			pinned: true,
+			upNext: true,
 			finished: false
 		});
 	});
 
 	it('matches rows by selected chips (union)', () => {
-		const filters = { inProgress: true, pinned: true, finished: false };
+		const filters = { inProgress: true, pinned: true, upNext: false, finished: false };
 		expect(
 			rowMatchesHistoryFilters(
 				{ sourcePath: 'a', status: 'in_progress', pinned: true },
@@ -66,6 +67,7 @@ describe('historyFilters', () => {
 		const filtered = applyHistoryFilters(rows, {
 			inProgress: true,
 			pinned: false,
+			upNext: false,
 			finished: true
 		});
 		expect(filtered.map((row) => row.sourcePath)).toEqual(['a', 'b']);

@@ -7,7 +7,23 @@ import {
 	sortBookRows,
 	type BookHistoryRow
 } from '../src/history/historyListModel';
-import type { EpubVaultEntry, ReadingState } from '../src/types/m2Contracts';
+import { docKeyFromSourcePath } from '../src/store/docKey';
+import type { BookCacheIndex, EpubVaultEntry, ReadingState } from '../src/types/m2Contracts';
+
+const docKeyFor = docKeyFromSourcePath;
+
+function cachedIndex(sourcePath: string, title: string, author?: string): BookCacheIndex {
+	return {
+		docKey: docKeyFromSourcePath(sourcePath),
+		sourcePath,
+		sourceChecksum: 'x',
+		title,
+		author,
+		totalWordCount: 0,
+		chapters: [],
+		parsedAt: '2026-01-01T00:00:00.000Z'
+	};
+}
 
 const entries: EpubVaultEntry[] = [
 	{ sourcePath: 'books/unread.epub', title: 'unread', folder: 'books' },
@@ -230,16 +246,85 @@ describe('historyListModel books', () => {
 		const sections = buildBookDashboardSections(model, {
 			inProgress: true,
 			pinned: true,
+			upNext: true,
 			finished: true
 		}, '');
 
 		expect(sections.map((section) => section.title)).toEqual([
 			'Pinned',
-			'Up Next',
+			'Up next',
 			'Finished'
 		]);
 		expect(sections[0]?.rows.map((row) => row.title)).toEqual(['Half Read']);
 		expect(sections[1]?.rows.map((row) => row.title)).toEqual(['unread']);
 		expect(sections[2]?.rows.map((row) => row.title)).toEqual(['Finished Book']);
 	});
+
+	it('prefers a user rename, then EPUB metadata, then a cleaned filename', async () => {
+		const model = await buildBookHistoryModel({
+			entries: [
+				{ sourcePath: 'a/Siddhartha (Hermann Hesse).epub', title: 'Siddhartha (Hermann Hesse)', folder: 'a' },
+				{ sourcePath: 'a/meta.epub', title: 'meta', folder: 'a' },
+				{ sourcePath: 'a/renamed.epub', title: 'renamed', folder: 'a' }
+			],
+			getReadingState: (path) =>
+				path === 'a/renamed.epub'
+					? bookState(path, { title: 'Long Metadata Title: With Subtitle', author: 'Meta Author' })
+					: undefined,
+			getCachedIndex: async (docKey) =>
+				docKey.length > 0 && docKey === docKeyFor('a/meta.epub')
+					? cachedIndex('a/meta.epub', 'Meta Title z-library.sk, 1lib.sk', 'Cached Author')
+					: null,
+			getDisplayOverride: (path) =>
+				path === 'a/renamed.epub' ? { title: 'Short', updatedAt: '2026-10-24T00:00:00.000Z' } : undefined
+		});
+		const byPath = new Map([...model.main, ...model.unread].map((row) => [row.sourcePath, row]));
+
+		expect(byPath.get('a/Siddhartha (Hermann Hesse).epub')).toMatchObject({
+			title: 'Siddhartha',
+			author: 'Hermann Hesse',
+			hasCustomTitle: false
+		});
+		expect(byPath.get('a/meta.epub')).toMatchObject({ title: 'Meta Title', author: 'Cached Author' });
+		expect(byPath.get('a/renamed.epub')).toMatchObject({
+			title: 'Short',
+			author: 'Meta Author',
+			originalTitle: 'Long Metadata Title: With Subtitle',
+			hasCustomTitle: true
+		});
+	});
+
+	it('collapses duplicate copies and keeps the one with reading history', async () => {
+		const model = await buildBookHistoryModel({
+			entries: [
+				{ sourcePath: 'books/Siddhartha.epub', title: 'Siddhartha', folder: 'books' },
+				{ sourcePath: 'books/epub/Siddhartha (Hermann Hesse).epub', title: 'Siddhartha (Hermann Hesse)', folder: 'books/epub' },
+				{ sourcePath: 'old/Siddhartha.epub', title: 'Siddhartha', folder: 'old' }
+			],
+			getReadingState: (path) =>
+				path === 'books/epub/Siddhartha (Hermann Hesse).epub'
+					? bookState(path, { title: 'Siddhartha', progressPercent: 12 })
+					: undefined,
+			getCachedIndex: async () => null,
+			isInVault: (path) => path !== 'old/Siddhartha.epub'
+		});
+
+		expect(model.main.map((row) => row.sourcePath)).toEqual(['books/epub/Siddhartha (Hermann Hesse).epub']);
+		expect(model.unread).toEqual([]);
+	});
+
+	it('hides Up next when that filter is off', async () => {
+		const model = await buildBookHistoryModel({
+			entries,
+			getReadingState: () => undefined,
+			getCachedIndex: async () => null
+		});
+		const sections = buildBookDashboardSections(
+			model,
+			{ inProgress: true, pinned: true, upNext: false, finished: true },
+			''
+		);
+		expect(sections).toEqual([]);
+	});
 });
+

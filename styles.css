@@ -3807,3 +3807,888 @@ body.speed-reader-ai-immersive-blackout-body .app-container {
 		animation: none;
 	}
 }
+
+/* ==========================================================================
+   Library view (full tab): header, continue card, chips, cover grid, dialogs.
+   Uses Obsidian theme variables only so it follows light/dark and themes.
+   ========================================================================== */
+
+.srai-library {
+	--srai-lib-radius: 14px;
+	--srai-lib-gap: 1.25rem;
+	--srai-lib-tile-min: 132px;
+	--srai-lib-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+	padding: 0 !important;
+	background: var(--background-primary);
+	container: srai-library / inline-size;
+}
+
+.srai-library__page {
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 1.75rem 2rem 3rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+.srai-library__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.srai-library__title {
+	margin: 0;
+	font-size: 1.9rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+}
+
+.srai-library__search {
+	position: relative;
+	flex: 0 1 320px;
+	min-width: 200px;
+}
+
+.srai-library__search-icon {
+	position: absolute;
+	left: 0.7rem;
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	color: var(--text-faint);
+	pointer-events: none;
+}
+
+.srai-library__search-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.srai-library .srai-library__search-input {
+	width: 100%;
+	height: 36px;
+	padding-left: 2.1rem;
+	border-radius: 999px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.srai-library .srai-library__search-input:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+}
+
+/* Continue card ---------------------------------------------------------- */
+
+.srai-library .speed-reader-dashboard-hero-host {
+	padding: 0;
+}
+
+.srai-library .speed-reader-dashboard-hero {
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 1.25rem;
+	margin: 0;
+	padding: 1.1rem 1.25rem;
+	border-radius: calc(var(--srai-lib-radius) + 4px);
+	box-shadow: none;
+	transition: border-color 160ms ease, background 160ms ease;
+}
+
+.srai-library .speed-reader-dashboard-hero:hover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
+}
+
+.srai-library .speed-reader-dashboard-hero__surface {
+	width: 84px;
+	height: 126px;
+	border-radius: 8px;
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.speed-reader-dashboard-hero__topline .speed-reader-dashboard-hero__eyebrow {
+	margin: 0;
+}
+
+.srai-library .speed-reader-dashboard-hero__title {
+	margin-top: 0.3rem;
+	font-size: 1.35rem;
+	letter-spacing: -0.01em;
+}
+
+.speed-reader-dashboard-hero__title,
+.speed-reader-dashboard-card__title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+}
+
+.speed-reader-dashboard-hero__subtitle {
+	margin-top: 0.15rem;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.speed-reader-dashboard-hero__secondary {
+	margin-top: 0.25rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.speed-reader-dashboard-hero__footer {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 0.85rem;
+}
+
+.speed-reader-dashboard-hero__bar {
+	flex: 1 1 auto;
+	max-width: 320px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--background-modifier-border);
+	overflow: hidden;
+}
+
+.speed-reader-dashboard-hero__bar-fill {
+	height: 100%;
+	border-radius: inherit;
+	background: var(--interactive-accent);
+	transition: width 300ms var(--srai-lib-ease, ease);
+}
+
+.speed-reader-dashboard-hero__percent {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+.speed-reader-dashboard-hero__footer .speed-reader-dashboard-hero__resume {
+	margin-left: auto;
+}
+
+/* Tabs + chips ----------------------------------------------------------- */
+
+.srai-library__toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem 1rem;
+	flex-wrap: wrap;
+	padding-bottom: 0.75rem;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.srai-library__tabs {
+	display: inline-flex;
+	padding: 3px;
+	border-radius: 999px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.srai-library .srai-library__tab,
+.srai-library .srai-library__chip {
+	appearance: none;
+	box-shadow: none;
+	height: auto;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.srai-library .srai-library__tab {
+	padding: 0.35rem 1rem;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--text-muted);
+	font-weight: var(--font-medium);
+}
+
+.srai-library .srai-library__tab.is-active {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.srai-library__chips {
+	display: flex;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+}
+
+.srai-library .srai-library__chip {
+	padding: 0.3rem 0.8rem;
+	border-radius: 999px;
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
+	color: var(--text-muted);
+}
+
+.srai-library .srai-library__chip:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.srai-library .srai-library__chip.is-active {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.srai-library .srai-library__chip.is-hidden {
+	display: none;
+}
+
+.srai-library__body {
+	min-height: 0;
+}
+
+.srai-library .speed-reader-dashboard-body__pane {
+	height: auto;
+	overflow: visible;
+	padding: 0;
+}
+
+.srai-library .speed-reader-dashboard-pane {
+	display: flex;
+	flex-direction: column;
+	gap: 2rem;
+}
+
+/* Shelves + cover grid --------------------------------------------------- */
+
+.srai-lib-shelf__header {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5rem;
+	margin-bottom: 0.9rem;
+}
+
+.srai-lib-shelf__title {
+	font-size: 1.05rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.srai-lib-shelf__count {
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+	font-variant-numeric: tabular-nums;
+}
+
+.srai-lib-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(var(--srai-lib-tile-min), 1fr));
+	gap: 1.5rem var(--srai-lib-gap);
+}
+
+.srai-lib-tile {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	cursor: pointer;
+	border-radius: 10px;
+	outline: none;
+}
+
+.srai-lib-tile:focus-visible .srai-lib-tile__cover {
+	box-shadow:
+		0 0 0 2px var(--background-primary),
+		0 0 0 4px var(--interactive-accent);
+}
+
+.srai-lib-tile__cover {
+	position: relative;
+	aspect-ratio: 2 / 3;
+	width: 100%;
+	border-radius: 6px 10px 10px 6px;
+	overflow: hidden;
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.12),
+		0 6px 16px rgba(0, 0, 0, 0.14);
+	transition:
+		transform 200ms var(--srai-lib-ease),
+		box-shadow 200ms var(--srai-lib-ease);
+}
+
+/* Faint spine highlight so flat covers read as books. */
+.srai-lib-tile__cover::before {
+	content: '';
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 6px;
+	background: linear-gradient(90deg, rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.08) 60%, transparent);
+	z-index: 1;
+	pointer-events: none;
+}
+
+.srai-lib-tile:hover .srai-lib-tile__cover {
+	transform: translateY(-3px);
+	box-shadow:
+		0 2px 4px rgba(0, 0, 0, 0.12),
+		0 14px 28px rgba(0, 0, 0, 0.2);
+}
+
+.srai-lib-tile.is-finished .srai-lib-tile__cover {
+	filter: saturate(0.75);
+}
+
+/* Cover art (shared by tiles and the continue card) */
+.srai-cover {
+	background-color: hsl(var(--srai-cover-hue, 220) 32% 34%);
+	background-size: cover;
+	background-position: center;
+}
+
+.srai-cover__placeholder {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	padding: 14% 12% 12%;
+	background:
+		linear-gradient(160deg, hsl(var(--srai-cover-hue, 220) 45% 46%), hsl(calc(var(--srai-cover-hue, 220) + 30) 40% 24%));
+	color: rgba(255, 255, 255, 0.94);
+	text-align: left;
+}
+
+.speed-reader-dashboard-hero__surface.srai-cover {
+	position: relative;
+	overflow: hidden;
+}
+
+.speed-reader-dashboard-hero__surface .srai-cover__placeholder {
+	padding: 10px 8px;
+}
+
+.srai-cover.has-cover .srai-cover__placeholder {
+	display: none;
+}
+
+.srai-cover__placeholder-title {
+	font-family: var(--font-text-theme, Georgia), Georgia, serif;
+	font-size: 0.95rem;
+	font-weight: 600;
+	line-height: 1.2;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 5;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+}
+
+.speed-reader-dashboard-hero__surface .srai-cover__placeholder-title {
+	font-size: 0.72rem;
+}
+
+.srai-cover__placeholder-author {
+	font-size: 0.7rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.8;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.srai-lib-tile__badges {
+	position: absolute;
+	top: 8px;
+	left: 10px;
+	right: 40px;
+	display: flex;
+	gap: 4px;
+	flex-wrap: wrap;
+	z-index: 2;
+	pointer-events: none;
+}
+
+.srai-lib-tile__badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 2px 7px;
+	border-radius: 999px;
+	font-size: 0.68rem;
+	font-weight: 600;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.55);
+	backdrop-filter: blur(6px);
+}
+
+.srai-lib-tile__badge.is-current {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.srai-lib-tile__badge.is-pin {
+	padding: 3px;
+}
+
+.srai-lib-tile__badge.is-pin svg {
+	width: 12px;
+	height: 12px;
+}
+
+.srai-lib-tile__badge.is-missing {
+	background: color-mix(in srgb, var(--text-error) 80%, black);
+}
+
+.srai-library .srai-lib-tile__menu {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	z-index: 2;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(6px);
+	opacity: 0;
+	transition: opacity 140ms ease, background 140ms ease;
+}
+
+.srai-lib-tile:hover .srai-lib-tile__menu,
+.srai-lib-tile:focus-within .srai-lib-tile__menu,
+.srai-library .srai-lib-tile__menu:focus-visible {
+	opacity: 1;
+}
+
+.srai-library .srai-lib-tile__menu:hover {
+	background: rgba(0, 0, 0, 0.72);
+	color: #fff;
+}
+
+.srai-lib-tile__progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 4px;
+	background: rgba(0, 0, 0, 0.35);
+	z-index: 2;
+}
+
+.srai-lib-tile__progress-fill {
+	height: 100%;
+	background: var(--interactive-accent);
+}
+
+.srai-lib-tile__text {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	padding-inline: 2px;
+}
+
+.srai-lib-tile__title {
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--text-normal);
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+}
+
+.srai-lib-tile__subtitle,
+.srai-lib-tile__meta {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.srai-lib-tile__subtitle {
+	color: var(--text-faint);
+}
+
+.srai-lib-tile__meta {
+	display: flex;
+	gap: 0.4rem;
+}
+
+.srai-lib-tile__author {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.srai-lib-tile__author + .srai-lib-tile__status::before {
+	content: '·';
+	margin-right: 0.4rem;
+	color: var(--text-faint);
+}
+
+.srai-lib-tile__status {
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.srai-lib-tile.is-finished .srai-lib-tile__status {
+	color: var(--text-success);
+}
+
+/* Skeletons + empty state inside the grid view */
+.srai-library .speed-reader-dashboard-skeletons {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(var(--srai-lib-tile-min), 1fr));
+	gap: var(--srai-lib-gap);
+}
+
+.srai-library .speed-reader-dashboard-skeleton {
+	display: block;
+	aspect-ratio: 2 / 3;
+	padding: 0;
+	border-radius: 8px;
+	box-shadow: none;
+}
+
+.srai-library .speed-reader-dashboard-skeleton > * {
+	display: none;
+}
+
+/* Dialogs ---------------------------------------------------------------- */
+
+.srai-lib-dialog__hint {
+	margin-top: 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.srai-lib-dialog .srai-lib-dialog__input {
+	width: min(340px, 60vw);
+}
+
+.srai-lib-cover-dialog {
+	width: min(720px, 94vw);
+}
+
+.srai-lib-cover-dialog__search {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.srai-lib-cover-dialog__search input {
+	flex: 1 1 180px;
+	min-width: 0;
+}
+
+.srai-lib-cover-dialog__status {
+	margin: 0.75rem 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.srai-lib-cover-dialog__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+	gap: 0.9rem;
+	max-height: 55vh;
+	overflow-y: auto;
+	padding: 4px;
+}
+
+.srai-lib-cover-dialog .srai-lib-cover-dialog__option {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	height: auto;
+	padding: 0;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.srai-lib-cover-dialog__option img {
+	width: 100%;
+	aspect-ratio: 2 / 3;
+	object-fit: cover;
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+	transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.srai-lib-cover-dialog__option:hover img,
+.srai-lib-cover-dialog__option:focus-visible img {
+	transform: translateY(-2px);
+	box-shadow:
+		0 0 0 2px var(--interactive-accent),
+		0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.srai-lib-cover-dialog__option.is-loading {
+	opacity: 0.55;
+	pointer-events: none;
+}
+
+.srai-lib-cover-dialog__provider {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.srai-lib-cover-dialog__footer:not(:empty) {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 1rem;
+}
+
+/* Narrow panes and phones ------------------------------------------------ */
+
+/* Touch: no hover, so the ⋯ button is always shown (smaller and quieter), hover lifts are
+   dropped so they don't stick after a tap, and a press gives instant feedback instead. */
+@media (hover: none) {
+	.srai-library .srai-lib-tile__menu {
+		opacity: 1;
+		width: 30px;
+		height: 30px;
+		background: rgba(0, 0, 0, 0.38);
+	}
+
+	/* Larger invisible hit area around the small ⋯ button. */
+	.srai-library .srai-lib-tile__menu::after {
+		content: '';
+		position: absolute;
+		inset: -8px;
+	}
+
+	.srai-lib-tile:hover .srai-lib-tile__cover {
+		transform: none;
+		box-shadow:
+			0 1px 2px rgba(0, 0, 0, 0.12),
+			0 6px 16px rgba(0, 0, 0, 0.14);
+	}
+
+	.srai-lib-tile:active .srai-lib-tile__cover {
+		transform: scale(0.97);
+		transition-duration: 80ms;
+	}
+
+	.srai-lib-tile {
+		-webkit-tap-highlight-color: transparent;
+		-webkit-touch-callout: none;
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	.srai-library .speed-reader-dashboard-hero:active {
+		background: var(--background-modifier-hover);
+	}
+
+	.srai-library .srai-library__tab,
+	.srai-library .srai-library__chip {
+		min-height: 36px;
+	}
+
+	/* iOS zooms the page when focusing an input under 16px. */
+	.srai-library .srai-library__search-input,
+	.srai-lib-dialog input[type='text'] {
+		font-size: 16px;
+	}
+}
+
+/* Container query, not media query: a narrow split pane on a wide screen needs this too. */
+@container srai-library (max-width: 640px) {
+	.srai-library__page {
+		--srai-lib-tile-min: 96px;
+		--srai-lib-gap: 0.75rem;
+		gap: 1rem;
+		padding: 0.75rem 1rem calc(2rem + env(safe-area-inset-bottom, 0px));
+	}
+
+	.srai-library__header {
+		gap: 0.6rem;
+	}
+
+	.srai-library__title {
+		font-size: 1.45rem;
+	}
+
+	.srai-library__search {
+		flex: 1 1 100%;
+		min-width: 0;
+	}
+
+	.srai-library .srai-library__search-input {
+		height: 40px;
+	}
+
+	/* Continue card: cover left, text right; progress + full-width Resume underneath. */
+	.srai-library .speed-reader-dashboard-hero {
+		gap: 0.85rem;
+		padding: 0.85rem;
+		align-items: start;
+	}
+
+	.srai-library .speed-reader-dashboard-hero__surface {
+		width: 64px;
+		height: 96px;
+	}
+
+	.srai-library .speed-reader-dashboard-hero__title {
+		font-size: 1.1rem;
+	}
+
+	.speed-reader-dashboard-hero__footer {
+		flex-wrap: wrap;
+		gap: 0.5rem 0.75rem;
+		margin-top: 0.6rem;
+	}
+
+	.speed-reader-dashboard-hero__bar {
+		flex: 1 1 0;
+		max-width: none;
+	}
+
+	.speed-reader-dashboard-hero__footer .speed-reader-dashboard-hero__resume {
+		flex: 1 1 100%;
+		margin-left: 0;
+		min-height: 40px;
+	}
+
+	/* Toolbar: segmented Books/Notes across the full width, chips as one swipeable row. */
+	.srai-library__toolbar {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.6rem;
+		padding-bottom: 0.6rem;
+	}
+
+	.srai-library__tabs {
+		display: flex;
+	}
+
+	.srai-library .srai-library__tab {
+		flex: 1 1 0;
+	}
+
+	.srai-library__chips {
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		margin-inline: -1rem;
+		padding-inline: 1rem;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.srai-library__chips::-webkit-scrollbar {
+		display: none;
+	}
+
+	.srai-library .srai-library__chip {
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
+	.srai-library .speed-reader-dashboard-pane {
+		gap: 1.5rem;
+	}
+
+	.srai-lib-shelf__header {
+		margin-bottom: 0.6rem;
+	}
+
+	.srai-lib-grid {
+		row-gap: 1.1rem;
+	}
+
+	.srai-lib-tile {
+		gap: 0.45rem;
+	}
+
+	.srai-lib-tile__title {
+		font-size: var(--font-ui-smaller);
+	}
+
+	/* Too cramped at three columns; the full title is in the rename dialog and tooltip. */
+	.srai-lib-tile__subtitle {
+		display: none;
+	}
+
+	.srai-lib-tile__meta {
+		font-size: 0.7rem;
+	}
+
+	.srai-lib-tile__badges {
+		top: 6px;
+		left: 8px;
+	}
+
+	.srai-lib-tile__badge {
+		font-size: 0.62rem;
+		padding: 1px 6px;
+	}
+
+	.srai-cover__placeholder-title {
+		font-size: 0.8rem;
+	}
+}
+
+/* Phone dialogs: stack label over a full-width input; buttons wrap instead of squeezing. */
+.is-phone .srai-lib-dialog .setting-item {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0.4rem;
+}
+
+.is-phone .srai-lib-dialog .setting-item-control {
+	justify-content: flex-end;
+	flex-wrap: wrap;
+}
+
+.is-phone .srai-lib-dialog .srai-lib-dialog__input {
+	width: 100%;
+}
+
+.is-phone .srai-lib-cover-dialog__search input {
+	flex-basis: 100%;
+}
+
+.is-phone .srai-lib-cover-dialog__search button {
+	flex: 1 1 100%;
+	min-height: 40px;
+}
+
+.is-phone .srai-lib-cover-dialog__grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.6rem;
+	max-height: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.srai-lib-tile__cover,
+	.speed-reader-dashboard-hero__bar-fill {
+		transition: none;
+	}
+
+	.srai-lib-tile:hover .srai-lib-tile__cover {
+		transform: none;
+	}
+}

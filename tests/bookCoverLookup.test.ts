@@ -49,3 +49,12 @@ describe('bookCoverLookup', () => {
 		]);
 	});
 });
+
+describe('bookCoverLookup rate limits', () => {
+	it('reports a 429 as a rate-limit error', async () => {
+		const fetchImpl = vi.fn(async () => new Response(null, { status: 429 })) as unknown as typeof fetch;
+		await expect(findBookCoverOptions('Nausea', undefined, fetchImpl)).rejects.toThrow(
+			/rate-limiting/
+		);
+	});
+});

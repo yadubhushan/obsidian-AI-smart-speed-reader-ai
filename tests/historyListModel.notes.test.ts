@@ -188,10 +188,11 @@ describe('historyListModel notes', () => {
 		const sections = buildNoteDashboardSections(rows, {
 			inProgress: true,
 			pinned: true,
+			upNext: true,
 			finished: false
 		}, '');
 
-		expect(sections.map((section) => section.title)).toEqual(['Pinned', 'In Progress']);
+		expect(sections.map((section) => section.title)).toEqual(['Pinned', 'Reading']);
 		expect(sections[0]?.rows.map((row) => row.title)).toEqual(['Pinned']);
 		expect(sections[1]?.rows.map((row) => row.title)).toEqual(['Active']);
 	});

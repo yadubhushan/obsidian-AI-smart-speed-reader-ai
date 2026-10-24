@@ -125,6 +125,7 @@ export type EventBusEventMap = {
 	'reader-closed': { sourcePath: string };
 	'book-cache-updated': { docKey: string; sourcePath: string };
 	'epub-index-changed': Record<string, never>;
+	'library-metadata-changed': { sourcePath: string };
 };
 
 export type EventBusEventName = keyof EventBusEventMap;

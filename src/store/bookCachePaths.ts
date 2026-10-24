@@ -63,3 +63,8 @@ export function bookCacheCoverPath(basePath: string, docKey: string): string {
 export function bookCacheCoverOptionsPath(basePath: string, docKey: string): string {
 	return joinCachePath(basePath, `${docKey}/cover-options.json`);
 }
+
+/** User-picked cover; kept apart from `cover.jpg` so a re-parse never overwrites it. */
+export function bookCacheCustomCoverPath(basePath: string, docKey: string): string {
+	return joinCachePath(basePath, `${docKey}/custom-cover.jpg`);
+}

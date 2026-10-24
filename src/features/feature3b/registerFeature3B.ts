@@ -2,23 +2,28 @@ import { Notice } from 'obsidian';
 import type SpeedReaderAiPlugin from '../../main';
 import type { PluginServices } from '../../services/serviceRegistry';
 import { continueReading } from '../../history/continueReading';
-import { openReadingHistoryModal } from '../../history/ReadingHistoryModal';
+import { activateLibraryView, LIBRARY_VIEW_TYPE, LibraryView } from '../../history/libraryView';
 
 export function registerFeature3B(plugin: SpeedReaderAiPlugin, services: PluginServices): void {
-	const openHistory = () => {
-		openReadingHistoryModal({
-			app: plugin.app,
-			services,
-			getManifestStore: () => plugin.getManifestStore()
-		});
+	plugin.registerView(
+		LIBRARY_VIEW_TYPE,
+		(leaf) =>
+			new LibraryView(leaf, {
+				services,
+				getManifestStore: () => plugin.getManifestStore()
+			})
+	);
+
+	const openLibrary = () => {
+		void activateLibraryView(plugin.app);
 	};
 
-	plugin.addRibbonIcon('library', 'Open reading dashboard', openHistory);
+	plugin.addRibbonIcon('library', 'Open library', openLibrary);
 
 	plugin.addCommand({
 		id: 'open-reading-history',
-		name: 'Open reading dashboard',
-		callback: openHistory
+		name: 'Open library',
+		callback: openLibrary
 	});
 
 	plugin.addCommand({

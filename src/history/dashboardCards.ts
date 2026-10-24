@@ -1,5 +1,6 @@
 import { setIcon, type App } from 'obsidian';
-import { bookCacheCoverPath } from '../store/bookCachePaths';
+import { renderBookCoverArt } from './bookCoverArt';
+import { splitBookTitle } from './bookTitleCleanup';
 import type { PluginServices } from '../services/serviceRegistry';
 import { renderProgressRing } from './progressRing';
 import type { BookHistoryRow, DashboardSection, NoteHistoryRow } from './historyListModel';
@@ -29,37 +30,6 @@ function createSurface(parent: HTMLElement, row: DashboardRow): HTMLElement {
 	return surface;
 }
 
-async function loadBookCover(
-	app: App,
-	services: PluginServices,
-	coverUrls: string[],
-	docKey: string,
-	coverEl: HTMLElement,
-	isDisposed: () => boolean
-): Promise<void> {
-	const coverPath = bookCacheCoverPath(services.dataPaths.bookCacheBase, docKey);
-	try {
-		const exists = await app.vault.adapter.exists(coverPath);
-		if (!exists || isDisposed()) {
-			coverEl.addClass('is-placeholder');
-			return;
-		}
-		const bytes = await app.vault.adapter.readBinary(coverPath);
-		const blob = new Blob([bytes], { type: 'image/jpeg' });
-		const url = URL.createObjectURL(blob);
-		coverUrls.push(url);
-		if (isDisposed()) {
-			URL.revokeObjectURL(url);
-			return;
-		}
-		coverEl.style.backgroundImage = `url("${url}")`;
-		coverEl.removeClass('is-placeholder');
-		coverEl.empty();
-	} catch {
-		coverEl.addClass('is-placeholder');
-	}
-}
-
 function renderCardMeta(parent: HTMLElement, row: DashboardRow): void {
 	const meta = parent.createDiv({ cls: 'speed-reader-dashboard-card__meta' });
 	const top = meta.createDiv({ cls: 'speed-reader-dashboard-card__topline' });
@@ -80,7 +50,11 @@ function renderCardMeta(parent: HTMLElement, row: DashboardRow): void {
 		});
 	}
 
-	meta.createDiv({ cls: 'speed-reader-dashboard-card__title', text: row.title });
+	meta.createDiv({
+		cls: 'speed-reader-dashboard-card__title',
+		text: row.title,
+		attr: { title: row.title }
+	});
 	if ('author' in row && row.author) {
 		meta.createDiv({
 			cls: 'speed-reader-dashboard-card__secondary',
@@ -150,14 +124,7 @@ export function renderReadingCard(
 
 	const surface = createSurface(card, row);
 	if (row.surfaceKind === 'book') {
-		void loadBookCover(
-			deps.app,
-			deps.services,
-			deps.coverUrls,
-			row.docKey,
-			surface,
-			deps.isDisposed
-		);
+		renderBookCoverArt(surface, row, deps);
 	}
 
 	renderCardMeta(card, row);
@@ -184,7 +151,7 @@ export function renderContinueReadingCard(
 		});
 		empty.createDiv({
 			cls: 'speed-reader-dashboard-hero__eyebrow',
-			text: 'Continue Reading'
+			text: 'Continue reading'
 		});
 		empty.createDiv({
 			cls: 'speed-reader-dashboard-hero__title',
@@ -192,7 +159,7 @@ export function renderContinueReadingCard(
 		});
 		empty.createDiv({
 			cls: 'speed-reader-dashboard-hero__description',
-			text: 'Open a book or note to start building your reading dashboard.'
+			text: 'Open a book or note and it will show up here.'
 		});
 		return;
 	}
@@ -201,26 +168,14 @@ export function renderContinueReadingCard(
 	const surface = createSurface(hero, row);
 	surface.addClass('speed-reader-dashboard-hero__surface');
 	if (row.surfaceKind === 'book') {
-		void loadBookCover(
-			deps.app,
-			deps.services,
-			deps.coverUrls,
-			row.docKey,
-			surface,
-			deps.isDisposed
-		);
+		renderBookCoverArt(surface, row, deps);
 	}
 
 	const content = hero.createDiv({ cls: 'speed-reader-dashboard-hero__content' });
-	content.createDiv({
-		cls: 'speed-reader-dashboard-hero__eyebrow',
-		text: 'Continue Reading'
-	});
-
 	const top = content.createDiv({ cls: 'speed-reader-dashboard-hero__topline' });
 	top.createSpan({
-		cls: 'speed-reader-dashboard-card__type-badge',
-		text: row.typeLabel
+		cls: 'speed-reader-dashboard-hero__eyebrow',
+		text: 'Continue reading'
 	});
 	if ('badgeLabel' in row) {
 		top.createSpan({
@@ -229,19 +184,34 @@ export function renderContinueReadingCard(
 		});
 	}
 
+	const { main, subtitle } = splitBookTitle(row.title);
 	content.createDiv({
 		cls: 'speed-reader-dashboard-hero__title',
-		text: row.title
+		text: main,
+		attr: { title: row.title }
 	});
+	if (subtitle) {
+		content.createDiv({ cls: 'speed-reader-dashboard-hero__subtitle', text: subtitle });
+	}
 	content.createDiv({
 		cls: 'speed-reader-dashboard-hero__secondary',
 		text: 'author' in row && row.author ? row.author : row.lengthLabel
 	});
 
-	const actions = hero.createDiv({ cls: 'speed-reader-dashboard-hero__actions' });
-	const progress = actions.createDiv({ cls: 'speed-reader-dashboard-hero__progress' });
-	renderProgressRing(progress, row.progressPercent);
-	const resumeBtn = actions.createEl('button', {
+	const footer = content.createDiv({ cls: 'speed-reader-dashboard-hero__footer' });
+	const percent = Math.max(0, Math.min(100, Math.round(row.progressPercent)));
+	const bar = footer.createDiv({
+		cls: 'speed-reader-dashboard-hero__bar',
+		attr: {
+			role: 'progressbar',
+			'aria-valuenow': String(percent),
+			'aria-valuemin': '0',
+			'aria-valuemax': '100'
+		}
+	});
+	bar.createDiv({ cls: 'speed-reader-dashboard-hero__bar-fill' }).style.width = `${percent}%`;
+	footer.createSpan({ cls: 'speed-reader-dashboard-hero__percent', text: `${percent}%` });
+	const resumeBtn = footer.createEl('button', {
 		cls: 'mod-cta speed-reader-dashboard-hero__resume',
 		text: 'Resume',
 		attr: { type: 'button' }

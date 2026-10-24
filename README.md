@@ -32,6 +32,8 @@ Use it when you want to:
 - **Selection support** — Read selected text, or start from the whole note.
 - **EPUB books** — Speed read vault EPUBs with chapter navigation and resume.
 - **Word lookup** — Press **D** to look up the current word in an inline overlay (English; requires internet).
+- **Library** — Open **Speed Reader AI: Open library** (or the library ribbon icon) for a full-tab bookshelf of every EPUB in the vault: continue-reading card, cover grid, search, and Reading / Pinned / Up next / Finished filters. Long titles are clamped and cleaned up (download-site junk like `z-library.sk` is hidden), and duplicate copies of the same book collapse into one tile.
+- **Per-book actions** — Select **⋯** on a book (or right-click it) to rename it, change its cover, pin it, mark it finished, reset progress, reveal it in the file explorer, or delete it. Renaming only changes the library display; the EPUB file keeps its name. **Change cover** searches Google Books and Open Library (requires internet; only the title and author you enter are sent).
 
 ## How it works
 
@@ -73,7 +75,7 @@ Install plugin binaries on each device via BRAT or the community catalog (~350 K
 | Path | Sync? | Why |
 |------|-------|-----|
 | `{configDir}/plugins/speed-reader-ai/data.json` | **With plugin sync** | Reader and AI settings; also carries a lightweight reading-state sync stamp |
-| `{configDir}/plugins/speed-reader-ai/data/` | **With plugin sync** | Reading progress, AI prepare cache, EPUB parse cache, LLM model list, prompts |
+| `{configDir}/plugins/speed-reader-ai/data/` | **With plugin sync** | Reading progress, AI prepare cache, EPUB parse cache and covers, library renames (`library-metadata.json`), LLM model list, prompts |
 | Notes and EPUBs | **Yes** | Source content |
 
 Replace `{configDir}` with your vault config folder (usually `.obsidian`). Do not rely on Sync to deliver `main.js` — use BRAT or the catalog per device.
@@ -83,13 +85,13 @@ Replace `{configDir}` with your vault config folder (usually `.obsidian`). Do no
 1. **Pause** or close the reader before switching devices (ensures progress is flushed to disk).
 2. Wait until Sync shows **Fully synced** on the device you read on.
 3. On the other device, open Obsidian (foreground reloads synced progress) or force-quit and reopen.
-4. Use **Continue reading** or **Reading history** to resume — not a stale file tab.
+4. Use **Continue reading** or the **Library** to resume — not a stale file tab.
 
 **Verify sync is working:** open **Settings → Sync → View sync activity** and look for `.obsidian/plugins/speed-reader-ai/data/reading-state.json` uploading on the source device and downloading on the target. If absent, toggle any Speed Reader setting to force a plugin sync cycle.
 
 **Resume position stale on second device?** Progress saves every ~2s while playing and every 30s during long playback; pausing flushes immediately. Obsidian Sync is not live — the reader does not auto-open on another device while you read. Avoid reading the same document on two devices at once (last-write-wins on the whole state file).
 
-**Mobile history empty while desktop shows progress?** Turn on **Installed community plugin list** sync on mobile, install/update the plugin on that device, force-quit Obsidian, and reopen **Reading history**. Progress is stored in `{configDir}/plugins/speed-reader-ai/data/reading-state.json`. Legacy data under `vault/.speedreader/` is imported automatically when the plugin copy is empty.
+**Mobile history empty while desktop shows progress?** Turn on **Installed community plugin list** sync on mobile, install/update the plugin on that device, force-quit Obsidian, and reopen the **Library**. Progress is stored in `{configDir}/plugins/speed-reader-ai/data/reading-state.json`. Legacy data under `vault/.speedreader/` is imported automatically when the plugin copy is empty.
 
 ### Mobile reader
 

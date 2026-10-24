@@ -8,6 +8,7 @@ export interface PluginDataPaths {
 	dbFile: string;
 	readCacheBase: string;
 	bookCacheBase: string;
+	libraryMetadataFile: string;
 }
 
 function normalizePath(path: string): string {
@@ -33,7 +34,8 @@ export function createPluginDataPaths(configDir: string, pluginId: string): Plug
 		dbDir,
 		dbFile: joinPath(dbDir, 'speed-reader.db'),
 		readCacheBase: joinPath(dataRoot, 'read-cache'),
-		bookCacheBase: joinPath(dataRoot, 'book-cache')
+		bookCacheBase: joinPath(dataRoot, 'book-cache'),
+		libraryMetadataFile: joinPath(dataRoot, 'library-metadata.json')
 	};
 }
 
