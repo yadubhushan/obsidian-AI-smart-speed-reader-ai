@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSentenceUnits } from '../src/engine/lineRepeatPlayback';
 import {
 	isSentenceEndPunctuation,
+	navWordsFromStream,
 	parseTrailingPunctuation,
 	type NavWord
 } from '../src/engine/readingNavigation';
@@ -29,6 +30,19 @@ function nav(words: string[], paragraphStarts: number[] = [0]): NavWord[] {
 }
 
 describe('bookmarkContextLines', () => {
+	it('keeps initials and titles inside their sentence', () => {
+		const text =
+			'Celebrating B. F. Skinner. His work was praised by President Lyndon B. Johnson and Dr. Smith.';
+		const navWords = navWordsFromStream(
+			text.split(' ').map((word) => ({ kind: 'word' as const, text: word }))
+		);
+		const snapshot = buildBookmarkContextLinesFromData(navWords, buildSentenceUnits(navWords), 0);
+		expect(snapshot.lines.map((line) => line.text)).toEqual([
+			'Celebrating B. F. Skinner.',
+			'His work was praised by President Lyndon B. Johnson and Dr. Smith.'
+		]);
+	});
+
 	it('builds sentence cards with paragraph indices', () => {
 		const navWords = nav(['First.', 'Second.', 'Third.', 'Fourth.'], [0, 2]);
 		const sentenceUnits = buildSentenceUnits(navWords);

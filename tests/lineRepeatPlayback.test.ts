@@ -123,7 +123,7 @@ describe('lineRepeatPlayback', () => {
 	});
 
 	it('navigates next and prev line unit indices', () => {
-		const navWords = legacyNavWords('A. B. C.');
+		const navWords = legacyNavWords('One. Two. Three.');
 		const units = buildSentenceUnits(navWords);
 
 		expect(nextLineUnitIndex(units, 0)).toBe(1);

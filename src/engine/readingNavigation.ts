@@ -52,12 +52,39 @@ export function isSentenceEndPunctuation(punctuation: string): boolean {
 	return /[;.!\u0964\u0965]/u.test(punctuation);
 }
 
+/** Titles and Latin shorthands whose period is part of the word, not a sentence end. */
+const NON_TERMINAL_ABBREVIATIONS = new Set([
+	'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'mt', 'rev', 'hon',
+	'gen', 'col', 'capt', 'lt', 'sgt', 'vs', 'cf', 'fig', 'e.g', 'i.e'
+]);
+
+/**
+ * Whether a word's trailing period marks an abbreviation rather than a sentence
+ * end: a lone initial ("B." in "B. F. Skinner", "Lyndon B. Johnson") or a known
+ * title such as "Dr.". Leading quotes and brackets are ignored.
+ */
+export function isAbbreviationPeriod(word: string, punctuation: string): boolean {
+	if (punctuation !== '.') {
+		return false;
+	}
+	const bare = word.replace(/^[^\p{L}]+/u, '');
+	if (/^\p{Lu}$/u.test(bare)) {
+		return true;
+	}
+	return NON_TERMINAL_ABBREVIATIONS.has(bare.toLowerCase());
+}
+
+/** Sentence end for a whole token: sentence punctuation that isn't an abbreviation's period. */
+export function isSentenceEndWord(word: string, punctuation: string): boolean {
+	return isSentenceEndPunctuation(punctuation) && !isAbbreviationPeriod(word, punctuation);
+}
+
 export function navWordsFromLegacy(words: WordData[]): NavWord[] {
 	return words.map((w, wordIndex) => ({
 		wordIndex,
 		seekIndex: wordIndex,
 		display: wordDisplayText(w.word, w.punctuation),
-		isSentenceEnd: isSentenceEndPunctuation(w.punctuation)
+		isSentenceEnd: isSentenceEndWord(w.word, w.punctuation)
 	}));
 }
 
@@ -78,12 +105,12 @@ export function navWordsFromStream(
 			continue;
 		}
 
-		const { punctuation } = parseTrailingPunctuation(token.text);
+		const { word, punctuation } = parseTrailingPunctuation(token.text);
 		result.push({
 			wordIndex,
 			seekIndex: tokenIndex,
 			display: token.text,
-			isSentenceEnd: isSentenceEndPunctuation(punctuation),
+			isSentenceEnd: isSentenceEndWord(word, punctuation),
 			isParagraphStart: paragraphStartSet.has(wordIndex)
 		});
 		wordIndex++;
