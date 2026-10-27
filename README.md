@@ -105,7 +105,7 @@ On iOS/Android Obsidian, the reader uses touch-first controls (desktop layout an
 | Double-tap left / right (paused) | Skip back / forward |
 | Long-press word (paused) | Dictionary (bottom sheet) |
 | Tap context word (paused) | Dictionary for that word |
-| Swipe left / right (paused) | Skip back / forward |
+| Swipe left / right (paused) | Previous / next line (sentence) |
 | Swipe down top bar | Expand chapter + progress; second swipe closes reader |
 | 🔖 (transport dock) | Bookmark current line (paragraph + highlighted sentence) |
 | 📑 (transport dock) | Open bookmark line picker (scroll, select lines, bookmark) |

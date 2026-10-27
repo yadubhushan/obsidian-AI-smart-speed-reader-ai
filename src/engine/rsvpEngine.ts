@@ -467,6 +467,41 @@ export class RSVPEngine implements RSVPEngineContext {
 		this.seekToNavWord(navWords[units[targetIndex]!.startWordIdx]!);
 	}
 
+	/** Paused navigation: jump to the start of the next sentence (one context line). */
+	nextSentence() {
+		this.seekToAdjacentSentence(1);
+	}
+
+	/**
+	 * Paused navigation: jump to the previous sentence. When the reader is
+	 * mid-sentence, the first step restarts the current sentence.
+	 */
+	prevSentence() {
+		this.seekToAdjacentSentence(-1);
+	}
+
+	private seekToAdjacentSentence(direction: 1 | -1) {
+		const units = this.sentenceUnits;
+		if (units.length === 0) {
+			this.seekToAdjacentParagraph(direction);
+			return;
+		}
+
+		const seekIndex = this.getCurrentSeekIndex();
+		const currentUnitIndex = findSentenceUnitForSeekIndex(units, seekIndex);
+
+		let targetIndex: number;
+		if (direction > 0) {
+			targetIndex = Math.min(currentUnitIndex + 1, units.length - 1);
+		} else if (seekIndex > units[currentUnitIndex]!.startSeekIndex) {
+			targetIndex = currentUnitIndex;
+		} else {
+			targetIndex = Math.max(currentUnitIndex - 1, 0);
+		}
+
+		this.seekToSentenceUnit(units[targetIndex]!);
+	}
+
 	getPauseContext(radiusWords = PAUSE_CONTEXT_RADIUS): PauseContextToken[] {
 		const navWords = this.getNavWords();
 		if (navWords.length === 0) {

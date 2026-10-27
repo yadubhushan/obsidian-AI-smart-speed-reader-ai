@@ -114,6 +114,54 @@ describe('RSVPEngine', () => {
 		});
 	});
 
+	describe('sentence navigation', () => {
+		function loadMultiSentenceParagraphs() {
+			// Paragraphs start at 0 and 4; sentences start at 0, 2, 4.
+			engine.loadProcessedDocument({
+				kind: 'single_story',
+				processorId: 'single_story',
+				meta: {
+					sourcePath: 'docs/sentences.md',
+					sourceChecksum: 'test',
+					processedAt: '2026-10-27T12:00:00.000Z',
+					model: 'test',
+					prepareStrategy: 'single'
+				},
+				paragraphStarts: [0, 4],
+				stream: [
+					{ kind: 'word', text: 'a1' },
+					{ kind: 'word', text: 'a2.' },
+					{ kind: 'word', text: 'a3' },
+					{ kind: 'word', text: 'a4.' },
+					{ kind: 'word', text: 'b1' },
+					{ kind: 'word', text: 'b2.' }
+				]
+			});
+		}
+
+		it('steps one sentence forward inside a paragraph and clamps at the end', () => {
+			loadMultiSentenceParagraphs();
+			expect(engine.getBaseTokenIndex()).toBe(0);
+			engine.nextSentence();
+			expect(engine.getBaseTokenIndex()).toBe(2);
+			engine.nextSentence();
+			expect(engine.getBaseTokenIndex()).toBe(4);
+			engine.nextSentence();
+			expect(engine.getBaseTokenIndex()).toBe(4);
+		});
+
+		it('restarts the current sentence then steps back, clamping at the start', () => {
+			loadMultiSentenceParagraphs();
+			engine.seekToToken(3); // mid second sentence
+			engine.prevSentence();
+			expect(engine.getBaseTokenIndex()).toBe(2);
+			engine.prevSentence();
+			expect(engine.getBaseTokenIndex()).toBe(0);
+			engine.prevSentence();
+			expect(engine.getBaseTokenIndex()).toBe(0);
+		});
+	});
+
 	it('advances words on timeout', () => {
 		engine.loadText('One two three four five');
 		engine.play();

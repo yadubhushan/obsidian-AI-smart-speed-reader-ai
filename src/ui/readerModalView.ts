@@ -1977,15 +1977,15 @@ export class SpeedReaderAiModal extends Modal {
 		this.navStreak?.play(jump.words, jump.direction);
 	}
 
-	/** Paused swipe navigation: move one paragraph backward. */
-	private handleParagraphPrev() {
-		this.engine.prevParagraph();
+	/** Paused swipe navigation: move one sentence (context line) backward. */
+	private handleSentencePrev() {
+		this.engine.prevSentence();
 		this.refocusContent();
 	}
 
-	/** Paused swipe navigation: move one paragraph forward. */
-	private handleParagraphNext() {
-		this.engine.nextParagraph();
+	/** Paused swipe navigation: move one sentence (context line) forward. */
+	private handleSentenceNext() {
+		this.engine.nextSentence();
 		this.refocusContent();
 	}
 
@@ -2378,8 +2378,8 @@ export class SpeedReaderAiModal extends Modal {
 				onTapContextWord: (word) => {
 					void this.wordLookupHandlers?.lookupWord(word);
 				},
-				onSwipeLeft: () => this.handleParagraphPrev(),
-				onSwipeRight: () => this.handleParagraphNext(),
+				onSwipeLeft: () => this.handleSentencePrev(),
+				onSwipeRight: () => this.handleSentenceNext(),
 				onSwipeChapterLeft: () => this.handleShiftArrowLeft(),
 				onSwipeChapterRight: () => this.handleShiftArrowRight(),
 				onEdgeHoldStart: (side) => {
