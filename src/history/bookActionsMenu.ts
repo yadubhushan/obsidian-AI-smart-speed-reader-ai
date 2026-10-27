@@ -1,5 +1,6 @@
 import { Menu, Notice, TFile, type App } from 'obsidian';
 import type { PluginServices } from '../services/serviceRegistry';
+import { createEpubParseProgressOverlay } from '../ui/epubParseProgress';
 import { openCoverPicker } from './coverPickerModal';
 import { deleteHistoryItem } from './historyDeleteActions';
 import type { BookMenuAnchor } from './bookGrid';
@@ -52,6 +53,35 @@ async function resetProgress(deps: BookActionsDeps, row: BookHistoryRow): Promis
 	}
 	await deps.services.readingStateStore.remove(row.sourcePath);
 	await deps.services.readingStateStore.flush();
+	deps.onChanged();
+}
+
+async function rebuildBookText(deps: BookActionsDeps, row: BookHistoryRow): Promise<void> {
+	const confirmed = confirm(
+		`Rebuild the text of "${row.title}" from its EPUB? Progress, bookmarks and cover stay. AI chapter naming may run again.`
+	);
+	if (!confirmed) {
+		return;
+	}
+	const { readerGate, bookCacheStore } = deps.services;
+	if (readerGate.getActiveSourcePath() === row.sourcePath) {
+		readerGate.close();
+	}
+	const progress = createEpubParseProgressOverlay();
+	try {
+		await bookCacheStore.rebuild(row.sourcePath, {
+			onProgress: (message) => {
+				if (message) {
+					progress.show(message);
+				} else {
+					progress.hide();
+				}
+			}
+		});
+	} finally {
+		progress.hide();
+	}
+	new Notice(`Rebuilt text: ${row.title}`);
 	deps.onChanged();
 }
 
@@ -155,6 +185,12 @@ export function showBookActionsMenu(
 				.setTitle('Reveal in file explorer')
 				.setIcon('folder-open')
 				.onClick(() => revealInFileExplorer(app, row))
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Rebuild text from EPUB')
+				.setIcon('refresh-cw')
+				.onClick(() => runAction(rebuildBookText(deps, row), 'rebuild book text'))
 		);
 	}
 	menu.addItem((item) =>

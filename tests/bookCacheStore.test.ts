@@ -7,6 +7,7 @@ import { EventBus } from '../src/services/eventBus';
 import { BookCacheStoreImpl } from '../src/store/BookCacheStore';
 import { createPluginDataPaths } from '../src/store/pluginDataPaths';
 import { docKeyFromSourcePath } from '../src/store/docKey';
+import { bookCacheCustomCoverPath, bookCacheIndexPath } from '../src/store/bookCachePaths';
 import { createEpubSourceFormatProcessor } from '../src/formats/epub/epubSourceFormatProcessor';
 import { createNodeDataAdapter } from './nodeDataAdapter';
 import { buildMinimalEpubBytes } from './epubFixtures';
@@ -136,5 +137,68 @@ describe('BookCacheStore', () => {
 		expect(reopened.title).toBe('Captured Book');
 		expect(reopened.sourceChecksum).toBe(captured.sourceChecksum);
 		expect(onUpdated).toHaveBeenCalledTimes(1);
+	});
+
+	describe('rebuild', () => {
+		async function setup(title = 'Rebuild Book') {
+			const bytes = await buildMinimalEpubBytes({ title });
+			const adapter = createNodeDataAdapter(rootDir);
+			await adapter.writeBinary(sourcePath, bytes);
+			const app = createMockApp(rootDir, sourcePath, bytes);
+			const eventBus = new EventBus();
+			const onUpdated = vi.fn();
+			eventBus.on('book-cache-updated', onUpdated);
+			const paths = createPluginDataPaths(app.vault.configDir, 'speed-reader-ai');
+			const store = new BookCacheStoreImpl(
+				app,
+				createEpubSourceFormatProcessor(app),
+				eventBus,
+				paths.bookCacheBase
+			);
+			const docKey = docKeyFromSourcePath(sourcePath);
+			return { adapter, store, onUpdated, base: paths.bookCacheBase, docKey };
+		}
+
+		it('re-parses unchanged bytes and replaces a damaged index', async () => {
+			const { adapter, store, onUpdated, base, docKey } = await setup();
+			const original = await store.ensureParsed(sourcePath);
+			const indexPath = bookCacheIndexPath(base, docKey);
+			await adapter.write(
+				indexPath,
+				JSON.stringify({ ...original, title: 'Damaged', chapters: [] })
+			);
+
+			const rebuilt = await store.rebuild(sourcePath);
+
+			expect(onUpdated).toHaveBeenCalledTimes(2);
+			expect(rebuilt.title).toBe('Rebuild Book');
+			expect(rebuilt.sourceChecksum).toBe(original.sourceChecksum);
+			const cached = await store.get(docKey);
+			expect(cached?.title).toBe('Rebuild Book');
+			expect(cached?.chapters.length).toBe(original.chapters.length);
+		});
+
+		it('keeps the user-picked custom cover', async () => {
+			const { adapter, store, base, docKey } = await setup();
+			await store.ensureParsed(sourcePath);
+			const customCover = bookCacheCustomCoverPath(base, docKey);
+			await adapter.writeBinary(customCover, new Uint8Array([1, 2, 3]).buffer);
+
+			await store.rebuild(sourcePath);
+
+			expect(await adapter.exists(customCover)).toBe(true);
+		});
+
+		it('throws and leaves the cache untouched when the EPUB is missing', async () => {
+			const { adapter, store, onUpdated, base, docKey } = await setup('Only Copy');
+			await store.ensureParsed(sourcePath);
+			const before = await adapter.read(bookCacheIndexPath(base, docKey));
+			await adapter.remove(sourcePath);
+
+			await expect(store.rebuild(sourcePath)).rejects.toThrow('EPUB file not found');
+
+			expect(await adapter.read(bookCacheIndexPath(base, docKey))).toBe(before);
+			expect(onUpdated).toHaveBeenCalledTimes(1);
+		});
 	});
 });

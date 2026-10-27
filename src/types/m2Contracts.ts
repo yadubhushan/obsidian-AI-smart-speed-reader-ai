@@ -46,6 +46,8 @@ export interface EnsureParsedOptions {
 export interface BookCacheStore {
 	get(docKey: string): Promise<BookCacheIndex | null>;
 	ensureParsed(sourcePath: string, options?: EnsureParsedOptions): Promise<BookCacheIndex>;
+	/** Re-parse from the source EPUB even when the checksum matches. Throws if the source is missing. */
+	rebuild(sourcePath: string, options?: EnsureParsedOptions): Promise<BookCacheIndex>;
 	invalidate(docKey: string): Promise<void>;
 }
 

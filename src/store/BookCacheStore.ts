@@ -56,6 +56,23 @@ export class BookCacheStoreImpl implements BookCacheStore {
 			return cached;
 		}
 
+		return this.parseAndWrite(sourcePath, bytes, options);
+	}
+
+	async rebuild(sourcePath: string, options?: EnsureParsedOptions): Promise<BookCacheIndex> {
+		// Never touch the cache when the source is gone: it may be the only copy of the text.
+		if (!(await this.app.vault.adapter.exists(sourcePath))) {
+			throw new Error(`EPUB file not found: ${sourcePath}`);
+		}
+		const bytes = await this.app.vault.adapter.readBinary(sourcePath);
+		return this.parseAndWrite(sourcePath, bytes, options);
+	}
+
+	private async parseAndWrite(
+		sourcePath: string,
+		bytes: ArrayBuffer,
+		options?: EnsureParsedOptions
+	): Promise<BookCacheIndex> {
 		const report = options?.onProgress;
 		report?.('Parsing EPUB…');
 
@@ -70,7 +87,10 @@ export class BookCacheStoreImpl implements BookCacheStore {
 				}
 			});
 			await this.writeIndex(index, coverBytes);
-			this.eventBus.emit('book-cache-updated', { docKey, sourcePath });
+			this.eventBus.emit('book-cache-updated', {
+				docKey: docKeyFromSourcePath(sourcePath),
+				sourcePath
+			});
 			return index;
 		} finally {
 			report?.(null);
