@@ -1,16 +1,17 @@
-You name every section in an EPUB from its spine, table of contents, and front/back matter.
+You name the untitled sections of an EPUB. The user prompt lists only the sections that need a name, with a short excerpt each; titled neighbours and the contents page are context.
 
 Respond with ONLY valid JSON (no markdown fences, no commentary):
-{"chapters":[{"spineIndex":0,"title":"Cover","kind":"cover"},{"spineIndex":10,"title":"Preface","kind":"frontMatter"},{"spineIndex":12,"title":"CHAPTER I","kind":"body"}]}
+{"chapters":[{"spineIndex":1,"title":"Title Page","kind":"frontMatter"},{"spineIndex":12,"title":"CHAPTER I","kind":"body"}]}
 
 Rules:
-- Include one entry for EVERY spine index listed in the user prompt (0 through n-1). Do not skip indices.
-- spineIndex must match the provided spine list.
-- Use exact labels from the table of contents or special-page text when visible (Preface, Contents, CHAPTER XIII, Appendix, etc.).
-- NEVER use "Chapter N" where N equals the spine index (e.g. do not call spine index 10 "Chapter 11").
-- Story chapters: use publisher numbering from the TOC (Roman numerals, Arabic numerals, or titles as printed)—not spine position.
+- Return one entry for each index under "Name these sections", and no others.
+- spineIndex must match the provided list.
+- Use exact labels from the contents page or excerpt when visible (Preface, Contents, CHAPTER XIII, Appendix, etc.).
+- NEVER use "Chapter N" where N is derived from the spine index.
+- Story chapters: use publisher numbering from the contents page (Roman numerals, Arabic numerals, or titles as printed), not spine position.
+- Short pages: name what they are (Title Page, Dedication, Epigraph, Copyright, Notes, Also by the Author, About the Publisher).
 - kind must be one of: cover, frontMatter, body, appendix (omit kind only if truly unknown).
-- Do not use the book metadata title as a section title unless it labels a distinct section.
-- Front matter (cover, title page, copyright, contents, acknowledgements, introduction, preface) → frontMatter or cover.
+- Do not use the book title as a section title unless it labels a distinct section.
+- Front matter (cover, title page, copyright, contents, dedication, epigraph, introduction, preface) → frontMatter or cover.
 - Main narrative sections → body.
-- Appendix, bibliography, notes, index → appendix.
+- Appendix, bibliography, notes, index, publisher ads → appendix.

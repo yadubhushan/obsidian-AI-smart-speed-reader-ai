@@ -1,6 +1,7 @@
 import type { BookSectionKind } from '../../types/m2Contracts';
 import type { LlmClient } from '../../llm/LlmClient';
 import { runLlmParseWithRetry } from '../../llm/structuredLlmJson';
+import { isSpineIndexChapterFallback, isSpineIndexSectionFallback } from './epubTitleResolution';
 import epubChapterIndexPrompt from '../../../config/prompts/epub-chapter-index.txt';
 
 const VALID_KINDS: BookSectionKind[] = ['cover', 'frontMatter', 'body', 'appendix'];
@@ -86,35 +87,67 @@ export function parseEpubChapterIndexResponse(raw: string): EpubChapterIndexResu
 	return { chapters };
 }
 
-function buildUserPrompt(input: {
+/**
+ * Sections still on a `Chapter N` / `Section N` placeholder that have text to go on —
+ * the only ones worth asking about. Image-only pages (covers) give the model nothing.
+ */
+export function isUnresolvedSnapshot(s: SpineTitleSnapshot): boolean {
+	return (
+		s.wordCount > 0 &&
+		(isSpineIndexChapterFallback(s.currentTitle, s.spineIndex) ||
+			isSpineIndexSectionFallback(s.currentTitle, s.spineIndex))
+	);
+}
+
+/** Below this, the excerpt names the page (title page, epigraph, notes); a contents page adds nothing. */
+const CONTENTS_PAGE_MIN_WORDS = 300;
+const CONTENTS_PAGE_MAX_CHARS = 3000;
+
+function snapshotLine(s: SpineTitleSnapshot, withExcerpt: boolean): string {
+	const excerpt = withExcerpt && s.excerpt ? ` | excerpt="${s.excerpt.replace(/"/g, "'")}"` : '';
+	return `${s.spineIndex}: ${s.path} | title="${s.currentTitle}" | words=${s.wordCount}${excerpt}`;
+}
+
+/**
+ * Sends only the unresolved sections, each with its titled neighbours for position,
+ * plus the contents page when an unresolved section is long enough to be a real chapter.
+ */
+export function buildUserPrompt(input: {
 	bookTitle: string;
 	spineSnapshots: SpineTitleSnapshot[];
 	specialPages: SpecialPageCandidate[];
 }): string {
-	const spineLines = input.spineSnapshots
-		.map(
-			(s) =>
-				`${s.spineIndex}: ${s.path} | title="${s.currentTitle}" | words=${s.wordCount}${
-					s.excerpt ? ` | excerpt="${s.excerpt.replace(/"/g, "'")}"` : ''
-				}`
-		)
-		.join('\n');
-
-	const specialBlocks = input.specialPages
-		.map(
-			(page) =>
-				`--- ${page.pageKind} (spine ${page.spineIndex}) ---\n${page.plainText}`
-		)
-		.join('\n\n');
+	const { spineSnapshots } = input;
+	const unresolved = spineSnapshots.filter(isUnresolvedSnapshot);
+	const contextIndices = new Set<number>();
+	for (const s of unresolved) {
+		const pos = spineSnapshots.indexOf(s);
+		for (const near of [spineSnapshots[pos - 1], spineSnapshots[pos + 1]]) {
+			if (near && !isUnresolvedSnapshot(near)) {
+				contextIndices.add(near.spineIndex);
+			}
+		}
+	}
 
 	const parts = [
 		`Book title: ${input.bookTitle}`,
+		`Total sections: ${spineSnapshots.length}`,
 		'',
-		'Full spine (must return every index):',
-		spineLines
+		'Name these sections (return exactly these indices):',
+		...unresolved.map((s) => snapshotLine(s, true))
 	];
-	if (specialBlocks) {
-		parts.push('', 'Special pages (contents, preface, appendix, etc.):', specialBlocks);
+	const context = spineSnapshots.filter((s) => contextIndices.has(s.spineIndex));
+	if (context.length) {
+		parts.push('', 'Already-titled neighbours (context only, do not return):');
+		parts.push(...context.map((s) => snapshotLine(s, false)));
+	}
+	const contents = input.specialPages.find((p) => p.pageKind === 'contents');
+	if (contents && unresolved.some((s) => s.wordCount >= CONTENTS_PAGE_MIN_WORDS)) {
+		parts.push(
+			'',
+			`--- contents page (spine ${contents.spineIndex}) ---`,
+			contents.plainText.slice(0, CONTENTS_PAGE_MAX_CHARS)
+		);
 	}
 	return parts.join('\n').slice(0, 12000);
 }
@@ -133,7 +166,9 @@ export async function resolveChapterTitlesViaLlm(
 	}
 ): Promise<LlmChapterIndexMaps> {
 	const empty = { titles: new Map<number, string>(), kinds: new Map<number, BookSectionKind>() };
-	if (input.spineSnapshots.length === 0) {
+	const wanted = new Set(input.spineSnapshots.filter(isUnresolvedSnapshot).map((s) => s.spineIndex));
+	// Every section already has a real title: nothing to pay for.
+	if (wanted.size === 0) {
 		return empty;
 	}
 
@@ -147,7 +182,8 @@ export async function resolveChapterTitlesViaLlm(
 	const titles = new Map<number, string>();
 	const kinds = new Map<number, BookSectionKind>();
 	for (const chapter of result.chapters) {
-		if (chapter.spineIndex < input.spineSnapshots.length) {
+		// Never let the model overwrite a title the book already gave us.
+		if (wanted.has(chapter.spineIndex)) {
 			titles.set(chapter.spineIndex, chapter.title);
 			if (chapter.kind) {
 				kinds.set(chapter.spineIndex, chapter.kind);

@@ -72,4 +72,27 @@ describe('runLlmParseWithRetry', () => {
 		).rejects.toThrow(StructuredOutputError);
 		expect(calls).toBe(2);
 	});
+	it('unwraps fenced or prefixed JSON without paying for a retry', async () => {
+		let calls = 0;
+		const llm: LlmClient = {
+			async complete() {
+				calls++;
+				return 'Here you go:\n```json\n{"ok":true}\n```';
+			}
+		};
+		const r = await runLlmParseWithRetry(llm, {
+			systemPrompt: 's',
+			userPrompt: 'u',
+			parse: (raw) => {
+				try {
+					return JSON.parse(raw) as { ok: boolean };
+				} catch {
+					return null;
+				}
+			},
+			failureMessage: 'bad'
+		});
+		expect(r).toEqual({ ok: true });
+		expect(calls).toBe(1);
+	});
 });
