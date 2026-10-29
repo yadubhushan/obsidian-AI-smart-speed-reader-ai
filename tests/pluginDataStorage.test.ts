@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultLlmModelCatalog } from '../src/llm/llmModelCatalog';
 import {
 	pluginDataFromSettings,
 	readingStateSyncFromPluginData,
@@ -8,12 +7,10 @@ import {
 import { DEFAULT_SETTINGS } from '../src/types';
 
 describe('pluginDataStorage', () => {
-	const catalog = createDefaultLlmModelCatalog();
 
 	it('loads flat legacy data.json as settings', () => {
 		const settings = settingsFromPluginData(
-			{ reader: { wpm: 500 } },
-			catalog
+			{ reader: { wpm: 500 } }
 		);
 		expect(settings.reader.wpm).toBe(500);
 	});
@@ -23,8 +20,7 @@ describe('pluginDataStorage', () => {
 			{
 				schemaVersion: 1,
 				settings: { reader: { wpm: 420 } }
-			},
-			catalog
+			}
 		);
 		expect(settings.reader.wpm).toBe(420);
 	});

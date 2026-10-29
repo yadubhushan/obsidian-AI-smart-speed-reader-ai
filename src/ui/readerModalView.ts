@@ -2,10 +2,8 @@ import { App, Modal, Notice } from 'obsidian';
 import { RSVPEngine, type NavJump } from '../engine/rsvpEngine';
 import { isLinePlaybackMode, getPlaybackModeLabel } from '../engine/playbackMode';
 import { tokenDisplayLabel } from '../engine/manifestPlayback';
-import { SettingsBackedLlmClient, describeActiveLlmBackend } from '../llm/createLlmClient';
+import { createLlmClient, resolveModelLabel } from '../llm/llmClientFactory';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
-import type { LlmModelCatalog } from '../llm/llmModelCatalog';
-import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 import type { ManifestStore } from '../store/ManifestStore';
 import { HeadingInfo, PlaybackMode, ReaderState, SpeedReaderAiSettings, WordData } from '../types';
 import type { PreparePromptSet } from '../llm/promptCatalog';
@@ -192,7 +190,6 @@ export interface SpeedReaderAiModalOptions {
 	preparePrompts?: PreparePromptSet;
 	onCacheCleared?: () => void | Promise<void>;
 	onReaderClose?: () => void;
-	llmModelCatalog?: LlmModelCatalog;
 	bookCacheBase?: string;
 }
 
@@ -202,7 +199,6 @@ export class SpeedReaderAiModal extends Modal {
 	private readonly onSettingsChange: (settings: SpeedReaderAiSettings) => void;
 	private readonly manifestStore?: ManifestStore;
 	private readonly preparePrompts?: PreparePromptSet;
-	private readonly llmModelCatalog: LlmModelCatalog;
 	private readonly onCacheCleared?: () => void | Promise<void>;
 	private readonly onReaderClose?: () => void;
 	private sessionHooks?: ReaderSessionHooks;
@@ -308,7 +304,6 @@ export class SpeedReaderAiModal extends Modal {
 			preparePrompts,
 			onCacheCleared,
 			onReaderClose,
-			llmModelCatalog = createDefaultLlmModelCatalog(),
 			bookCacheBase = ''
 		} = options;
 		this.bookCacheBase = bookCacheBase;
@@ -319,7 +314,6 @@ export class SpeedReaderAiModal extends Modal {
 		this.preparePrompts = preparePrompts;
 		this.onCacheCleared = onCacheCleared;
 		this.onReaderClose = onReaderClose;
-		this.llmModelCatalog = llmModelCatalog;
 		if (readerOpen.kind !== 'preferences' && !preparePrompts) {
 			throw new Error('SpeedReaderAiModal requires preparePrompts');
 		}
@@ -1319,7 +1313,7 @@ export class SpeedReaderAiModal extends Modal {
 					reader: { ...next.reader, wpm: clampTtsWpm(next.reader.wpm) }
 				}
 			: next;
-		this.settings = validateSettings(normalizedNext, this.llmModelCatalog);
+		this.settings = validateSettings(normalizedNext);
 		this.engine.setSettings(this.settings);
 		this.appearance.applyAll();
 		this.header?.setProgressVisible(this.settings.reader.display.showProgress);
@@ -1724,11 +1718,10 @@ export class SpeedReaderAiModal extends Modal {
 			this.prepareOverlay?.show();
 		}
 		this.render();
-		const llm = new SettingsBackedLlmClient({
-			getSettings: () => this.settings,
-			getAiProviders: () => getAiProvidersApi(this.app)
-		});
+		const getAiProviders = () => getAiProvidersApi(this.app);
+		const llm = createLlmClient(() => this.settings, getAiProviders);
 		try {
+			const modelLabel = await resolveModelLabel(this.settings, getAiProviders);
 			await this.session.prepareWithAi(
 				this.session.activeModeId,
 				{
@@ -1737,7 +1730,7 @@ export class SpeedReaderAiModal extends Modal {
 					settings: {
 						prepareSingleCallMaxChars: this.settings.ai.prepareSingleCallMaxChars,
 						prepareSingleCallMaxLines: this.settings.ai.prepareSingleCallMaxLines,
-						llmModel: this.settings.ai.llmModel
+						modelLabel
 					},
 					onPrepareProgress: (info) => {
 						this.prepareOverlay?.update(
@@ -1763,7 +1756,7 @@ export class SpeedReaderAiModal extends Modal {
 			this.desktopReadingSetup?.setStatus(this.prepareStatus);
 			const message = e instanceof Error ? e.message : String(e);
 			new Notice(
-				`Prepare failed: ${message}. Check LLM backend (${describeActiveLlmBackend(this.settings)}) in plugin settings.`
+				`Prepare failed: ${message}. Check AI Providers in Settings → Speed Reader AI.`
 			);
 		} finally {
 			this.prepareControls?.setPreparing(false);

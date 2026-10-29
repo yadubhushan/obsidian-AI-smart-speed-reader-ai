@@ -3,15 +3,11 @@ import {
 	DEFAULT_SETTINGS,
 	READER_FONT_OPTIONS,
 	SpeedReaderAiSettings,
-	type ApiProviderPreset,
-	type LlmBackend,
 	type ReaderColorScheme,
 	type ReaderFontOption,
 	type ReaderThemePresetId
 } from '../types';
 import { isReaderThemePresetId } from '../ui/readerShell/readerThemePresets';
-import type { LlmModelCatalog } from '../llm/llmModelCatalog';
-import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 
 export const MIN_TIMEOUT_SECONDS = 30;
 export const MIN_PREPARE_SINGLE_CALL_MAX_CHARS = 1000;
@@ -126,23 +122,6 @@ function normalizeMaxPrepareVersions(value: unknown): number {
 	return Math.min(n, 50);
 }
 
-const LLM_BACKENDS: LlmBackend[] = ['auto', 'cursor-cli', 'ai-providers', 'openai-compatible'];
-const API_PRESETS: ApiProviderPreset[] = ['openai', 'openrouter', 'custom'];
-
-function normalizeLlmBackend(value: unknown): LlmBackend {
-	if (typeof value === 'string' && (LLM_BACKENDS as string[]).includes(value)) {
-		return value as LlmBackend;
-	}
-	return DEFAULT_SETTINGS.ai.llmBackend;
-}
-
-function normalizeApiProviderPreset(value: unknown): ApiProviderPreset {
-	if (typeof value === 'string' && (API_PRESETS as string[]).includes(value)) {
-		return value as ApiProviderPreset;
-	}
-	return DEFAULT_SETTINGS.ai.apiProviderPreset;
-}
-
 function pickFlat(raw: Record<string, unknown>, key: string): unknown {
 	if (key in raw) {
 		return raw[key];
@@ -251,17 +230,14 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 			)
 		},
 		ai: {
-			llmBackend: normalizeLlmBackend(raw.llmBackend),
 			aiProvidersProviderId: toString(
 				raw.aiProvidersProviderId,
 				DEFAULT_SETTINGS.ai.aiProvidersProviderId
 			),
-			apiProviderPreset: normalizeApiProviderPreset(raw.apiProviderPreset),
-			apiKey: toString(raw.apiKey, DEFAULT_SETTINGS.ai.apiKey),
-			apiBaseUrl: toString(raw.apiBaseUrl, DEFAULT_SETTINGS.ai.apiBaseUrl),
-			apiModel: toString(raw.apiModel, DEFAULT_SETTINGS.ai.apiModel),
-			cursorCliPath: toString(raw.cursorCliPath, DEFAULT_SETTINGS.ai.cursorCliPath),
-			llmModel: toString(raw.llmModel, DEFAULT_SETTINGS.ai.llmModel),
+			aiProvidersModelOverride: toString(
+				raw.aiProvidersModelOverride,
+				DEFAULT_SETTINGS.ai.aiProvidersModelOverride
+			),
 			timeoutSeconds: toNumber(raw.timeoutSeconds, DEFAULT_SETTINGS.ai.timeoutSeconds),
 			prepareSingleCallMaxChars: toNumber(
 				raw.prepareSingleCallMaxChars,
@@ -447,29 +423,18 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 
 function normalizeAiSettings(
 	raw: unknown,
-	flat: Record<string, unknown>,
-	catalog: LlmModelCatalog
+	flat: Record<string, unknown>
 ): SpeedReaderAiSettings['ai'] {
 	const a = isRecord(raw) ? raw : {};
 	return {
-		llmBackend: normalizeLlmBackend(firstDefined(a.llmBackend, flat.llmBackend)),
 		aiProvidersProviderId: toString(
 			firstDefined(a.aiProvidersProviderId, flat.aiProvidersProviderId),
 			DEFAULT_SETTINGS.ai.aiProvidersProviderId
 		).trim(),
-		apiProviderPreset: normalizeApiProviderPreset(
-			firstDefined(a.apiProviderPreset, flat.apiProviderPreset)
-		),
-		apiKey: toString(firstDefined(a.apiKey, flat.apiKey), DEFAULT_SETTINGS.ai.apiKey),
-		apiBaseUrl: toString(firstDefined(a.apiBaseUrl, flat.apiBaseUrl), DEFAULT_SETTINGS.ai.apiBaseUrl).trim(),
-		apiModel: toString(firstDefined(a.apiModel, flat.apiModel), DEFAULT_SETTINGS.ai.apiModel).trim(),
-		cursorCliPath: toString(
-			firstDefined(a.cursorCliPath, flat.cursorCliPath),
-			DEFAULT_SETTINGS.ai.cursorCliPath
+		aiProvidersModelOverride: toString(
+			firstDefined(a.aiProvidersModelOverride, flat.aiProvidersModelOverride),
+			DEFAULT_SETTINGS.ai.aiProvidersModelOverride
 		).trim(),
-		llmModel: catalog.normalize(
-			toString(firstDefined(a.llmModel, flat.llmModel), DEFAULT_SETTINGS.ai.llmModel)
-		),
 		timeoutSeconds: normalizeTimeoutSeconds(firstDefined(a.timeoutSeconds, flat.timeoutSeconds)),
 		prepareSingleCallMaxChars: normalizePrepareSingleCallMaxChars(
 			firstDefined(a.prepareSingleCallMaxChars, flat.prepareSingleCallMaxChars)
@@ -484,8 +449,7 @@ function normalizeAiSettings(
 }
 
 export function validateSettings(
-	raw: Partial<SpeedReaderAiSettings> | null | undefined,
-	catalog: LlmModelCatalog = createDefaultLlmModelCatalog()
+	raw: Partial<SpeedReaderAiSettings> | null | undefined
 ): SpeedReaderAiSettings {
 	const migrated = migrateFlatSettings(raw ?? {});
 	const input = isRecord(raw) ? raw : {};
@@ -503,7 +467,7 @@ export function validateSettings(
 
 	return {
 		reader: normalizeReaderSettings(readerRaw, flat),
-		ai: normalizeAiSettings(aiRaw, flat, catalog),
+		ai: normalizeAiSettings(aiRaw, flat),
 		bookmarks: {
 			bookBookmarkNoteTemplate: normalizeBookBookmarkTemplate(
 				firstDefined(

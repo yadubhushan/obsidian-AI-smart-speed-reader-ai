@@ -64,8 +64,11 @@ export interface ProcessorDeps {
 	prompts: import('../llm/promptCatalog').PreparePromptSet;
 	settings: Pick<
 		import('../types').AiSettings,
-		'prepareSingleCallMaxChars' | 'prepareSingleCallMaxLines' | 'llmModel'
-	>;
+		'prepareSingleCallMaxChars' | 'prepareSingleCallMaxLines'
+	> & {
+		/** Model name recorded in cache metadata. */
+		modelLabel: string;
+	};
 	onPrepareProgress?: (info: PrepareProgressInfo) => void;
 }
 

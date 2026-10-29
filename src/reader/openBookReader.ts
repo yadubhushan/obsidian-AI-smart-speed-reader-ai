@@ -12,7 +12,6 @@ import {
 	defaultBookPosition
 } from '../formats/bookIndexToProcessedDocument';
 import type { PreparePromptSet } from '../llm/promptCatalog';
-import { createDefaultLlmModelCatalog } from '../llm/llmModelCatalog';
 import { wireReaderBookmarks } from '../features/feature4/registerFeature4';
 import { wireReaderWordLookup } from '../features/word-lookup/registerWordLookup';
 import type { PluginServices } from '../services/serviceRegistry';
@@ -81,7 +80,6 @@ export async function openBookReader(deps: OpenBookReaderDeps): Promise<SpeedRea
 		onSettingsChange: deps.onSettingsChange,
 		preparePrompts: deps.preparePrompts,
 		onReaderClose: () => deps.onClose?.(deps.request.sourcePath),
-		llmModelCatalog: createDefaultLlmModelCatalog(),
 		bookCacheBase: deps.services.dataPaths.bookCacheBase
 	});
 

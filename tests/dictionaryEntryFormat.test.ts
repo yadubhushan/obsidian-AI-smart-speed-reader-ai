@@ -7,7 +7,6 @@ import {
 import type { DictionaryResult } from '../src/dictionary/dictionaryTypes';
 import { normalizeDictionaryVaultPath } from '../src/dictionary/dictionarySaveService';
 import { DEFAULT_SETTINGS } from '../src/types';
-import { createDefaultLlmModelCatalog } from '../src/llm/llmModelCatalog';
 import { validateSettings } from '../src/services/settingsValidator';
 
 const sampleResult: DictionaryResult = {
@@ -82,18 +81,16 @@ describe('normalizeDictionaryVaultPath', () => {
 });
 
 describe('validateSettings dictionaryNotePath', () => {
-	const defaultCatalog = createDefaultLlmModelCatalog();
 
 	it('defaults to dictionary.md', () => {
-		expect(validateSettings(null, defaultCatalog).dictionary.dictionaryNotePath).toBe(
+		expect(validateSettings(null).dictionary.dictionaryNotePath).toBe(
 			DEFAULT_SETTINGS.dictionary.dictionaryNotePath
 		);
 	});
 
 	it('normalizes stored path values', () => {
 		const result = validateSettings(
-			{ dictionary: { ...DEFAULT_SETTINGS.dictionary, dictionaryNotePath: '/notes/words.md' } },
-			defaultCatalog
+			{ dictionary: { ...DEFAULT_SETTINGS.dictionary, dictionaryNotePath: '/notes/words.md' } }
 		);
 		expect(result.dictionary.dictionaryNotePath).toBe('notes/words.md');
 	});

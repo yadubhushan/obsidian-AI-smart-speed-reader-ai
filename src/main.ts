@@ -1,6 +1,5 @@
 import { Notice, Plugin, type App } from 'obsidian';
 import { initAI } from '@obsidian-ai-providers/sdk';
-import { initCursorCliDesktopSupport } from './llm/cursorCliDesktopBridge';
 import { bootstrapLlmConfig } from './boot/llmConfigBootstrap';
 import { PrepareStatusBar } from './boot/prepareStatusBar';
 import { ReaderLauncher } from './boot/readerLauncher';
@@ -16,11 +15,6 @@ import { registerWordLookup } from './features/word-lookup/registerWordLookup';
 import { DEFAULT_SETTINGS, SpeedReaderAiSettings, SpeedReaderAiSettingTab } from './settings';
 import { createPluginServices, type PluginServices } from './services/serviceRegistry';
 import { validateSettings } from './services/settingsValidator';
-import {
-	createDefaultLlmModelCatalog,
-	loadLlmModelCatalogFromPath,
-	type LlmModelCatalog
-} from './llm/llmModelCatalog';
 import { loadPreparePromptSet, type PreparePromptSet } from './llm/promptCatalog';
 import { ManifestStore } from './store/ManifestStore';
 import { migratePluginData } from './store/migratePluginData';
@@ -42,8 +36,6 @@ import type { ReaderTabId } from './ui/readerShell/readerTabDock';
 export default class SpeedReaderAiPlugin extends Plugin {
 	settings!: SpeedReaderAiSettings;
 	dataPaths!: PluginDataPaths;
-	llmModelCatalog: LlmModelCatalog = createDefaultLlmModelCatalog();
-	llmModelsConfigPath = '';
 	preparePrompts!: PreparePromptSet;
 	private preparePromptsDirPath = '';
 	private manifestStore: ManifestStore | null = null;
@@ -60,15 +52,12 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 	async onload() {
 		initAI(this.app, this, async () => undefined, { disableFallback: true });
-		await initCursorCliDesktopSupport();
 
 		const llmConfig = await bootstrapLlmConfig(
 			this.app.vault.adapter,
 			this.app.vault.configDir,
 			this.manifest.id
 		);
-		this.llmModelsConfigPath = llmConfig.llmModelsConfigPath;
-		this.llmModelCatalog = llmConfig.llmModelCatalog;
 		this.preparePromptsDirPath = llmConfig.preparePromptsDirPath;
 		this.preparePrompts = llmConfig.preparePrompts;
 
@@ -105,7 +94,6 @@ export default class SpeedReaderAiPlugin extends Plugin {
 			persistSettings: (next) => this.persistValidatedSettings(next),
 			getServices: () => this.getServices(),
 			getManifestStore: () => this.getManifestStore(),
-			getLlmModelCatalog: () => this.llmModelCatalog,
 			getPreparePrompts: () => this.preparePrompts,
 			refreshPrepareStatusBar: () => this.refreshPrepareStatusBar()
 		});
@@ -173,19 +161,6 @@ export default class SpeedReaderAiPlugin extends Plugin {
 		return count;
 	}
 
-	async reloadLlmModelCatalog(): Promise<void> {
-		await this.reloadLlmModelCatalogFromDisk();
-		this.settings.ai.llmModel = this.llmModelCatalog.normalize(this.settings.ai.llmModel);
-		await this.saveSettings();
-	}
-
-	private async reloadLlmModelCatalogFromDisk(): Promise<void> {
-		this.llmModelCatalog = await loadLlmModelCatalogFromPath(
-			this.app.vault.adapter,
-			this.llmModelsConfigPath
-		);
-	}
-
 	private async reloadPreparePromptsFromDisk(): Promise<void> {
 		if (!this.preparePromptsDirPath) {
 			return;
@@ -198,7 +173,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 	async loadSettings() {
 		const raw = await this.loadData();
-		this.settings = settingsFromPluginData(raw, this.llmModelCatalog);
+		this.settings = settingsFromPluginData(raw);
 		this.readingStateSync = readingStateSyncFromPluginData(raw);
 	}
 
@@ -207,7 +182,7 @@ export default class SpeedReaderAiPlugin extends Plugin {
 	}
 
 	private persistValidatedSettings(next: SpeedReaderAiSettings): void {
-		this.settings = validateSettings(next, this.llmModelCatalog);
+		this.settings = validateSettings(next);
 		void this.saveSettings();
 	}
 
@@ -225,7 +200,6 @@ export default class SpeedReaderAiPlugin extends Plugin {
 
 	/** Reload settings and plugin data files after Obsidian Sync updates the plugin folder. */
 	async reloadPluginDataFromSync(): Promise<void> {
-		await this.reloadLlmModelCatalogFromDisk();
 		await this.loadSettings();
 		await this.reloadPreparePromptsFromDisk();
 

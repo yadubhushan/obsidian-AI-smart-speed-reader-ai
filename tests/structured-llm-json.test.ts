@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { LlmClient } from '../src/llm/CursorCliClient';
+import type { LlmClient } from '../src/llm/LlmClient';
 import { runLlmParseWithRetry, StructuredOutputError } from '../src/llm/structuredLlmJson';
 
 describe('runLlmParseWithRetry', () => {

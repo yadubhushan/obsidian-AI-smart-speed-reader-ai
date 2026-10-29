@@ -20,7 +20,7 @@ import {
 	parseNavDocument,
 	parseNcxDocument
 } from '../src/formats/epub/epubNavigation';
-import type { LlmClient } from '../src/llm/CursorCliClient';
+import type { LlmClient } from '../src/llm/LlmClient';
 import {
 	buildMinimalEpubBytes,
 	chaptersWithRepeatedBookTitle,

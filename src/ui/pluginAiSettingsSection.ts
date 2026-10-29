@@ -1,14 +1,8 @@
-import { App, Notice, Platform, Setting } from 'obsidian';
+import { App, Notice, Setting } from 'obsidian';
 import type SpeedReaderAiPlugin from '../main';
 import { DEFAULT_SETTINGS } from '../types';
 import { runAiProvidersSmokeTest } from '../llm/AiProvidersLlmClient';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
-import { describeActiveLlmBackend } from '../llm/createLlmClient';
-import {
-	API_PROVIDER_PRESETS,
-	resolveApiBaseUrl,
-	runOpenAiCompatibleSmokeTest
-} from '../llm/OpenAiCompatibleClient';
 import {
 	MIN_PREPARE_SINGLE_CALL_MAX_CHARS,
 	MIN_PREPARE_SINGLE_CALL_MAX_LINES,
@@ -18,8 +12,6 @@ import {
 	parseTimeoutSecondsFromInput
 } from '../services/settingsValidator';
 
-const BUTTON_SMOKE_CURSOR_LABEL = 'Test Cursor CLI connection';
-const BUTTON_SMOKE_API_LABEL = 'Test API connection';
 const BUTTON_SMOKE_AI_PROVIDERS_LABEL = 'Test AI Providers connection';
 
 export interface PluginAiSettingsHost {
@@ -29,295 +21,18 @@ export interface PluginAiSettingsHost {
 }
 
 export function displayPluginAiSettings(host: PluginAiSettingsHost, containerEl: HTMLElement): void {
-	const { app, plugin } = host;
-	const catalog = plugin.llmModelCatalog;
-	const ai = plugin.settings.ai;
-	const backend = ai.llmBackend;
-	const showCursor = backend === 'auto' || backend === 'cursor-cli';
-	const showAiProviders = backend === 'auto' || backend === 'ai-providers';
-	const showApi = backend === 'auto' || backend === 'openai-compatible';
+	const { plugin } = host;
 
 	containerEl.createEl('h3', { text: 'AI prepare' });
+	containerEl.createEl('p', {
+		text:
+			'AI prepare runs through the AI Providers community plugin, which holds your API keys and models. ' +
+			'Note text is sent to the provider you select.',
+		cls: 'setting-item-description'
+	});
 
-	new Setting(containerEl)
-		.setName('LLM backend')
-		.setDesc(
-			`Active: ${describeActiveLlmBackend(plugin.settings)}. ` +
-				'Auto uses Cursor CLI on desktop when available, otherwise AI Providers, then API key.'
-		)
-		.addDropdown((drop) =>
-			drop
-				.addOption('auto', 'Auto (recommended)')
-				.addOption('cursor-cli', 'Cursor CLI (desktop)')
-				.addOption('ai-providers', 'Obsidian AI Providers')
-				.addOption('openai-compatible', 'API key (OpenAI / OpenRouter)')
-				.setValue(ai.llmBackend)
-				.onChange(async (value) => {
-					plugin.settings.ai.llmBackend =
-						value === 'cursor-cli' ||
-						value === 'ai-providers' ||
-						value === 'openai-compatible'
-							? value
-							: 'auto';
-					await plugin.saveSettings();
-					host.refreshDisplay();
-				})
-		);
-
-	if (showCursor) {
-		containerEl.createEl('h4', { text: 'Cursor CLI' });
-		if (!Platform.isDesktopApp) {
-			containerEl.createEl('p', {
-				text: 'Cursor CLI is not available on mobile. Configure AI Providers or an API key below.',
-				cls: 'setting-item-description'
-			});
-		}
-
-		new Setting(containerEl)
-			.setName('LLM model')
-			.setDesc(
-				`Cursor agent model for AI prepare. Edit the list in \`${plugin.llmModelsConfigPath}\` ` +
-					'(ids are passed to Cursor CLI `--model`). Also used as model override for AI Providers.'
-			)
-			.addDropdown((drop) => {
-				for (const opt of catalog.options) {
-					drop.addOption(opt.id, opt.label);
-				}
-				drop
-					.setValue(catalog.normalize(ai.llmModel))
-					.onChange(async (value) => {
-						plugin.settings.ai.llmModel = catalog.normalize(value);
-						await plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName('Reload model list')
-			.setDesc('Re-read llm-models.json after you edit it.')
-			.addButton((btn) =>
-				btn.setButtonText('Reload from config').onClick(async () => {
-					btn.setDisabled(true);
-					try {
-						await plugin.reloadLlmModelCatalog();
-						new Notice(
-							`Loaded ${plugin.llmModelCatalog.options.length} model(s) from config.`,
-							8000
-						);
-						host.refreshDisplay();
-					} catch (e: unknown) {
-						const msg =
-							e instanceof Error ? e.message : `Reload failed: ${String(e)}`;
-						new Notice(msg, 12000);
-					} finally {
-						btn.setDisabled(false);
-					}
-				})
-			);
-
-		if (Platform.isDesktopApp) {
-			new Setting(containerEl)
-				.setName('Cursor CLI path')
-				.setDesc(
-					'Absolute path to the `cursor` or `cursor-agent` binary. ' +
-						'Obsidian often has a minimal PATH (unlike Terminal), so leave this empty only if `which cursor` works from a bare login shell. ' +
-						'Example: /Users/you/.local/bin/cursor'
-				)
-				.addText((text) =>
-					text
-						.setPlaceholder('e.g. /Users/you/.local/bin/cursor')
-						.setValue(ai.cursorCliPath)
-						.onChange(async (value) => {
-							plugin.settings.ai.cursorCliPath = value.trim();
-							await plugin.saveSettings();
-							const p = plugin.settings.ai.cursorCliPath;
-							if (!p.length) {
-								return;
-							}
-							try {
-								const { detectCursorExecutable } = await import('../llm/CursorCliClient');
-								detectCursorExecutable(p);
-							} catch {
-								new Notice(
-									'Could not resolve Cursor CLI at this path (setting saved). ' +
-										'Install the CLI or fix the path, then use Resolve to verify.',
-									11000
-								);
-							}
-						})
-				);
-
-			new Setting(containerEl)
-				.setName('Locate Cursor CLI executable')
-				.setDesc('Only checks filesystem / PATH resolution (instant). Does not call the agent.')
-				.addButton((btn) =>
-					btn.setButtonText('Resolve').onClick(async () => {
-						try {
-							const { detectCursorExecutable } = await import('../llm/CursorCliClient');
-							const configured = plugin.settings.ai.cursorCliPath.trim();
-							const exe = detectCursorExecutable(
-								configured.length ? configured : undefined
-							);
-							new Notice(`OK — using: ${exe}`, 10000);
-						} catch (e: unknown) {
-							const msg =
-								e instanceof Error ? e.message : `Resolution failed: ${String(e)}`;
-							new Notice(msg, 14000);
-						}
-					})
-				);
-
-			new Setting(containerEl)
-				.setName('Test Cursor CLI connection')
-				.setDesc(
-					'Runs a minimal ping prompt through the Cursor agent. Uses a capped timeout (30–120s).'
-				)
-				.addButton((btn) =>
-					btn.setButtonText(BUTTON_SMOKE_CURSOR_LABEL).onClick(async () => {
-						btn.setDisabled(true);
-						btn.setButtonText('Calling…');
-						try {
-							const { runCursorCliSmokeTest } = await import('../llm/CursorCliClient');
-							const path = plugin.settings.ai.cursorCliPath.trim();
-							const r = await runCursorCliSmokeTest({
-								cursorCliPath: path.length ? path : undefined,
-								model: plugin.settings.ai.llmModel,
-								timeoutSeconds: plugin.settings.ai.timeoutSeconds
-							});
-							if (r.ok) {
-								const trimmed = summarizeSmokeStdout(r.stdout);
-								const normalized = trimmed.toUpperCase();
-								const hinted = normalized.includes('SPEED_READER_PING_OK')
-									? '(response contains ping token)'
-									: '(unexpected format — check Cursor output)';
-								new Notice(
-									`LLM OK ${hinted}\n(${r.timeoutSecondsUsed}s timeout) ${trimmed}`,
-									16000
-								);
-							} else {
-								const pathHint = path.length
-									? `\nConfigured path: ${path}`
-									: '\nNo path configured — check PATH or set cursorCliPath.';
-								new Notice(`${r.message}${pathHint}`, 16000);
-							}
-						} catch (e: unknown) {
-							const msg =
-								e instanceof Error ? e.message : `Smoke test crashed: ${String(e)}`;
-							new Notice(msg, 16000);
-						} finally {
-							btn.setButtonText(BUTTON_SMOKE_CURSOR_LABEL);
-							btn.setDisabled(false);
-						}
-					})
-				);
-		}
-	}
-
-	if (showAiProviders) {
-		void displayAiProvidersSettings(host, containerEl);
-	}
-
-	if (showApi) {
-		containerEl.createEl('h4', { text: 'API key' });
-		containerEl.createEl('p', {
-			text: 'Sends note text to the configured provider during AI prepare. Keys are stored locally in plugin settings.',
-			cls: 'setting-item-description'
-		});
-
-		new Setting(containerEl)
-			.setName('API provider preset')
-			.setDesc('OpenAI and OpenRouter use standard chat completion endpoints.')
-			.addDropdown((drop) =>
-				drop
-					.addOption('openai', API_PROVIDER_PRESETS.openai.label)
-					.addOption('openrouter', API_PROVIDER_PRESETS.openrouter.label)
-					.addOption('custom', 'Custom base URL')
-					.setValue(ai.apiProviderPreset)
-					.onChange(async (value) => {
-						plugin.settings.ai.apiProviderPreset =
-							value === 'openrouter' || value === 'custom' ? value : 'openai';
-						await plugin.saveSettings();
-						host.refreshDisplay();
-					})
-			);
-
-		if (plugin.settings.ai.apiProviderPreset === 'custom') {
-			new Setting(containerEl)
-				.setName('Custom API base URL')
-				.setDesc('Example: https://api.example.com/v1')
-				.addText((text) =>
-					text
-						.setPlaceholder('https://api.example.com/v1')
-						.setValue(plugin.settings.ai.apiBaseUrl)
-						.onChange(async (value) => {
-							plugin.settings.ai.apiBaseUrl = value.trim();
-							await plugin.saveSettings();
-						})
-				);
-		}
-
-		new Setting(containerEl)
-			.setName('API key')
-			.setDesc('Bearer token for the selected provider.')
-			.addText((text) => {
-				text.inputEl.type = 'password';
-				text
-					.setPlaceholder('sk-…')
-					.setValue(plugin.settings.ai.apiKey)
-					.onChange(async (value) => {
-						plugin.settings.ai.apiKey = value;
-						await plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName('API model')
-			.setDesc('Model id passed to chat/completions (e.g. gpt-4o-mini, anthropic/claude-3.5-sonnet).')
-			.addText((text) =>
-				text
-					.setPlaceholder(DEFAULT_SETTINGS.ai.apiModel)
-					.setValue(plugin.settings.ai.apiModel)
-					.onChange(async (value) => {
-						plugin.settings.ai.apiModel = value.trim();
-						await plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName('Test API connection')
-			.setDesc('Runs a minimal ping prompt through the configured API.')
-			.addButton((btn) =>
-				btn.setButtonText(BUTTON_SMOKE_API_LABEL).onClick(async () => {
-					btn.setDisabled(true);
-					btn.setButtonText('Calling…');
-					try {
-						const baseUrl = resolveApiBaseUrl(
-							plugin.settings.ai.apiProviderPreset,
-							plugin.settings.ai.apiBaseUrl
-						);
-						const r = await runOpenAiCompatibleSmokeTest({
-							apiKey: plugin.settings.ai.apiKey,
-							model: plugin.settings.ai.apiModel,
-							baseUrl,
-							preset: plugin.settings.ai.apiProviderPreset,
-							timeoutSeconds: plugin.settings.ai.timeoutSeconds
-						});
-						if (r.ok) {
-							const trimmed = summarizeSmokeStdout(r.stdout);
-							new Notice(`API OK: ${trimmed}`, 16000);
-						} else {
-							new Notice(r.message, 16000);
-						}
-					} catch (e: unknown) {
-						const msg =
-							e instanceof Error ? e.message : `Smoke test crashed: ${String(e)}`;
-						new Notice(msg, 16000);
-					} finally {
-						btn.setButtonText(BUTTON_SMOKE_API_LABEL);
-						btn.setDisabled(false);
-					}
-				})
-			);
-	}
+	// Rendered async; its own container keeps it above the limits below.
+	void displayAiProvidersSettings(host, containerEl.createDiv());
 
 	containerEl.createEl('h4', { text: 'Prepare limits' });
 
@@ -343,7 +58,7 @@ export function displayPluginAiSettings(host: PluginAiSettingsHost, containerEl:
 	new Setting(containerEl)
 		.setName('Prepare single-call max chars')
 		.setDesc(
-			`Above this payload size, prepare uses batched CLI calls (minimum ${MIN_PREPARE_SINGLE_CALL_MAX_CHARS}).`
+			`Above this payload size, prepare uses batched LLM calls (minimum ${MIN_PREPARE_SINGLE_CALL_MAX_CHARS}).`
 		)
 		.addText((text) =>
 			text
@@ -367,7 +82,7 @@ export function displayPluginAiSettings(host: PluginAiSettingsHost, containerEl:
 	new Setting(containerEl)
 		.setName('Prepare single-call max lines')
 		.setDesc(
-			`Above this line count, prepare uses batched CLI calls (minimum ${MIN_PREPARE_SINGLE_CALL_MAX_LINES}).`
+			`Above this line count, prepare uses batched LLM calls (minimum ${MIN_PREPARE_SINGLE_CALL_MAX_LINES}).`
 		)
 		.addText((text) =>
 			text
@@ -428,6 +143,19 @@ async function displayAiProvidersSettings(
 		);
 
 	new Setting(containerEl)
+		.setName('Model override')
+		.setDesc("Optional model id. Leave empty to use the provider's own model.")
+		.addText((text) =>
+			text
+				.setPlaceholder('Provider default')
+				.setValue(plugin.settings.ai.aiProvidersModelOverride)
+				.onChange(async (value) => {
+					plugin.settings.ai.aiProvidersModelOverride = value.trim();
+					await plugin.saveSettings();
+				})
+		);
+
+	new Setting(containerEl)
 		.setName('Test AI Providers connection')
 		.setDesc('Runs a minimal ping prompt through the selected AI Providers entry.')
 		.addButton((btn) =>
@@ -437,7 +165,7 @@ async function displayAiProvidersSettings(
 				try {
 					const r = await runAiProvidersSmokeTest({
 						providerId: plugin.settings.ai.aiProvidersProviderId,
-						modelOverride: plugin.settings.ai.llmModel,
+						modelOverride: plugin.settings.ai.aiProvidersModelOverride,
 						timeoutSeconds: plugin.settings.ai.timeoutSeconds,
 						getAiProviders: () => getAiProvidersApi(app)
 					});

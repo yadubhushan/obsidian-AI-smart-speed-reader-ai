@@ -1,7 +1,6 @@
 import type { SpeedReaderAiSettings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { validateSettings } from '../services/settingsValidator';
-import type { LlmModelCatalog } from '../llm/llmModelCatalog';
 
 export const PLUGIN_DATA_SCHEMA_VERSION = 1;
 
@@ -29,14 +28,11 @@ function isNestedPluginData(raw: unknown): raw is SpeedReaderPluginData {
 }
 
 /** Load settings from raw `loadData()` payload (flat legacy or wrapped schema). */
-export function settingsFromPluginData(
-	raw: unknown,
-	catalog: LlmModelCatalog
-): SpeedReaderAiSettings {
+export function settingsFromPluginData(raw: unknown): SpeedReaderAiSettings {
 	if (isNestedPluginData(raw)) {
-		return validateSettings(Object.assign({}, DEFAULT_SETTINGS, raw.settings), catalog);
+		return validateSettings(Object.assign({}, DEFAULT_SETTINGS, raw.settings));
 	}
-	return validateSettings(Object.assign({}, DEFAULT_SETTINGS, raw), catalog);
+	return validateSettings(Object.assign({}, DEFAULT_SETTINGS, raw));
 }
 
 export function readingStateSyncFromPluginData(raw: unknown): ReadingStateSyncStamp | undefined {

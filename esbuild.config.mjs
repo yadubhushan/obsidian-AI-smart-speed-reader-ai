@@ -50,10 +50,6 @@ function copyAssets() {
 		join(__dirname, "node_modules/sql.js/dist/sql-wasm.wasm"),
 		join(outDir, "sql-wasm.wasm"),
 	);
-	copyFileIfMissing(
-		join(__dirname, "config/llm-models.json"),
-		join(outDir, "data/llm-models.json"),
-	);
 	copyPromptsDirIfMissing(
 		join(__dirname, "config/prompts"),
 		join(outDir, "data/prompts"),

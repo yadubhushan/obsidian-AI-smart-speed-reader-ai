@@ -1,7 +1,6 @@
 import { EventBus } from './eventBus';
 import type { SpeedReaderPluginHost } from './pluginHost';
-import { SettingsBackedLlmClient, isLlmBackendConfigured } from '../llm/createLlmClient';
-import { canResolveCursorCliDesktop } from '../llm/cursorCliDesktopBridge';
+import { createLlmClient, isLlmConfigured } from '../llm/llmClientFactory';
 import { getAiProvidersApi } from '../llm/aiProvidersBridge';
 import { validateSettings } from './settingsValidator';
 import { BookCacheStoreImpl } from '../store/BookCacheStore';
@@ -49,14 +48,13 @@ export function createPluginServices(
 		eventBus,
 		dataPaths.bookCacheBase,
 		() => {
-			if (!isLlmBackendConfigured(plugin.settings)) {
+			if (!isLlmConfigured(plugin.settings)) {
 				return undefined;
 			}
-			return new SettingsBackedLlmClient({
-				getSettings: () => plugin.settings,
-				getAiProviders: () => getAiProvidersApi(plugin.app),
-				canResolveCursorCli: (path) => canResolveCursorCliDesktop(path)
-			});
+			return createLlmClient(
+				() => plugin.settings,
+				() => getAiProvidersApi(plugin.app)
+			);
 		}
 	);
 	const epubVaultIndex: EpubVaultIndexImpl = createEpubVaultIndex(plugin.app, eventBus);
@@ -87,7 +85,7 @@ export function createPluginServices(
 		services,
 		getSettings: () => plugin.settings,
 		onSettingsChange: (newSettings) => {
-			plugin.settings = validateSettings(newSettings, plugin.llmModelCatalog);
+			plugin.settings = validateSettings(newSettings);
 			void plugin.saveSettings();
 		},
 		preparePrompts: plugin.preparePrompts,

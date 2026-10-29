@@ -9,7 +9,6 @@ import { wireReaderWordLookup } from '../features/word-lookup/registerWordLookup
 import type { SpeedReaderAiSettings } from '../settings';
 import type { PluginServices } from '../services/serviceRegistry';
 import { SpeedReaderAiModal } from '../speedReaderAiModal';
-import type { LlmModelCatalog } from '../llm/llmModelCatalog';
 import type { PreparePromptSet } from '../llm/promptCatalog';
 import type { ManifestStore } from '../store/ManifestStore';
 import type { SpeedReaderOpen } from '../ui/speedReaderOpen';
@@ -24,7 +23,6 @@ export interface ReaderLauncherDeps {
 	persistSettings(next: SpeedReaderAiSettings): void;
 	getServices(): PluginServices;
 	getManifestStore(): ManifestStore;
-	getLlmModelCatalog(): LlmModelCatalog;
 	getPreparePrompts(): PreparePromptSet;
 	refreshPrepareStatusBar(): Promise<void>;
 }
@@ -80,8 +78,7 @@ export class ReaderLauncher implements ReaderCommandHost {
 			settings: { ...this.deps.getSettings() },
 			onSettingsChange: (newSettings) => {
 				this.deps.persistSettings(newSettings);
-			},
-			llmModelCatalog: this.deps.getLlmModelCatalog()
+			}
 		});
 		modal.open();
 	}

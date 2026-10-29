@@ -44,8 +44,6 @@ export type ReaderThemePresetId =
 	| 'cyber-mint'
 	| 'nova-violet'
 	| 'crimson-surge';
-export type LlmBackend = 'auto' | 'cursor-cli' | 'ai-providers' | 'openai-compatible';
-export type ApiProviderPreset = 'openai' | 'openrouter' | 'custom';
 
 export const READER_FONT_OPTIONS = ['system-ui', 'Arial', 'Georgia', 'monospace'] as const;
 export type ReaderFontOption = (typeof READER_FONT_OPTIONS)[number];
@@ -102,14 +100,10 @@ export interface ReaderSettings {
 }
 
 export interface AiSettings {
-	llmBackend: LlmBackend;
+	/** Provider id from the AI Providers plugin, which owns keys and models. */
 	aiProvidersProviderId: string;
-	apiProviderPreset: ApiProviderPreset;
-	apiKey: string;
-	apiBaseUrl: string;
-	apiModel: string;
-	cursorCliPath: string;
-	llmModel: string;
+	/** Optional model id; empty uses the provider's own model. */
+	aiProvidersModelOverride: string;
 	timeoutSeconds: number;
 	prepareSingleCallMaxChars: number;
 	prepareSingleCallMaxLines: number;
@@ -225,14 +219,8 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		requireCompletionBeforeNewBook: false
 	},
 	ai: {
-		llmBackend: 'auto',
 		aiProvidersProviderId: '',
-		apiProviderPreset: 'openai',
-		apiKey: '',
-		apiBaseUrl: '',
-		apiModel: 'gpt-4o-mini',
-		cursorCliPath: '',
-		llmModel: 'composer-2.5-fast',
+		aiProvidersModelOverride: '',
 		timeoutSeconds: 300,
 		prepareSingleCallMaxChars: 120000,
 		prepareSingleCallMaxLines: 2000,

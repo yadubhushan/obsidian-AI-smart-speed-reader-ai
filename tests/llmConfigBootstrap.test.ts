@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrapLlmConfig } from '../src/boot/llmConfigBootstrap';
 import {
-	BUILTIN_LLM_MODELS_CONFIG,
-	pluginLlmModelsConfigPath,
-	serializeLlmModelsConfig,
-	type DataAdapterLike
-} from '../src/llm/llmModelCatalog';
-import {
+	type DataAdapterLike,
 	PREPARE_PROMPT_FILENAMES,
 	PREPARE_SECTIONS_FILENAME,
 	pluginPromptsDirPath,
@@ -40,14 +35,10 @@ function createMemoryAdapter(): DataAdapterLike & { files: Map<string, string> }
 }
 
 describe('bootstrapLlmConfig', () => {
-	it('creates default model config and prompt files when none exist', async () => {
+	it('creates default prompt files when none exist', async () => {
 		const adapter = createMemoryAdapter();
 
 		const state = await bootstrapLlmConfig(adapter, CONFIG_DIR, PLUGIN_ID);
-
-		expect(state.llmModelsConfigPath).toBe(pluginLlmModelsConfigPath(CONFIG_DIR, PLUGIN_ID));
-		expect(adapter.files.has(state.llmModelsConfigPath)).toBe(true);
-		expect(state.llmModelCatalog.defaultModelId).toBe(BUILTIN_LLM_MODELS_CONFIG.default);
 
 		expect(state.preparePromptsDirPath).toBe(pluginPromptsDirPath(CONFIG_DIR, PLUGIN_ID));
 		for (const filename of PREPARE_PROMPT_FILENAMES) {
@@ -57,37 +48,6 @@ describe('bootstrapLlmConfig', () => {
 		}
 		expect(state.preparePrompts.sections.length).toBeGreaterThan(0);
 		expect(state.preparePrompts.singleStory.length).toBeGreaterThan(0);
-	});
-
-	it('loads an existing user-edited model catalog instead of overwriting it', async () => {
-		const adapter = createMemoryAdapter();
-		const configPath = pluginLlmModelsConfigPath(CONFIG_DIR, PLUGIN_ID);
-		const custom = {
-			default: 'my-model',
-			models: [{ id: 'my-model', label: 'My Model' }]
-		};
-		adapter.files.set(configPath, JSON.stringify(custom));
-
-		const state = await bootstrapLlmConfig(adapter, CONFIG_DIR, PLUGIN_ID);
-
-		expect(state.llmModelCatalog.defaultModelId).toBe('my-model');
-		expect(state.llmModelCatalog.normalize('unknown')).toBe('my-model');
-		expect(adapter.files.get(configPath)).toBe(JSON.stringify(custom));
-	});
-
-	it('migrates a legacy plugin-root config into the data folder', async () => {
-		const adapter = createMemoryAdapter();
-		const legacyPath = `${CONFIG_DIR}/plugins/${PLUGIN_ID}/llm-models.json`;
-		const custom = serializeLlmModelsConfig({
-			default: 'legacy-model',
-			models: [{ id: 'legacy-model', label: 'Legacy Model' }]
-		});
-		adapter.files.set(legacyPath, custom);
-
-		const state = await bootstrapLlmConfig(adapter, CONFIG_DIR, PLUGIN_ID);
-
-		expect(state.llmModelsConfigPath).toBe(pluginLlmModelsConfigPath(CONFIG_DIR, PLUGIN_ID));
-		expect(state.llmModelCatalog.defaultModelId).toBe('legacy-model');
 	});
 
 	it('preserves user-edited prompt files', async () => {

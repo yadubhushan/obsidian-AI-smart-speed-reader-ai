@@ -75,7 +75,7 @@ Install plugin binaries on each device via BRAT or the community catalog (~350 K
 | Path | Sync? | Why |
 |------|-------|-----|
 | `{configDir}/plugins/speed-reader-ai/data.json` | **With plugin sync** | Reader and AI settings; also carries a lightweight reading-state sync stamp |
-| `{configDir}/plugins/speed-reader-ai/data/` | **With plugin sync** | Reading progress, AI prepare cache, EPUB parse cache and covers, library renames (`library-metadata.json`), LLM model list, prompts |
+| `{configDir}/plugins/speed-reader-ai/data/` | **With plugin sync** | Reading progress, AI prepare cache, EPUB parse cache and covers, library renames (`library-metadata.json`), prompts |
 | Notes and EPUBs | **Yes** | Source content |
 
 Replace `{configDir}` with your vault config folder (usually `.obsidian`). Do not rely on Sync to deliver `main.js` — use BRAT or the catalog per device.
@@ -144,7 +144,7 @@ Equivalent to `SPEED_READER_OUT=vault npm run build`. Override the target with `
 
 Open without a document: command palette **Open speed reader preferences**, or **Settings → Speed Reader AI → Open speed reader preferences**.
 
-**AI prepare** (LLM backend, API keys, model list, timeouts, cache clear) lives in **Settings → Community plugins → Speed Reader AI**.
+**AI prepare** (AI Providers entry, optional model override, timeouts, cache clear) lives in **Settings → Community plugins → Speed Reader AI**.
 
 ## Keyboard shortcuts
 
@@ -161,16 +161,9 @@ Open without a document: command palette **Open speed reader preferences**, or *
 
 Word lookup sends only the looked-up word to online dictionary APIs. Optionally configure a **Merriam Webster** Collegiate Dictionary API key in **Settings → Community plugins → Speed Reader AI → Dictionary** ([register free key](https://dictionaryapi.com/register/index); 1000 requests/day non-commercial). When a key is set, lookups use Merriam Webster first, then fall back to [dictionaryapi.dev](https://dictionaryapi.dev/) and [FreeDictionaryAPI.com](https://freedictionaryapi.com/) (Wiktionary). Without a key, the free chain runs unchanged. Attribution in the dictionary footer reflects which source returned the definition. Disable lookup in the reader **Advanced** tab.
 
-AI prepare sends note text to your configured LLM backend:
+AI prepare runs through the [AI Providers](https://github.com/pfrankov/obsidian-ai-providers) community plugin on desktop and mobile. Speed Reader AI stores no API keys: install AI Providers, add a provider there (OpenAI, OpenRouter, Anthropic, Ollama, any OpenAI-compatible endpoint, …), then pick it in **Settings → Community plugins → Speed Reader AI**. Note text is sent to the provider you pick. No telemetry.
 
-| Backend | Desktop | Mobile |
-|---------|---------|--------|
-| **Auto (default)** | Cursor CLI when installed, else AI Providers, else API key | AI Providers, else API key |
-| **Cursor CLI** | Local Cursor agent (no cloud by default) | Not available |
-| **Obsidian AI Providers** | Uses keys from the [AI Providers](https://github.com/pfrankov/obsidian-ai-providers) community plugin | Same |
-| **API key** | OpenAI, OpenRouter, or custom OpenAI-compatible endpoint | Same |
-
-Configure AI in **Settings → Community plugins → Speed Reader AI**. API keys are stored locally in plugin settings. No telemetry.
+> **Upgrading from 1.2.28 or earlier:** the built-in Cursor CLI and API-key backends were removed. Configure your key in AI Providers instead; old backend settings (including any stored API key) are dropped from `data.json` on the next save.
 
 ## Data storage
 
@@ -183,7 +176,6 @@ Prepared documents, book parse cache, and reading progress are stored under the 
     ├── reading-state.json # resume positions and pins
     ├── read-cache/        # AI prepare output (per note/doc key)
     ├── book-cache/        # parsed EPUB cache
-    ├── llm-models.json    # editable model list
     └── prompts/*.txt      # AI prepare prompt templates
 ```
 

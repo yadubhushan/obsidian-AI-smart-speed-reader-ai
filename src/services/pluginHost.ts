@@ -1,5 +1,4 @@
 import type { App } from 'obsidian';
-import type { LlmModelCatalog } from '../llm/llmModelCatalog';
 import type { PreparePromptSet } from '../llm/promptCatalog';
 import type { ManifestStore } from '../store/ManifestStore';
 import type { SpeedReaderAiSettings } from '../types';
@@ -9,7 +8,6 @@ export interface SpeedReaderPluginHost {
 	app: App;
 	manifest: { id: string };
 	settings: SpeedReaderAiSettings;
-	llmModelCatalog: LlmModelCatalog;
 	preparePrompts: PreparePromptSet;
 	saveSettings(): Promise<void>;
 	getManifestStore(): ManifestStore;

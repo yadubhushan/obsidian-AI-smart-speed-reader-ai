@@ -2,7 +2,7 @@ import { parseSegments } from '../src/parse/segmentParser';
 import { normalizeDocument } from '../src/parse/normalizeSegments';
 import type { NormalizedDocumentBundle } from '../src/parse/normalizeTypes';
 import type { ProcessedDocument, ProcessorDeps } from '../src/types/processedDocument';
-import type { LlmClient } from '../src/llm/CursorCliClient';
+import type { LlmClient } from '../src/llm/LlmClient';
 import { DEFAULT_SETTINGS } from '../src/types';
 import { loadPreparePromptSetFromDirSync } from '../src/llm/promptCatalogSync';
 import { join } from 'node:path';
@@ -66,7 +66,7 @@ export function defaultProcessorDeps(llm: LlmClient, overrides?: Partial<Process
 		settings: {
 			prepareSingleCallMaxChars: DEFAULT_SETTINGS.ai.prepareSingleCallMaxChars,
 			prepareSingleCallMaxLines: DEFAULT_SETTINGS.ai.prepareSingleCallMaxLines,
-			llmModel: DEFAULT_SETTINGS.ai.llmModel,
+			modelLabel: 'test-model',
 			...overrides
 		}
 	};

@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS } from '../src/types';
-import { createDefaultLlmModelCatalog } from '../src/llm/llmModelCatalog';
 import { migrateFlatSettings, validateSettings } from '../src/services/settingsValidator';
 
-const defaultCatalog = createDefaultLlmModelCatalog();
 
 describe('migrateFlatSettings', () => {
 	it('maps legacy flat data.json into nested groups', () => {
@@ -28,8 +26,8 @@ describe('migrateFlatSettings', () => {
 		expect(migrated.reader?.display?.showContext).toBe(false);
 		expect(migrated.reader?.ttsEnabled).toBe(true);
 		expect(migrated.reader?.ttsVoiceUri).toBe('voice://test');
-		expect(migrated.ai?.llmBackend).toBe('cursor-cli');
-		expect(migrated.ai?.cursorCliPath).toBe('/usr/local/bin/cursor');
+		expect(migrated.ai).not.toHaveProperty('llmBackend');
+		expect(migrated.ai).not.toHaveProperty('cursorCliPath');
 		expect(migrated.dictionary?.enableWordLookup).toBe(false);
 	});
 
@@ -45,15 +43,14 @@ describe('migrateFlatSettings', () => {
 	});
 
 	it('validateSettings produces full nested defaults for empty input', () => {
-		expect(validateSettings(null, defaultCatalog)).toEqual(DEFAULT_SETTINGS);
+		expect(validateSettings(null)).toEqual(DEFAULT_SETTINGS);
 		expect(DEFAULT_SETTINGS.reader.ttsEnabled).toBe(false);
 	});
 
 	it('validates persisted TTS values and rejects malformed values', () => {
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, ttsEnabled: true } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, ttsEnabled: true } }
 			).reader.ttsEnabled
 		).toBe(true);
 		expect(
@@ -64,44 +61,40 @@ describe('migrateFlatSettings', () => {
 						ttsEnabled: 'yes' as never,
 						ttsVoiceUri: 42 as never
 					}
-				},
-				defaultCatalog
+				}
 			).reader.ttsEnabled
 		).toBe(false);
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, ttsVoiceUri: 42 as never } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, ttsVoiceUri: 42 as never } }
 			).reader.ttsVoiceUri
 		).toBe('');
 	});
 
 	it('clamps contextLineFontSize to 12–32', () => {
 		const low = validateSettings(
-			{ reader: { ...DEFAULT_SETTINGS.reader, contextLineFontSize: 8 } },
-			defaultCatalog
+			{ reader: { ...DEFAULT_SETTINGS.reader, contextLineFontSize: 8 } }
 		);
 		expect(low.reader.contextLineFontSize).toBe(12);
 		const high = validateSettings(
-			{ reader: { ...DEFAULT_SETTINGS.reader, contextLineFontSize: 48 } },
-			defaultCatalog
+			{ reader: { ...DEFAULT_SETTINGS.reader, contextLineFontSize: 48 } }
 		);
 		expect(high.reader.contextLineFontSize).toBe(32);
 	});
 
 	it('validateSettings merges flat legacy fields via migration', () => {
-		const result = validateSettings({ wpm: 99999, chunkSize: 0 }, defaultCatalog);
+		const result = validateSettings({ wpm: 99999, chunkSize: 0 });
 		expect(result.reader.wpm).toBe(5000);
 		expect(result.reader.chunkSize).toBe(1);
 	});
 
 	it('clamps chunkSize to 1–30', () => {
 		expect(
-			validateSettings({ reader: { ...DEFAULT_SETTINGS.reader, chunkSize: 50 } }, defaultCatalog)
+			validateSettings({ reader: { ...DEFAULT_SETTINGS.reader, chunkSize: 50 } })
 				.reader.chunkSize
 		).toBe(30);
 		expect(
-			validateSettings({ reader: { ...DEFAULT_SETTINGS.reader, chunkSize: 15 } }, defaultCatalog)
+			validateSettings({ reader: { ...DEFAULT_SETTINGS.reader, chunkSize: 15 } })
 				.reader.chunkSize
 		).toBe(15);
 	});
@@ -109,60 +102,52 @@ describe('migrateFlatSettings', () => {
 	it('preserves valid defaultPlaybackMode values and migrates unknown to rsvp', () => {
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'rsvp' } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'rsvp' } }
 			).reader.defaultPlaybackMode
 		).toBe('rsvp');
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'lineRepeat' } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'lineRepeat' } }
 			).reader.defaultPlaybackMode
 		).toBe('lineRepeat');
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'progressiveRsvp' } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'progressiveRsvp' } }
 			).reader.defaultPlaybackMode
 		).toBe('progressiveRsvp');
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'lineByLine' } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'lineByLine' } }
 			).reader.defaultPlaybackMode
 		).toBe('lineByLine');
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'invalid' as never } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, defaultPlaybackMode: 'invalid' as never } }
 			).reader.defaultPlaybackMode
 		).toBe('rsvp');
 	});
 
 	it('defaults progressiveRsvpMaxWordLength to 4 and clamps out-of-range values', () => {
-		expect(validateSettings(null, defaultCatalog).reader.progressiveRsvpMaxWordLength).toBe(4);
+		expect(validateSettings(null).reader.progressiveRsvpMaxWordLength).toBe(4);
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 5 } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 5 } }
 			).reader.progressiveRsvpMaxWordLength
 		).toBe(5);
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 0 } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 0 } }
 			).reader.progressiveRsvpMaxWordLength
 		).toBe(1);
 		expect(
 			validateSettings(
-				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 99 } },
-				defaultCatalog
+				{ reader: { ...DEFAULT_SETTINGS.reader, progressiveRsvpMaxWordLength: 99 } }
 			).reader.progressiveRsvpMaxWordLength
 		).toBe(20);
 	});
 
 	it('defaults showCenterGuide to true for empty input', () => {
-		expect(validateSettings(null, defaultCatalog).reader.display.showCenterGuide).toBe(true);
+		expect(validateSettings(null).reader.display.showCenterGuide).toBe(true);
 	});
 
 	it('preserves valid reader color overrides and drops invalid ones', () => {
@@ -175,8 +160,7 @@ describe('migrateFlatSettings', () => {
 						centerCharacter: '#ff8800'
 					}
 				}
-			},
-			defaultCatalog
+			}
 		);
 		expect(valid.reader.colors.focusWord).toBe('#123abc');
 		expect(valid.reader.colors.centerCharacter).toBe('#ff8800');
@@ -190,15 +174,14 @@ describe('migrateFlatSettings', () => {
 						centerCharacter: '#fff'
 					}
 				}
-			},
-			defaultCatalog
+			}
 		);
 		expect(invalid.reader.colors.focusWord).toBe('');
 		expect(invalid.reader.colors.centerCharacter).toBe('');
 	});
 
 	it('defaults requireCompletionBeforeNewBook to false and preserves explicit true', () => {
-		expect(validateSettings(null, defaultCatalog).reader.requireCompletionBeforeNewBook).toBe(false);
+		expect(validateSettings(null).reader.requireCompletionBeforeNewBook).toBe(false);
 		expect(
 			validateSettings(
 				{
@@ -206,8 +189,7 @@ describe('migrateFlatSettings', () => {
 						...DEFAULT_SETTINGS.reader,
 						requireCompletionBeforeNewBook: true
 					}
-				},
-				defaultCatalog
+				}
 			).reader.requireCompletionBeforeNewBook
 		).toBe(true);
 	});

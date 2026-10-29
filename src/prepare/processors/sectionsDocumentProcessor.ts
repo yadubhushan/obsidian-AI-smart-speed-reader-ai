@@ -25,7 +25,7 @@ function buildMeta(
 		sourcePath: bundle.sourcePath,
 		sourceChecksum: bundle.sourceChecksum,
 		processedAt: new Date().toISOString(),
-		model: deps.settings.llmModel,
+		model: deps.settings.modelLabel,
 		prepareStrategy
 	};
 }
