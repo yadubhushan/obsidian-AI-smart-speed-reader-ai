@@ -2,6 +2,7 @@ import type { App } from 'obsidian';
 import {
 	bookCacheCoverOptionsPath,
 	bookCacheCoverPath,
+	bookCacheCustomCoverPath,
 	bookCacheDocKeyPath
 } from '../store/bookCachePaths';
 import type { BookCacheIndex } from '../types/m2Contracts';
@@ -13,7 +14,7 @@ const MAX_OPEN_LIBRARY_OPTIONS = 3;
 
 export class CoverLookupRateLimitError extends Error {
 	constructor() {
-		super('Google Books is rate-limiting requests. Wait a minute and try again.');
+		super('Cover search is rate-limited right now. Try again later.');
 		this.name = 'CoverLookupRateLimitError';
 	}
 }
@@ -37,6 +38,10 @@ interface GoogleBooksVolume {
 
 interface GoogleBooksResponse {
 	items?: GoogleBooksVolume[];
+}
+
+interface OpenLibrarySearchResponse {
+	docs?: Array<{ title?: string; author_name?: string[]; cover_i?: number; isbn?: string[] }>;
 }
 
 const GOOGLE_IMAGE_KEYS = [
@@ -63,6 +68,14 @@ function googleBookSearchUrl(title: string, author?: string): string {
 	);
 }
 
+function openLibrarySearchUrl(title: string, author?: string): string {
+	const params = new URLSearchParams({ title, limit: '8', fields: 'title,author_name,cover_i,isbn' });
+	if (author) {
+		params.set('author', author);
+	}
+	return `https://openlibrary.org/search.json?${params.toString()}`;
+}
+
 function bestGoogleImage(volume: GoogleBooksVolume): string | null {
 	const links = volume.volumeInfo?.imageLinks;
 	if (!links) {
@@ -83,7 +96,39 @@ function extractIsbn(volume: GoogleBooksVolume): string | undefined {
 		identifiers.find((item) => item.type === 'ISBN_10')?.identifier;
 }
 
+/**
+ * Keyless Google Books requests count against one quota shared by every anonymous caller,
+ * so a 429 there says nothing about our own volume. Fall back to Open Library search then,
+ * and only report a rate limit when neither source answers.
+ */
 export async function findBookCoverOptions(
+	title: string,
+	author: string | undefined,
+	fetchImpl: FetchLike
+): Promise<BookCoverOption[]> {
+	let googleError: unknown = null;
+	try {
+		const options = await findGoogleBookCoverOptions(title, author, fetchImpl);
+		if (options.length > 0) {
+			return options;
+		}
+	} catch (error) {
+		googleError = error;
+	}
+	try {
+		return await findOpenLibraryCoverOptions(title, author, fetchImpl);
+	} catch (error) {
+		if (googleError === null) {
+			return [];
+		}
+		if (googleError instanceof CoverLookupRateLimitError || error instanceof CoverLookupRateLimitError) {
+			throw new CoverLookupRateLimitError();
+		}
+		throw googleError;
+	}
+}
+
+async function findGoogleBookCoverOptions(
 	title: string,
 	author: string | undefined,
 	fetchImpl: FetchLike
@@ -138,6 +183,38 @@ export async function findBookCoverOptions(
 	return options;
 }
 
+async function findOpenLibraryCoverOptions(
+	title: string,
+	author: string | undefined,
+	fetchImpl: FetchLike
+): Promise<BookCoverOption[]> {
+	const res = await fetchImpl(openLibrarySearchUrl(title, author));
+	if (res.status === 429) {
+		throw new CoverLookupRateLimitError();
+	}
+	if (!res.ok) {
+		throw new Error(`Open Library error: ${res.status}`);
+	}
+
+	const data = (await res.json()) as OpenLibrarySearchResponse;
+	const options: BookCoverOption[] = [];
+	const seen = new Set<number>();
+	for (const doc of data.docs ?? []) {
+		if (!doc.cover_i || seen.has(doc.cover_i)) {
+			continue;
+		}
+		seen.add(doc.cover_i);
+		options.push({
+			provider: 'open-library',
+			url: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`,
+			title: doc.title,
+			author: doc.author_name?.join(', '),
+			isbn: doc.isbn?.[0]
+		});
+	}
+	return options;
+}
+
 async function downloadImage(url: string, fetchImpl: FetchLike): Promise<ArrayBuffer | null> {
 	const res = await fetchImpl(url);
 	if (!res.ok) {
@@ -158,19 +235,22 @@ export async function ensureBookCoverAssetsBeforeEpubDelete(
 	fetchImpl: FetchLike
 ): Promise<{ options: BookCoverOption[]; wroteCover: boolean }> {
 	const adapter = app.vault.adapter;
-	await adapter.mkdir(bookCacheDocKeyPath(bookCacheBase, index.docKey)).catch(() => undefined);
+	const coverPath = bookCacheCoverPath(bookCacheBase, index.docKey);
+	// The EPUB's own cover (or one the user picked) wins; only go online when there is none.
+	if (
+		(await adapter.exists(coverPath)) ||
+		(await adapter.exists(bookCacheCustomCoverPath(bookCacheBase, index.docKey)))
+	) {
+		return { options: [], wroteCover: false };
+	}
 
+	await adapter.mkdir(bookCacheDocKeyPath(bookCacheBase, index.docKey)).catch(() => undefined);
 	const options = await findBookCoverOptions(index.title, index.author, fetchImpl).catch(() => []);
 	if (options.length > 0) {
 		await adapter.write(
 			bookCacheCoverOptionsPath(bookCacheBase, index.docKey),
 			JSON.stringify({ sourcePath: index.sourcePath, title: index.title, author: index.author, options }, null, 2)
 		);
-	}
-
-	const coverPath = bookCacheCoverPath(bookCacheBase, index.docKey);
-	if (await adapter.exists(coverPath)) {
-		return { options, wroteCover: false };
 	}
 
 	for (const option of options) {

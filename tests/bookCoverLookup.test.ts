@@ -51,10 +51,35 @@ describe('bookCoverLookup', () => {
 });
 
 describe('bookCoverLookup rate limits', () => {
-	it('reports a 429 as a rate-limit error', async () => {
-		const fetchImpl = vi.fn(async () => new Response(null, { status: 429 })) as unknown as typeof fetch;
-		await expect(findBookCoverOptions('Nausea', undefined, fetchImpl)).rejects.toThrow(
-			/rate-limiting/
+	const json = (body: unknown) =>
+		new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+
+	it('falls back to Open Library search when Google Books answers 429', async () => {
+		const fetchImpl = vi.fn(async (url: string) =>
+			url.startsWith('https://www.googleapis.com/')
+				? new Response(null, { status: 429 })
+				: json({ docs: [{ title: 'Nausea', author_name: ['Jean-Paul Sartre'], cover_i: 42, isbn: ['111'] }, { cover_i: 42 }] })
+		) as unknown as typeof fetch;
+
+		const options = await findBookCoverOptions('Nausea', 'Sartre', fetchImpl);
+
+		expect(fetchImpl).toHaveBeenLastCalledWith(
+			'https://openlibrary.org/search.json?title=Nausea&limit=8&fields=title%2Cauthor_name%2Ccover_i%2Cisbn&author=Sartre'
 		);
+		expect(options).toEqual([
+			{
+				provider: 'open-library',
+				url: 'https://covers.openlibrary.org/b/id/42-L.jpg',
+				title: 'Nausea',
+				author: 'Jean-Paul Sartre',
+				isbn: '111'
+			}
+		]);
+	});
+
+	it('reports a rate limit only when both sources fail', async () => {
+		const fetchImpl = vi.fn(async () => new Response(null, { status: 429 })) as unknown as typeof fetch;
+		await expect(findBookCoverOptions('Nausea', undefined, fetchImpl)).rejects.toThrow(/rate-limited/);
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
 	});
 });

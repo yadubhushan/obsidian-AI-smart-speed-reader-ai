@@ -9,6 +9,8 @@ export interface RateLimitOptions {
 	baseDelayMs: number;
 	/** Cap for any single wait, including a server-sent Retry-After. */
 	maxDelayMs: number;
+	/** Hosts whose 429/503 answers are returned as-is instead of retried. */
+	noRetryHosts?: ReadonlySet<string>;
 	sleep?: (ms: number) => Promise<void>;
 	now?: () => number;
 	random?: () => number;
@@ -91,7 +93,11 @@ export function createRateLimitedFetch(
 		for (let attempt = 0; ; attempt += 1) {
 			await waitForSlot(host);
 			const response = init === undefined ? await fetchImpl(input) : await fetchImpl(input, init);
-			if (!RETRYABLE_STATUS.has(response.status) || attempt >= opts.maxRetries) {
+			if (
+				!RETRYABLE_STATUS.has(response.status) ||
+				attempt >= opts.maxRetries ||
+				opts.noRetryHosts?.has(host)
+			) {
 				return response;
 			}
 			const delay = backoffMs(response, attempt);

@@ -71,6 +71,20 @@ describe('createRateLimitedFetch', () => {
 		expect(clock.sleeps).toEqual([500]);
 	});
 
+	it('returns a 429 as-is for hosts marked no-retry', async () => {
+		const clock = fakeClock();
+		const fetchImpl = vi.fn().mockResolvedValue(respond(429));
+		const limited = createRateLimitedFetch(fetchImpl as unknown as typeof fetch, {
+			...clock,
+			noRetryHosts: new Set(['quota.example.com'])
+		});
+
+		const res = await limited('https://quota.example.com/a');
+
+		expect(res.status).toBe(429);
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+	});
+
 	it('does not retry ordinary errors', async () => {
 		const clock = fakeClock();
 		const fetchImpl = vi.fn().mockResolvedValue(respond(404));
