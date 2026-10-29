@@ -1178,9 +1178,9 @@ export class SpeedReaderAiModal extends Modal {
 			const noun = this.readerOpen.kind === 'book' ? 'Chapter' : 'Section';
 			return {
 				label: noun,
-				options: sections.map((section, index) => ({
+				options: sections.map((section) => ({
 					id: section.id,
-					label: `${index + 1} of ${sections.length} · ${section.title}`
+					label: section.title
 				})),
 				currentId: sections[state?.currentSectionIndex ?? 0]?.id ?? null,
 				canStep: true
@@ -1543,6 +1543,11 @@ export class SpeedReaderAiModal extends Modal {
 	private startPlayback(): void {
 		if (this.usesAdaptiveDesktopChrome() && (this.setupRequired || this.setupRequested)) {
 			return;
+		}
+		// The cover has nothing to read, so playing from it starts the next chapter.
+		if (this.state && this.isActiveBookCoverSection(this.state)) {
+			this.engine.nextSection();
+			this.notifySectionChange();
 		}
 		this.engine.play();
 	}
