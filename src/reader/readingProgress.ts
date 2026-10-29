@@ -9,6 +9,7 @@ import type {
 	SourceKind
 } from '../types/m2Contracts';
 import type { ProcessedDocument } from '../types/processedDocument';
+import { resolveBookPosition } from '../formats/bookChapterIds';
 
 function isSectionsProcessed(
 	processed: ProcessedDocument
@@ -37,16 +38,17 @@ export function bookProgressPercent(index: BookCacheIndex, position: BookPositio
 		return 0;
 	}
 
-	const chapterIndex = index.chapters.findIndex((c) => c.chapterId === position.chapterId);
-	if (chapterIndex < 0) {
+	const resolved = resolveBookPosition(index, position);
+	if (!resolved) {
 		return 0;
 	}
+	const { chapterIndex } = resolved;
 
 	let wordsConsumed = 0;
 	for (let i = 0; i < chapterIndex; i++) {
 		wordsConsumed += index.chapters[i]?.wordCount ?? 0;
 	}
-	wordsConsumed += Math.max(0, Math.min(position.wordIndex, index.chapters[chapterIndex]?.wordCount ?? 0));
+	wordsConsumed += Math.max(0, Math.min(resolved.wordIndex, index.chapters[chapterIndex]?.wordCount ?? 0));
 
 	return clampProgressPercent((wordsConsumed / index.totalWordCount) * 100);
 }

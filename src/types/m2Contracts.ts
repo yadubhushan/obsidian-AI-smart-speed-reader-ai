@@ -36,6 +36,8 @@ export interface BookCacheIndex {
 	totalWordCount: number;
 	chapters: BookChapter[];
 	parsedAt: string;
+	/** EPUB parser revision that built this index; older caches are re-parsed on open. */
+	parserVersion?: number;
 }
 
 export interface EnsureParsedOptions {

@@ -1,7 +1,29 @@
+import { cleanTitleText, elementTitleText } from './epubTitleResolution';
+
 export interface NavEntry {
 	label: string;
 	href: string;
+	/** Anchor id inside `href` (without `#`), when the TOC points mid-file. */
+	fragment?: string;
+	/** Nesting level in the TOC (0 = top level). */
+	depth?: number;
 }
+
+/** A TOC entry that starts a new chapter partway through one spine file. */
+export interface NavSplitPoint {
+	label: string;
+	fragment: string;
+}
+
+/** How one spine file divides into chapters. */
+export interface NavSpineSplit {
+	points: NavSplitPoint[];
+	/** Label of a TOC entry pointing at the file itself; names any text before `points[0]`. */
+	leadInLabel?: string;
+}
+
+/** Numbered sub-sections ("2", "IV.") sit inside a chapter; they never start one. */
+const BARE_NUMBER_LABEL_RE = /^[\divxlcdm]+\.?$/i;
 
 export interface OpfManifestInfo {
 	title: string;
@@ -32,6 +54,22 @@ export function resolveRelative(baseDir: string, href: string): string {
 export function stripFragment(href: string): string {
 	const hash = href.indexOf('#');
 	return hash >= 0 ? href.slice(0, hash) : href;
+}
+
+export function fragmentOf(href: string): string | undefined {
+	const hash = href.indexOf('#');
+	if (hash < 0) {
+		return undefined;
+	}
+	const raw = href.slice(hash + 1);
+	if (!raw) {
+		return undefined;
+	}
+	try {
+		return decodeURIComponent(raw);
+	} catch {
+		return raw;
+	}
 }
 
 /** Resolved spine content paths (relative to OPF directory). */
@@ -112,19 +150,31 @@ function isTocNavElement(nav: Element): boolean {
 	return role === 'doc-toc';
 }
 
+function navAnchorDepth(anchor: Element, root: ParentNode): number {
+	let depth = 0;
+	for (let el = anchor.parentElement; el && el !== root; el = el.parentElement) {
+		if (el.tagName === 'OL' || el.tagName === 'UL') {
+			depth++;
+		}
+	}
+	return Math.max(0, depth - 1);
+}
+
 function collectNavAnchors(root: ParentNode, baseDir: string, out: NavEntry[]): void {
 	for (const anchor of root.querySelectorAll('a[href]')) {
 		const href = anchor.getAttribute('href');
 		if (!href || href.startsWith('#')) {
 			continue;
 		}
-		const label = anchor.textContent?.trim() ?? '';
+		const label = cleanTitleText(elementTitleText(anchor));
 		if (!label) {
 			continue;
 		}
 		out.push({
 			label,
-			href: resolveRelative(baseDir, stripFragment(href))
+			href: resolveRelative(baseDir, stripFragment(href)),
+			fragment: fragmentOf(href),
+			depth: navAnchorDepth(anchor, root)
 		});
 	}
 }
@@ -150,20 +200,28 @@ export function parseNavDocument(navXml: string, navPath: string, opfDir: string
 	return entries;
 }
 
-function collectNcxNavPoints(parent: Element, baseDir: string, out: NavEntry[]): void {
+function collectNcxNavPoints(
+	parent: Element,
+	baseDir: string,
+	out: NavEntry[],
+	depth = 0
+): void {
 	for (const point of parent.querySelectorAll(':scope > navPoint')) {
-		const label =
-			point.querySelector(':scope > navLabel > text')?.textContent?.trim() ??
-			point.querySelector(':scope > navLabel')?.textContent?.trim() ??
-			'';
+		const label = cleanTitleText(
+			point.querySelector(':scope > navLabel > text')?.textContent ??
+				point.querySelector(':scope > navLabel')?.textContent ??
+				''
+		);
 		const src = point.querySelector(':scope > content')?.getAttribute('src');
 		if (label && src) {
 			out.push({
 				label,
-				href: resolveRelative(baseDir, stripFragment(src))
+				href: resolveRelative(baseDir, stripFragment(src)),
+				fragment: fragmentOf(src),
+				depth
 			});
 		}
-		collectNcxNavPoints(point, baseDir, out);
+		collectNcxNavPoints(point, baseDir, out, depth + 1);
 	}
 }
 
@@ -200,26 +258,117 @@ function spineIndexForHref(
 	return undefined;
 }
 
+/** Ranks entries that share a spine file: whole-file links, then shallower, then longer labels. */
+function navEntryRank(entry: NavEntry): [number, number, number] {
+	return [entry.fragment ? 1 : 0, entry.depth ?? 0, -entry.label.length];
+}
+
+function outranks(a: NavEntry, b: NavEntry): boolean {
+	const ra = navEntryRank(a);
+	const rb = navEntryRank(b);
+	for (let i = 0; i < ra.length; i++) {
+		if (ra[i] !== rb[i]) {
+			return ra[i]! < rb[i]!;
+		}
+	}
+	return false;
+}
+
 /**
  * Map navigation labels onto spine indices. When multiple entries hit the same spine
- * file, keep the longest label.
+ * file, prefer one linking to the file itself (its heading) over anchors inside it, then
+ * the shallowest TOC level, then the longest label.
  */
 export function mapNavEntriesToSpine(
 	entries: NavEntry[],
 	spinePaths: string[]
 ): Map<number, string> {
-	const result = new Map<number, string>();
+	const best = new Map<number, NavEntry>();
 	for (const entry of entries) {
 		const index = spineIndexForHref(entry.href, spinePaths);
 		if (index === undefined) {
 			continue;
 		}
-		const existing = result.get(index);
-		if (!existing || entry.label.length > existing.length) {
-			result.set(index, entry.label);
+		const existing = best.get(index);
+		if (!existing || outranks(entry, existing)) {
+			best.set(index, entry);
+		}
+	}
+	return new Map([...best].map(([index, entry]) => [index, entry.label]));
+}
+
+/**
+ * TOC entries that start chapters mid-file, grouped by spine index. Bare-number labels are
+ * skipped and only the shallowest remaining TOC level counts, so sub-sections never split a
+ * chapter; a file needs at least two distinct anchors to split.
+ */
+export function navSplitPointsBySpine(
+	entries: NavEntry[],
+	spinePaths: string[]
+): Map<number, NavSpineSplit> {
+	const bySpine = new Map<number, NavEntry[]>();
+	for (const entry of entries) {
+		const index = spineIndexForHref(entry.href, spinePaths);
+		if (index === undefined) {
+			continue;
+		}
+		const list = bySpine.get(index) ?? [];
+		list.push(entry);
+		bySpine.set(index, list);
+	}
+
+	const result = new Map<number, NavSpineSplit>();
+	for (const [index, list] of bySpine) {
+		const anchored = list.filter(
+			(e) => e.fragment && !BARE_NUMBER_LABEL_RE.test(e.label.trim())
+		);
+		const minDepth = Math.min(...anchored.map((e) => e.depth ?? 0));
+		const points: NavSplitPoint[] = [];
+		const seen = new Set<string>();
+		for (const entry of anchored) {
+			if ((entry.depth ?? 0) !== minDepth || seen.has(entry.fragment!)) {
+				continue;
+			}
+			seen.add(entry.fragment!);
+			points.push({ label: entry.label, fragment: entry.fragment! });
+		}
+		if (points.length >= 2) {
+			result.set(index, {
+				points,
+				leadInLabel: list.find((e) => !e.fragment)?.label
+			});
 		}
 	}
 	return result;
+}
+
+export async function loadNavigationEntries(
+	zip: { file(path: string): { async(type: 'text'): Promise<string> } | null },
+	opfDir: string,
+	navHref: string | undefined,
+	ncxHref: string | undefined,
+	spinePaths: string[]
+): Promise<NavEntry[]> {
+	if (navHref) {
+		const navPath = resolveRelative(opfDir, navHref);
+		const navXml = await zip.file(navPath)?.async('text');
+		if (navXml) {
+			const entries = parseNavDocument(navXml, navPath, opfDir);
+			if (mapNavEntriesToSpine(entries, spinePaths).size > 0) {
+				return entries;
+			}
+		}
+	}
+
+	if (ncxHref) {
+		const ncxPath = resolveRelative(opfDir, ncxHref);
+		const ncxXml = await zip.file(ncxPath)?.async('text');
+		if (ncxXml) {
+			return parseNcxDocument(ncxXml, ncxPath, opfDir);
+		}
+	}
+
+	return [];
 }
 
 export async function loadNavigationTitles(
@@ -229,26 +378,6 @@ export async function loadNavigationTitles(
 	ncxHref: string | undefined,
 	spinePaths: string[]
 ): Promise<Map<number, string>> {
-	if (navHref) {
-		const navPath = resolveRelative(opfDir, navHref);
-		const navXml = await zip.file(navPath)?.async('text');
-		if (navXml) {
-			const entries = parseNavDocument(navXml, navPath, opfDir);
-			const mapped = mapNavEntriesToSpine(entries, spinePaths);
-			if (mapped.size > 0) {
-				return mapped;
-			}
-		}
-	}
-
-	if (ncxHref) {
-		const ncxPath = resolveRelative(opfDir, ncxHref);
-		const ncxXml = await zip.file(ncxPath)?.async('text');
-		if (ncxXml) {
-			const entries = parseNcxDocument(ncxXml, ncxPath, opfDir);
-			return mapNavEntriesToSpine(entries, spinePaths);
-		}
-	}
-
-	return new Map();
+	const entries = await loadNavigationEntries(zip, opfDir, navHref, ncxHref, spinePaths);
+	return mapNavEntriesToSpine(entries, spinePaths);
 }

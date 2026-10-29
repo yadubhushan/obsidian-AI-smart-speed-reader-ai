@@ -20,12 +20,93 @@ export function isSameAsBookTitle(title: string, bookTitle: string): boolean {
 	return a.length > 0 && a === b;
 }
 
+const TITLE_LINE_BREAK = '\u0000';
+const HTML_TAG_RE = /<\/?[a-z][^>]*>/i;
+/** A bare label such as "Chapter One" or "IV", which a subtitle line follows after `: `. */
+const BARE_LABEL_RE = /^(?:(?:chapter|part|book|section|ch\.?)\s+[\p{L}\d]+|[\divxlcdm]+\.?)$/iu;
+
+/**
+ * Element text as one line. A `<br>` after a bare label becomes `: `
+ * ("Chapter One: The Underground"); any other `<br>` is just a space.
+ */
+export function elementTitleText(el: Element): string {
+	const clone = el.cloneNode(true) as Element;
+	for (const br of Array.from(clone.querySelectorAll('br'))) {
+		br.replaceWith(TITLE_LINE_BREAK);
+	}
+	const parts = (clone.textContent ?? '')
+		.split(TITLE_LINE_BREAK)
+		.map((part) => part.replace(/\s+/g, ' ').trim())
+		.filter(Boolean);
+	return parts.reduce(
+		(acc, part, i) => (i === 0 ? part : `${acc}${BARE_LABEL_RE.test(parts[i - 1]!) ? ': ' : ' '}${part}`),
+		''
+	);
+}
+
+/**
+ * Normalise a TOC label: some converters escape the heading's HTML into the label
+ * (`<a id="page_7"></a>Chapter One<br />The Underground`), so strip that markup.
+ */
+export function cleanTitleText(raw: string): string {
+	if (HTML_TAG_RE.test(raw)) {
+		const doc = new DOMParser().parseFromString(raw, 'text/html');
+		if (doc.body) {
+			return elementTitleText(doc.body);
+		}
+	}
+	return raw.replace(/\s+/g, ' ').trim();
+}
+
 export function bodyHeadingFromHtml(html: string): string | undefined {
 	const doc = new DOMParser().parseFromString(html, 'text/html');
-	const heading =
-		doc.querySelector('h1')?.textContent?.trim() ??
-		doc.querySelector('h2')?.textContent?.trim();
+	const el = doc.querySelector('h1') ?? doc.querySelector('h2');
+	const heading = el ? elementTitleText(el) : '';
 	return heading || undefined;
+}
+
+const FIRST_LINE_MAX_WORDS = 10;
+const FIRST_LINE_MAX_CHARS = 80;
+
+function titleKey(value: string): string {
+	return value.toLowerCase().replace(/[^\p{L}\d]+/gu, '');
+}
+
+/**
+ * Last resort before `Section N`: a short opening line such as "Copyright" or
+ * "Also by Ayn Rand" usually names the page better than its spine number.
+ */
+export function firstLineTitle(plain: string, bookTitle: string): string | undefined {
+	const line = plain
+		.split(/\n\n+/)
+		.map((p) => p.replace(/\s+/g, ' ').trim())
+		.find(Boolean)
+		// Drop a footnote marker glued to the last word ("THE PREFACE1").
+		?.replace(/(?<=\p{L})\d{1,2}$/u, '');
+	if (!line || line.length > FIRST_LINE_MAX_CHARS) {
+		return undefined;
+	}
+	// Sentences end in punctuation; headings like "Also by Ayn Rand" do not.
+	if (/[.!?,;:]$/.test(line)) {
+		return undefined;
+	}
+	if (line.split(' ').length > FIRST_LINE_MAX_WORDS || !/\p{L}{2,}/u.test(line)) {
+		return undefined;
+	}
+	// Title pages: "Atlas Shrugged Ayn Rand", or the first line of a wrapped title.
+	const lineKey = titleKey(line);
+	const bookKey = titleKey(bookTitle);
+	if (bookKey && (lineKey.startsWith(bookKey) || bookKey.startsWith(lineKey))) {
+		return undefined;
+	}
+	return line;
+}
+
+export function isSpineFallbackTitle(title: string, spineIndex: number): boolean {
+	return (
+		isSpineIndexChapterFallback(title, spineIndex) ||
+		isSpineIndexSectionFallback(title, spineIndex)
+	);
 }
 
 function hasExplicitChapterLabel(navTitle?: string, bodyHeading?: string): boolean {

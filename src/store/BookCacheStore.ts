@@ -16,7 +16,7 @@ import type {
 	EnsureParsedOptions,
 	SourceFormatProcessor
 } from '../types/m2Contracts';
-import { parseEpubBytes } from '../formats/epub/epubParse';
+import { EPUB_PARSER_VERSION, parseEpubBytes } from '../formats/epub/epubParse';
 
 export class BookCacheStoreImpl implements BookCacheStore {
 	constructor(
@@ -53,7 +53,11 @@ export class BookCacheStoreImpl implements BookCacheStore {
 		const checksum = await binaryChecksum(bytes);
 
 		if (cached && cached.sourceChecksum === checksum) {
-			return cached;
+			if ((cached.parserVersion ?? 1) >= EPUB_PARSER_VERSION) {
+				return cached;
+			}
+			// Same book, older parser: re-index, keeping its existing chapter titles.
+			return this.parseAndWrite(sourcePath, bytes, options, cached);
 		}
 
 		return this.parseAndWrite(sourcePath, bytes, options);
@@ -71,7 +75,8 @@ export class BookCacheStoreImpl implements BookCacheStore {
 	private async parseAndWrite(
 		sourcePath: string,
 		bytes: ArrayBuffer,
-		options?: EnsureParsedOptions
+		options?: EnsureParsedOptions,
+		previousIndex?: BookCacheIndex
 	): Promise<BookCacheIndex> {
 		const report = options?.onProgress;
 		report?.('Parsing EPUB…');
@@ -79,6 +84,7 @@ export class BookCacheStoreImpl implements BookCacheStore {
 		try {
 			const { index, coverBytes } = await parseEpubBytes(sourcePath, bytes, {
 				llm: this.getLlm?.(),
+				previousIndex,
 				onLlmChapterIndexStart: () => {
 					report?.('Naming chapters with AI…');
 				},
