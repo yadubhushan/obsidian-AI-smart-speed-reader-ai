@@ -211,6 +211,9 @@ export function migrateFlatSettings(raw: unknown): Partial<SpeedReaderAiSettings
 				raw.progressiveRsvpMaxWordLength,
 				DEFAULT_SETTINGS.reader.progressiveRsvpMaxWordLength
 			),
+			rampStartWpm: toNumber(raw.rampStartWpm, DEFAULT_SETTINGS.reader.rampStartWpm),
+			rampTargetWpm: toNumber(raw.rampTargetWpm, DEFAULT_SETTINGS.reader.rampTargetWpm),
+			rampMinutes: toNumber(raw.rampMinutes, DEFAULT_SETTINGS.reader.rampMinutes),
 			lineRepeatGapMs: toNumber(raw.lineRepeatGapMs, DEFAULT_SETTINGS.reader.lineRepeatGapMs),
 			ttsEnabled: toBoolean(raw.ttsEnabled, DEFAULT_SETTINGS.reader.ttsEnabled),
 			ttsVoiceUri: toString(raw.ttsVoiceUri, DEFAULT_SETTINGS.reader.ttsVoiceUri),
@@ -371,6 +374,21 @@ function normalizeReaderSettings(raw: unknown, flat: Record<string, unknown>): S
 			),
 			1,
 			20
+		),
+		rampStartWpm: clamp(
+			Math.round(toNumber(firstDefined(r.rampStartWpm, flat.rampStartWpm), DEFAULT_SETTINGS.reader.rampStartWpm)),
+			50,
+			5000
+		),
+		rampTargetWpm: clamp(
+			Math.round(toNumber(firstDefined(r.rampTargetWpm, flat.rampTargetWpm), DEFAULT_SETTINGS.reader.rampTargetWpm)),
+			50,
+			5000
+		),
+		rampMinutes: clamp(
+			toNumber(firstDefined(r.rampMinutes, flat.rampMinutes), DEFAULT_SETTINGS.reader.rampMinutes),
+			1,
+			60
 		),
 		lineRepeatGapMs: clamp(
 			Math.round(

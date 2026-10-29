@@ -28,6 +28,15 @@ export abstract class BasePlaybackStrategy implements PlaybackStrategy {
 	abstract calculateRemainingMs(ctx: RSVPEngineContext): number;
 	abstract getCurrentChunkWordIndices(ctx: RSVPEngineContext, totalNavWords: number): number[];
 
+	getEffectiveWpm(ctx: RSVPEngineContext): number {
+		return ctx.settings.reader.wpm;
+	}
+
+	/** Returns the new speed when the strategy owns it, or null to change settings WPM. */
+	adjustWpm(_ctx: RSVPEngineContext, _delta: number): number | null {
+		return null;
+	}
+
 	getPrimaryDisplayToken(ctx: RSVPEngineContext): { kind: StreamTokenKind; text?: string; orpIndex?: number; alt?: string } | undefined {
 		return undefined;
 	}

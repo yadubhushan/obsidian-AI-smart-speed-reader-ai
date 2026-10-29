@@ -18,7 +18,7 @@ const SHORTCUT_ROWS: [string, string][] = [
 	['Shift + ← / →', 'Previous / next section or chapter'],
 	['↑ / ↓', 'Increase / decrease WPM'],
 	['[ / ]', 'Decrease / increase font size'],
-	['L', 'Cycle playback mode (RSVP → Progressive RSVP → Line by line → Line repeat)'],
+	['L', 'Cycle playback mode (RSVP → Progressive RSVP → Ramp-up RSVP → Line by line → Line repeat)'],
 	['F', 'Toggle immersive focus (fullscreen)'],
 	['B', 'Create bookmark'],
 	['Shift + B', 'Open bookmark line picker'],

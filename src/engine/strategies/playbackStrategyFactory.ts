@@ -2,6 +2,7 @@ import type { PlaybackMode } from '../../types';
 import type { PlaybackStrategy } from '../playbackStrategy';
 import { RsvpStrategy } from './RsvpStrategy';
 import { ProgressiveRsvpStrategy } from './ProgressiveRsvpStrategy';
+import { RampRsvpStrategy } from './RampRsvpStrategy';
 import { LineByLineStrategy } from './LineByLineStrategy';
 import { LineRepeatStrategy } from './LineRepeatStrategy';
 
@@ -11,6 +12,8 @@ export function createPlaybackStrategy(mode: PlaybackMode): PlaybackStrategy {
 			return new RsvpStrategy();
 		case 'progressiveRsvp':
 			return new ProgressiveRsvpStrategy();
+		case 'rampRsvp':
+			return new RampRsvpStrategy();
 		case 'lineByLine':
 			return new LineByLineStrategy();
 		case 'lineRepeat':

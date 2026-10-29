@@ -31,6 +31,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 
 		ctx.setTimeoutId(
 			window.setTimeout(() => {
+				this.onChunkShown(ctx, delay);
 				ctx.setCurrentIndex(endIndex);
 				ctx.setTimeoutId(null);
 				this.runLegacyLoop(ctx);
@@ -66,6 +67,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 
 		ctx.setTimeoutId(
 			window.setTimeout(() => {
+				this.onChunkShown(ctx, delay);
 				ctx.setCurrentTokenIndex(endIndex);
 				ctx.setTimeoutId(null);
 				this.runManifestLoop(ctx);
@@ -126,7 +128,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 			return 0;
 		}
 
-		const baseDelay = 60000 / ctx.settings.reader.wpm;
+		const baseDelay = 60000 / this.getEffectiveWpm(ctx);
 		let multiplier = 1;
 
 		for (const word of chunk) {
@@ -163,7 +165,7 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 			return 0;
 		}
 
-		const baseDelay = 60000 / ctx.settings.reader.wpm;
+		const baseDelay = 60000 / this.getEffectiveWpm(ctx);
 		let total = 0;
 
 		for (let index = ctx.currentIndex; index < ctx.words.length; ) {
@@ -201,6 +203,9 @@ export class RsvpStrategy extends BasePlaybackStrategy {
 		const { tokens } = this.resolveManifestChunk(ctx, ctx.currentTokenIndex);
 		return primaryDisplayToken(tokens);
 	}
+
+	/** Called once a chunk has stayed on screen for its full delay. */
+	protected onChunkShown(_ctx: RSVPEngineContext, _delayMs: number): void {}
 
 	protected getEffectiveChunkSize(ctx: RSVPEngineContext): number {
 		return ctx.settings.reader.chunkSize;

@@ -2109,15 +2109,16 @@ export class SpeedReaderAiModal extends Modal {
 	}
 
 	private adjustWpm(delta: number, options?: { quiet?: boolean }) {
-		const currentWpm = this.settings.reader.wpm;
+		const currentWpm = this.engine.getCurrentWpm();
 		const requestedWpm = currentWpm + delta;
 		const targetWpm = this.settings.reader.ttsEnabled
 			? clampTtsWpm(requestedWpm)
 			: requestedWpm;
-		const newWpm = this.engine.adjustWpm(targetWpm - currentWpm);
+		const newWpm = Math.round(this.engine.adjustWpm(targetWpm - currentWpm));
+		// Ramp-up mode owns its speed, so the saved WPM only moves when the engine moved it.
 		this.settings = {
 			...this.settings,
-			reader: { ...this.settings.reader, wpm: newWpm }
+			reader: { ...this.settings.reader, wpm: this.engine.getSettings().reader.wpm }
 		};
 		this.engine.setSettings(this.settings);
 		if (!options?.quiet) {

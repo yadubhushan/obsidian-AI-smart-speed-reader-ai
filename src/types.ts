@@ -36,7 +36,7 @@ export type {
 } from './types/processedDocument';
 
 
-export type PlaybackMode = 'rsvp' | 'progressiveRsvp' | 'lineByLine' | 'lineRepeat';
+export type PlaybackMode = 'rsvp' | 'progressiveRsvp' | 'rampRsvp' | 'lineByLine' | 'lineRepeat';
 
 export type ReaderColorScheme = 'dark' | 'light' | 'auto';
 export type ReaderThemePresetId =
@@ -85,6 +85,10 @@ export interface ReaderSettings {
 	defaultPlaybackMode: PlaybackMode;
 	/** Words with letter count ≤ threshold may bundle in Progressive RSVP mode. */
 	progressiveRsvpMaxWordLength: number;
+	/** Ramp-up RSVP: speed it starts at, speed it climbs to, and reading minutes to get there. */
+	rampStartWpm: number;
+	rampTargetWpm: number;
+	rampMinutes: number;
 	lineRepeatGapMs: number;
 	/** Speak each displayed chunk with the device's built-in voice. */
 	ttsEnabled: boolean;
@@ -209,6 +213,9 @@ export const DEFAULT_SETTINGS: SpeedReaderAiSettings = {
 		},
 		defaultPlaybackMode: 'rsvp',
 		progressiveRsvpMaxWordLength: 4,
+		rampStartWpm: 50,
+		rampTargetWpm: 150,
+		rampMinutes: 10,
 		lineRepeatGapMs: 600,
 		ttsEnabled: false,
 		ttsVoiceUri: '',

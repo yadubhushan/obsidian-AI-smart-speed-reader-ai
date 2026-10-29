@@ -3,6 +3,7 @@ import type { PlaybackMode } from '../types';
 export const PLAYBACK_MODE_ORDER: readonly PlaybackMode[] = [
 	'rsvp',
 	'progressiveRsvp',
+	'rampRsvp',
 	'lineByLine',
 	'lineRepeat'
 ] as const;
@@ -10,6 +11,7 @@ export const PLAYBACK_MODE_ORDER: readonly PlaybackMode[] = [
 export const PLAYBACK_MODE_LABELS: Record<PlaybackMode, string> = {
 	rsvp: 'RSVP',
 	progressiveRsvp: 'Progressive RSVP',
+	rampRsvp: 'Ramp-up RSVP',
 	lineByLine: 'Line by line',
 	lineRepeat: 'Line repeat'
 };

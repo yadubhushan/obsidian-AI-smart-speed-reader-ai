@@ -60,11 +60,30 @@ export function buildReadingCard(parent: HTMLElement, ctx: SettingsSectionContex
 			}, { debounce: true })
 	);
 
+	const rampStart = stepper(body, 'Ramp start WPM', { value: reader.rampStartWpm, min: 50, max: 5000, step: 25 }, (wpm) =>
+		ctx.update((r) => {
+			r.rampStartWpm = wpm;
+		}, { debounce: true })
+	);
+	const rampTarget = stepper(body, 'Ramp target WPM', { value: reader.rampTargetWpm, min: 50, max: 5000, step: 25 }, (wpm) =>
+		ctx.update((r) => {
+			r.rampTargetWpm = wpm;
+		}, { debounce: true })
+	);
+	const rampMinutes = slider(body, 'Ramp minutes', { value: reader.rampMinutes, min: 1, max: 60 }, (minutes) =>
+		ctx.update((r) => {
+			r.rampMinutes = minutes;
+		}, { debounce: true })
+	);
+
 	return {
 		sync() {
 			const mode = ctx.reader().defaultPlaybackMode;
 			chunk.setVisible(mode === 'rsvp');
 			maxWordLength.setVisible(mode === 'progressiveRsvp');
+			for (const row of [rampStart, rampTarget, rampMinutes]) {
+				row.setVisible(mode === 'rampRsvp');
+			}
 		}
 	};
 }
@@ -286,6 +305,9 @@ export function resetPaneFieldsToDefaults(r: ReaderSettings): void {
 	r.chunkSize = d.chunkSize;
 	r.defaultPlaybackMode = d.defaultPlaybackMode;
 	r.progressiveRsvpMaxWordLength = d.progressiveRsvpMaxWordLength;
+	r.rampStartWpm = d.rampStartWpm;
+	r.rampTargetWpm = d.rampTargetWpm;
+	r.rampMinutes = d.rampMinutes;
 	r.colorScheme = d.colorScheme;
 	r.themePreset = d.themePreset;
 	r.colors = d.colors;

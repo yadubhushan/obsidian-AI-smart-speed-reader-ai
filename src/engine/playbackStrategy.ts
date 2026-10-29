@@ -49,5 +49,7 @@ export interface PlaybackStrategy {
 	getCurrentDelay(ctx: RSVPEngineContext): number;
 	calculateRemainingMs(ctx: RSVPEngineContext): number;
 	getCurrentChunkWordIndices(ctx: RSVPEngineContext, totalNavWords: number): number[];
+	getEffectiveWpm(ctx: RSVPEngineContext): number;
+	adjustWpm(ctx: RSVPEngineContext, delta: number): number | null;
 	getPrimaryDisplayToken(ctx: RSVPEngineContext): { kind: StreamTokenKind; text?: string; orpIndex?: number; alt?: string } | undefined;
 }

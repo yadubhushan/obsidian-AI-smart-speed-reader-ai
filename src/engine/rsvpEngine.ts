@@ -608,10 +608,18 @@ export class RSVPEngine implements RSVPEngineContext {
 		this.goToSection(this.currentSectionIndex - 1);
 	}
 
+	/** Speed actually driving playback; differs from settings WPM while a mode ramps. */
+	getCurrentWpm(): number {
+		return this.strategy.getEffectiveWpm(this);
+	}
+
 	adjustWpm(delta: number): number {
-		this.settings.reader.wpm = clamp(this.settings.reader.wpm + delta, 50, 5000);
+		const owned = this.strategy.adjustWpm(this, delta);
+		if (owned === null) {
+			this.settings.reader.wpm = clamp(this.settings.reader.wpm + delta, 50, 5000);
+		}
 		this.emitState(false);
-		return this.settings.reader.wpm;
+		return this.getCurrentWpm();
 	}
 
 	getCurrentSentenceText(): string {
@@ -1034,7 +1042,7 @@ export class RSVPEngine implements RSVPEngineContext {
 				progress,
 				isPlaying: this.isPlaying,
 				finished,
-				currentWpm: this.settings.reader.wpm,
+				currentWpm: this.getCurrentWpm(),
 				timeRemainingMs: this.strategy.calculateRemainingMs(this),
 				currentHeading: this.getCurrentHeading(),
 				playbackMode,
@@ -1068,7 +1076,7 @@ export class RSVPEngine implements RSVPEngineContext {
 			progress,
 			isPlaying: this.isPlaying,
 			finished,
-			currentWpm: this.settings.reader.wpm,
+			currentWpm: this.getCurrentWpm(),
 			timeRemainingMs: this.strategy.calculateRemainingMs(this),
 			currentHeading: this.getCurrentHeading(),
 			playbackMode,

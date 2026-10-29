@@ -11,13 +11,14 @@ import {
 } from '../src/engine/playbackMode';
 
 describe('playbackMode helpers', () => {
-	it('defines four modes in cycle order', () => {
-		expect(PLAYBACK_MODE_ORDER).toEqual(['rsvp', 'progressiveRsvp', 'lineByLine', 'lineRepeat']);
+	it('defines five modes in cycle order', () => {
+		expect(PLAYBACK_MODE_ORDER).toEqual(['rsvp', 'progressiveRsvp', 'rampRsvp', 'lineByLine', 'lineRepeat']);
 	});
 
 	it('maps display labels', () => {
 		expect(PLAYBACK_MODE_LABELS.rsvp).toBe('RSVP');
 		expect(PLAYBACK_MODE_LABELS.progressiveRsvp).toBe('Progressive RSVP');
+		expect(PLAYBACK_MODE_LABELS.rampRsvp).toBe('Ramp-up RSVP');
 		expect(PLAYBACK_MODE_LABELS.lineByLine).toBe('Line by line');
 		expect(PLAYBACK_MODE_LABELS.lineRepeat).toBe('Line repeat');
 		expect(getPlaybackModeLabel('lineByLine')).toBe('Line by line');
@@ -41,9 +42,10 @@ describe('playbackMode helpers', () => {
 		expect(normalizePlaybackMode(undefined)).toBe('rsvp');
 	});
 
-	it('cycles through all four modes', () => {
+	it('cycles through all five modes', () => {
 		expect(cyclePlaybackMode('rsvp')).toBe('progressiveRsvp');
-		expect(cyclePlaybackMode('progressiveRsvp')).toBe('lineByLine');
+		expect(cyclePlaybackMode('progressiveRsvp')).toBe('rampRsvp');
+		expect(cyclePlaybackMode('rampRsvp')).toBe('lineByLine');
 		expect(cyclePlaybackMode('lineByLine')).toBe('lineRepeat');
 		expect(cyclePlaybackMode('lineRepeat')).toBe('rsvp');
 	});
